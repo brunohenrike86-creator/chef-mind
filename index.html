@@ -2476,7 +2476,7 @@ window.addEventListener('load', () => {
         }
 
         // ========== TELA LANÇAR ==========
-        function removerItemComanda(indice) {
+        async function removerItemComanda(indice) {
             // BLOQUEAR SE ESTIVER EM MODO LEITURA
             if (state.modoLeitura) {
                 showToast('Modo consulta - edição desativada', 'warning');
@@ -2486,8 +2486,11 @@ window.addEventListener('load', () => {
             const comanda = state.comandas[state.comandaAtual];
             if (!comanda) return;
             
-            // ☁️ SHEETS: remover item se tiver _id
+            // ☁️ SHEETS: remover item — aguarda _id se ainda estiver pendente
             const itemRemovido = comanda.itens[indice];
+            if (itemRemovido && itemRemovido._pendingAdd) {
+                await itemRemovido._pendingAdd;
+            }
             if (itemRemovido && itemRemovido._id) {
                 sheetsAPI('removerItem', { item_id: itemRemovido._id });
             }
@@ -2861,7 +2864,7 @@ function carregarComanda() {
             console.log('Observação final:', observacao);
 
             // ✅ ADICIONAR FLAG PREPARO_JA NO ITEM
-            comanda.itens.push({
+            const _itemMarmita = {
                 codigo: marnitaEmEdicao,
                 nome: item.nome,
                 tipo: item.tipo,
@@ -2870,15 +2873,16 @@ function carregarComanda() {
                 observacao: observacao,
                 icone: getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo)),
                 preparo_ja: preparoJa  // ✅ FLAG NOVA
-            });
+            };
+            comanda.itens.push(_itemMarmita);
 
             atualizarTotalComanda(state.comandaAtual);
             saveStorage();
             // ☁️ SHEETS: gravar marmita
-            sheets_addItem(state.comandaAtual, {
+            _itemMarmita._pendingAdd = sheets_addItem(state.comandaAtual, {
                 codigo: marnitaEmEdicao, nome: item.nome, quantidade: 1,
                 preco: item.preco, observacao: observacao, preparo_ja: preparoJa
-            });
+            }).then(res => { if (res && res.id) _itemMarmita._id = res.id; delete _itemMarmita._pendingAdd; });
             renderizarListaLançada();
             
             // ✅ SE PREPARO JÁ → MOVE COMANDA PARA PREPARO SE AINDA NÃO ESTIVER
@@ -2945,7 +2949,7 @@ function carregarComanda() {
 
             // Fluxo por tipo normal (não é Quilo)
             if (item.tipo === 'Fixo') {
-                comanda.itens.push({
+                const _itemFixo = {
                     codigo: codigo,
                     nome: item.nome,
                     tipo: item.tipo,
@@ -2953,14 +2957,15 @@ function carregarComanda() {
                     quantidade: 1,
                     observacao: '',
                     icone: getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo))
-                });
+                };
+                comanda.itens.push(_itemFixo);
                 atualizarTotalComanda(state.comandaAtual);
                 showToast(`${item.nome} lançado`, 'success');
                 // ☁️ SHEETS: gravar item fixo
-                sheets_addItem(state.comandaAtual, {
+                _itemFixo._pendingAdd = sheets_addItem(state.comandaAtual, {
                     codigo, nome: item.nome, quantidade: 1,
                     preco: item.preco, observacao: '', preparo_ja: false
-                });
+                }).then(res => { if (res && res.id) _itemFixo._id = res.id; delete _itemFixo._pendingAdd; });
             } else if (item.tipo === 'Gramas') {
                 // Solicitar peso
                 const peso = prompt(`Peso (kg) para ${item.nome}:`);
@@ -2971,7 +2976,7 @@ function carregarComanda() {
                         return;
                     }
                     const total = pesoNum * item.preco;
-                    comanda.itens.push({
+                    const _itemGramas = {
                         codigo: codigo,
                         nome: item.nome,
                         tipo: item.tipo,
@@ -2980,14 +2985,15 @@ function carregarComanda() {
                         total: total,
                         observacao: `${pesoNum}kg`,
                         icone: getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo))
-                    });
+                    };
+                    comanda.itens.push(_itemGramas);
                     atualizarTotalComanda(state.comandaAtual);
                     showToast(`${item.nome} (${pesoNum}kg) lançado`, 'success');
                     // ☁️ SHEETS: gravar item por peso
-                    sheets_addItem(state.comandaAtual, {
+                    _itemGramas._pendingAdd = sheets_addItem(state.comandaAtual, {
                         codigo, nome: item.nome, quantidade: pesoNum,
                         preco: item.preco, observacao: `${pesoNum}kg`, preparo_ja: false
-                    });
+                    }).then(res => { if (res && res.id) _itemGramas._id = res.id; delete _itemGramas._pendingAdd; });
                 }
                 document.getElementById('lançarCodigoItem').value = '';
                 document.getElementById('lançarCodigoItem').focus();
@@ -4265,7 +4271,7 @@ function carregarComanda() {
             const kg = peso / 1000;
             const total = kg * item.preco;
             
-            comanda.itens.push({
+            const _itemQuilo = {
                 codigo: codigo,
                 nome: item.nome,
                 tipo: item.tipo,
@@ -4274,13 +4280,20 @@ function carregarComanda() {
                 total: total,
                 observacao: peso + 'g',
                 icone: item.icone
-            });
+            };
+            comanda.itens.push(_itemQuilo);
             
             atualizarTotalComanda(state.comandaAtual);
             saveStorage();
             renderizarListaLançada();
             renderizarItensDisponiveis();
             
+            // ☁️ SHEETS: gravar item buffet por peso
+            _itemQuilo._pendingAdd = sheets_addItem(state.comandaAtual, {
+                codigo, nome: item.nome, quantidade: kg,
+                preco: item.preco, observacao: peso + 'g', preparo_ja: false
+            }).then(res => { if (res && res.id) _itemQuilo._id = res.id; delete _itemQuilo._pendingAdd; });
+
             showToast(item.nome + ' (' + peso + 'g) - R$ ' + total.toFixed(2), 'success');
             
             fecharModalBuffet();
@@ -4756,95 +4769,4 @@ function carregarComanda() {
                 return;
             }
 
-            const comanda = state.comandas[state.comandaCheckout];
-
-            if (!comanda || comanda.itens.length === 0) {
-                showToast('Comanda sem itens', 'error');
-                return;
-            }
-
-            // Marcar como paga
-            comanda.status = 'Fechada/Paga';
-            comanda.paid = true;
-            comanda.formaPagamento = state.formaPagamentoSelecionada;
-            comanda.dataPagamento = new Date().toISOString();
-
-            saveStorage();
-
-            // Feedback
-            showToast(`✓ Pagamento confirmado (#${comanda.numero})`, 'success');
-
-            // Limpar
-            state.comandaCheckout = null;
-            state.formaPagamentoSelecionada = null;
-            document.getElementById('areaDetalhes').style.display = 'none';
-            document.getElementById('areaPagamento').style.display = 'none';
-            document.getElementById('areaVazia').style.display = 'flex';
-
-            // Recarregar lista
-            renderizarCheckout();
-
-            // Fechar collapse se aberto
-            document.getElementById('listaComandas').style.display = 'none';
-            document.getElementById('iconColapse').textContent = '▼';
-        }
-
-        // ===== MODAL BUFFET QUILO =====
-        let codigoBuffetAtual = null;
-
-        function fecharModalBuffet() {
-            document.getElementById('modalBuffetQuilo').style.display = 'none';
-            codigoBuffetAtual = null;
-            document.getElementById('lançarCodigoItem').value = '';
-            document.getElementById('lançarCodigoItem').focus();
-        }
-
-        function calcularTotalBuffet() {
-            const peso = parseFloat(document.getElementById('pesoQuilo').value) || 0;
-            const item = state.itens[codigoBuffetAtual];
-            if (peso > 0) {
-                const kg = peso / 1000;
-                const total = kg * item.preco;
-                document.getElementById('exibirTotal').textContent = total.toFixed(2);
-            } else {
-                document.getElementById('exibirTotal').textContent = '0,00';
-            }
-        }
-
-        function confirmarBuffet() {
-            const peso = parseFloat(document.getElementById('pesoQuilo').value);
-            
-            if (!peso || peso <= 0) {
-                showToast('Informe o peso', 'error');
-                return;
-            }
-            
-            const item = state.itens[codigoBuffetAtual];
-            const kg = peso / 1000;
-            const total = kg * item.preco;
-            const comanda = state.comandas[state.comandaAtual];
-            
-            comanda.itens.push({
-                codigo: codigoBuffetAtual,
-                nome: item.nome,
-                tipo: item.tipo,
-                preco: item.preco,
-                quantidade: kg,
-                total: total,
-                observacao: peso + 'g',
-                icone: item.icone
-            });
-            
-            atualizarTotalComanda(state.comandaAtual);
-            saveStorage();
-            renderizarListaLançada();
-            renderizarItensDisponiveis();
-            
-            showToast(item.nome + ' (' + peso + 'g) - R$ ' + total.toFixed(2), 'success');
-            
-            fecharModalBuffet();
-        }
-
-</script>
-</body>
-</html>
+            const coma
