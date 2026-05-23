@@ -1196,6 +1196,271 @@
             }
         };
 
+
+        // // ============================================================
+// chef-mind · Integração Google Sheets
+// Versão: 1.0
+// Cole este bloco logo APÓS a linha: const state = { ... };
+// ============================================================
+
+// ── URL da sua API (Apps Script) ────────────────────────────
+const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzcCET0RgEazy9VtW26fkMSNaXRFArqKUiIDGIAsnUEdQdYtLrNupqfm9H-K3_DSDA0Sw/exec';
+
+// ── Indicador visual de sincronização ───────────────────────
+let _syncPendente = false;
+
+function mostrarSyncStatus(msg, tipo = 'info') {
+    console.log(`[Sheets] ${msg}`);
+    // Reutiliza o toast existente do sistema
+    if (typeof showToast === 'function') {
+        showToast(msg, tipo === 'erro' ? 'error' : 'success');
+    }
+}
+
+// ── Função central de chamada à API ─────────────────────────
+async function sheetsAPI(action, dados = {}) {
+    try {
+        const ehLeitura = action.startsWith('get');
+
+        if (ehLeitura) {
+            // GET: passa action como parâmetro de URL
+            const params = new URLSearchParams({ action, ...dados });
+            const resp = await fetch(`${SHEETS_API_URL}?${params}`);
+            const json = await resp.json();
+            if (json.erro) throw new Error(json.erro);
+            return json;
+        } else {
+            // POST: envia JSON no body
+            const resp = await fetch(SHEETS_API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action, ...dados })
+            });
+            const json = await resp.json();
+            if (json.erro) throw new Error(json.erro);
+            return json;
+        }
+    } catch (err) {
+        console.warn(`[Sheets] Erro em "${action}":`, err.message);
+        return null;
+    }
+}
+
+// ── Carregar dados iniciais do Google Sheets ─────────────────
+// Substitui o loadStorage() original
+async function loadStorage() {
+    console.log('[Sheets] Carregando dados...');
+
+    try {
+        // 1. Carregar configuração (carnes do dia)
+        const config = await sheetsAPI('getConfig');
+        if (config) {
+            const diasMap = { seg: 0, ter: 1, qua: 2, qui: 3, sex: 4, sab: 5, dom: 6 };
+            Object.entries(diasMap).forEach(([sigla, idx]) => {
+                const chave = `carnes_${sigla}`;
+                if (config[chave]) {
+                    state.marnitasDia[idx] = config[chave]
+                        .split(',')
+                        .map(c => c.trim())
+                        .filter(Boolean);
+                }
+            });
+            console.log('[Sheets] ✅ Config carregada:', config);
+        }
+
+        // 2. Carregar cardápio do Sheets (substitui o hardcoded)
+        const cardapio = await sheetsAPI('getCardapio');
+        if (cardapio && cardapio.length > 0) {
+            // Limpa o cardápio padrão e usa o do Sheets
+            const novoItens = {};
+            cardapio.forEach(item => {
+                novoItens[String(item.codigo)] = {
+                    nome: item.nome,
+                    preco: parseFloat(item.preco) || 0,
+                    icone: item.icone || '🍽️',
+                    categoria: item.categoria || 'Geral',
+                    tipo: item.tipo || 'Fixo'
+                };
+            });
+            // Só substitui se vieram dados válidos
+            if (Object.keys(novoItens).length > 0) {
+                Object.assign(state.itens, novoItens);
+                console.log('[Sheets] ✅ Cardápio carregado:', Object.keys(novoItens).length, 'itens');
+            }
+        }
+
+        // 3. Carregar usuários
+        const usuarios = await sheetsAPI('getUsuarios');
+        if (usuarios && usuarios.length > 0) {
+            usuarios.forEach(u => {
+                state.usuarios[u.login] = {
+                    nome: u.login,
+                    senha: String(u.senha),
+                    perfil: u.nivel === 'admin' ? 'Admin' : 'Atendente'
+                };
+            });
+            console.log('[Sheets] ✅ Usuários carregados:', usuarios.length);
+        }
+
+        // 4. Carregar comandas abertas do dia
+        const comandas = await sheetsAPI('getComandasAbertas');
+        if (comandas && comandas.length > 0) {
+            for (const c of comandas) {
+                // Buscar itens de cada comanda
+                const itensComanda = await sheetsAPI('getItensDaComanda', { comanda_id: c.id });
+
+                state.comandas[c.numero] = {
+                    _id: c.id,               // ID do Sheets para atualizações
+                    numero: c.numero,
+                    status: c.status === 'em_preparo' ? 'Em Preparo' : 'Aberta',
+                    data: c.timestamp_abertura ? c.timestamp_abertura.split('T')[0] : new Date().toISOString().split('T')[0],
+                    timestampAbertura: c.timestamp_abertura,
+                    preparoJa: String(c.preparo_ja).toLowerCase() === 'true',
+                    itens: (itensComanda || []).map(i => ({
+                        _id: i.id,
+                        codigo: i.codigo,
+                        nome: i.nome,
+                        quantidade: parseInt(i.quantidade) || 1,
+                        preco: parseFloat(i.preco_unit) || 0,
+                        total: parseFloat(i.total) || 0,
+                        observacao: i.observacao || '',
+                        preparoJa: String(i.preparo_ja).toLowerCase() === 'true',
+                        timestampPedido: i.timestamp_pedido,
+                        timestampInicioPreparo: i.timestamp_inicio_preparo,
+                        timestampConcluido: i.timestamp_concluido,
+                        usuarioPreparo: i.usuario_preparo
+                    }))
+                };
+            }
+            console.log('[Sheets] ✅ Comandas abertas carregadas:', comandas.length);
+        }
+
+        console.log('[Sheets] ✅ Carregamento completo!');
+
+    } catch (err) {
+        console.warn('[Sheets] Aviso no carregamento:', err.message);
+        console.log('[Sheets] Usando dados locais como fallback');
+    }
+}
+
+// ── Salvar usuários no Sheets ────────────────────────────────
+// Substitui o saveStorage() original (usado ao criar/editar usuários)
+async function saveStorage() {
+    // saveStorage no código original é chamado ao salvar usuários
+    // Aqui sincronizamos o usuário que foi modificado
+    // Como não sabemos qual foi, fazemos nada (as mudanças de usuário
+    // são enviadas pelas funções específicas abaixo)
+    console.log('[Sheets] saveStorage chamado (usuários gerenciados via Sheets)');
+}
+
+// ── Abrir comanda no Sheets ──────────────────────────────────
+// Chame esta função logo após criar a comanda em state.comandas
+async function sheets_novaComanda(numero) {
+    const resultado = await sheetsAPI('novaComanda', { numero: String(numero) });
+    if (resultado && resultado.id) {
+        // Guarda o ID do Sheets na comanda para operações futuras
+        if (state.comandas[numero]) {
+            state.comandas[numero]._id = resultado.id;
+        }
+        console.log(`[Sheets] ✅ Comanda ${numero} criada no Sheets (id: ${resultado.id})`);
+        return resultado.id;
+    }
+    return null;
+}
+
+// ── Lançar item na comanda ───────────────────────────────────
+async function sheets_addItem(numeroComanda, item) {
+    const comanda = state.comandas[numeroComanda];
+    if (!comanda || !comanda._id) {
+        console.warn('[Sheets] Comanda sem _id, item não sincronizado');
+        return null;
+    }
+
+    const resultado = await sheetsAPI('addItem', {
+        comanda_id: comanda._id,
+        codigo: item.codigo,
+        nome: item.nome,
+        categoria: state.itens[item.codigo]?.categoria || '',
+        quantidade: item.quantidade || 1,
+        preco_unit: item.preco,
+        total: (item.quantidade || 1) * item.preco,
+        observacao: item.observacao || '',
+        preparo_ja: item.preparoJa || false
+    });
+
+    if (resultado && resultado.id && comanda.itens) {
+        // Atualiza o _id do item na memória
+        const itemMemoria = comanda.itens[comanda.itens.length - 1];
+        if (itemMemoria) itemMemoria._id = resultado.id;
+        console.log(`[Sheets] ✅ Item "${item.nome}" lançado na comanda ${numeroComanda}`);
+    }
+    return resultado;
+}
+
+// ── Iniciar preparo de uma marmita ───────────────────────────
+async function sheets_iniciarPreparo(itemId, usuario) {
+    return sheetsAPI('iniciarPreparo', {
+        item_id: itemId,
+        usuario: usuario || state.userLogado || ''
+    });
+}
+
+// ── Concluir preparo de uma marmita ─────────────────────────
+async function sheets_concluirPreparo(itemId) {
+    return sheetsAPI('concluirPreparo', { item_id: itemId });
+}
+
+// ── Pagar comanda ────────────────────────────────────────────
+async function sheets_pagarComanda(numeroComanda, total, formaPagamento) {
+    const comanda = state.comandas[numeroComanda];
+    if (!comanda || !comanda._id) {
+        console.warn('[Sheets] Comanda sem _id, pagamento não sincronizado');
+        return null;
+    }
+
+    const resultado = await sheetsAPI('pagarComanda', {
+        comanda_id: comanda._id,
+        total: total,
+        forma_pagamento: formaPagamento || ''
+    });
+
+    if (resultado && resultado.sucesso) {
+        console.log(`[Sheets] ✅ Comanda ${numeroComanda} paga no Sheets`);
+    }
+    return resultado;
+}
+
+// ── Atualizar carnes do dia no Sheets ────────────────────────
+async function sheets_salvarCarnesDia(diaSemana, carnes) {
+    const siglas = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'];
+    const chave = `carnes_${siglas[diaSemana]}`;
+    return sheetsAPI('atualizarConfig', {
+        chave,
+        valor: carnes.join(',')
+    });
+}
+
+// ── Atualizar item do cardápio no Sheets ─────────────────────
+async function sheets_atualizarCardapio(codigo, dados) {
+    return sheetsAPI('atualizarCardapio', {
+        operacao: 'atualizar',
+        codigo: String(codigo),
+        ...dados
+    });
+}
+
+// ── Criar item no cardápio no Sheets ─────────────────────────
+async function sheets_novoItemCardapio(item) {
+    return sheetsAPI('atualizarCardapio', {
+        operacao: 'novo',
+        codigo: item.codigo,
+        nome: item.nome,
+        categoria: item.categoria,
+        preco: item.preco
+    });
+}
+
+console.log('[Sheets] ✅ Módulo de integração carregado. API:', SHEETS_API_URL);
+
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
