@@ -1197,280 +1197,149 @@
         };
 
 
-        // // ============================================================
-// chef-mind · Integração Google Sheets
-// Versão: 1.0
-// Cole este bloco logo APÓS a linha: const state = { ... };
-// ============================================================
+        // ====================================================
+        // ☁️ INTEGRAÇÃO GOOGLE SHEETS — chef-mind Fase 2
+        // ====================================================
+        const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbwAaSxDyP5NC8HlJ9AgMVWOV0CzjFfbr1DLNwSIp3BgEymvHGaYb2VLz5gY58dgOTg98w/exec';
 
-// ── URL da sua API (Apps Script) ────────────────────────────
-const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbwAaSxDyP5NC8HlJ9AgMVWOV0CzjFfbr1DLNwSIp3BgEymvHGaYb2VLz5gY58dgOTg98w/exec';
-
-// ── Indicador visual de sincronização ───────────────────────
-let _syncPendente = false;
-
-function mostrarSyncStatus(msg, tipo = 'info') {
-    console.log(`[Sheets] ${msg}`);
-    // Reutiliza o toast existente do sistema
-    if (typeof showToast === 'function') {
-        showToast(msg, tipo === 'erro' ? 'error' : 'success');
-    }
-}
-
-// ── Função central de chamada à API ─────────────────────────
-async function sheetsAPI(action, dados = {}) {
-    try {
-        const ehLeitura = action.startsWith('get');
-
-        if (ehLeitura) {
-            // GET: passa action como parâmetro de URL
-            const params = new URLSearchParams({ action, ...dados });
-            const resp = await fetch(`${SHEETS_API_URL}?${params}`);
-            const json = await resp.json();
-            if (json.erro) throw new Error(json.erro);
-            return json;
-        } else {
-            // POST: envia JSON no body
-            const resp = await fetch(SHEETS_API_URL, {
-                method: 'POST',
-                body: JSON.stringify({ action, ...dados })
-            });
-            const json = await resp.json();
-            if (json.erro) throw new Error(json.erro);
-            return json;
-        }
-    } catch (err) {
-        console.warn(`[Sheets] Erro em "${action}":`, err.message);
-        return null;
-    }
-}
-
-// ── Carregar dados iniciais do Google Sheets ─────────────────
-// Substitui o loadStorage() original
-async function loadFromSheets() {
-    console.log('[Sheets] Carregando dados...');
-
-    try {
-        // 1. Carregar configuração (carnes do dia)
-        const config = await sheetsAPI('getConfig');
-        if (config) {
-            const diasMap = { seg: 0, ter: 1, qua: 2, qui: 3, sex: 4, sab: 5, dom: 6 };
-            Object.entries(diasMap).forEach(([sigla, idx]) => {
-                const chave = `carnes_${sigla}`;
-                if (config[chave]) {
-                    state.marnitasDia[idx] = config[chave]
-                        .split(',')
-                        .map(c => c.trim())
-                        .filter(Boolean);
+        async function sheetsAPI(action, dados = {}) {
+            try {
+                const ehLeitura = action.startsWith('get');
+                if (ehLeitura) {
+                    const params = new URLSearchParams({ action, ...dados });
+                    const resp = await fetch(`${SHEETS_API_URL}?${params}`);
+                    const json = await resp.json();
+                    if (json.erro) throw new Error(json.erro);
+                    return json;
+                } else {
+                    const resp = await fetch(SHEETS_API_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({ action, ...dados })
+                    });
+                    const json = await resp.json();
+                    if (json.erro) throw new Error(json.erro);
+                    return json;
                 }
-            });
-            console.log('[Sheets] ✅ Config carregada:', config);
-        }
-
-        // 2. Carregar cardápio do Sheets (substitui o hardcoded)
-        const cardapio = await sheetsAPI('getCardapio');
-        if (cardapio && cardapio.length > 0) {
-            // Limpa o cardápio padrão e usa o do Sheets
-            const novoItens = {};
-            cardapio.forEach(item => {
-                // Garantir código com zeros à esquerda (Sheets remove zeros de números)
-                const codigo = String(item.codigo).padStart(3, '0');
-                novoItens[codigo] = {
-                    nome: item.nome,
-                    preco: parseFloat(item.preco) || 0,
-                    icone: item.icone || '🍽️',
-                    categoria: item.categoria || 'Geral',
-                    tipo: item.tipo || 'Fixo'
-                };
-            });
-            // SUBSTITUIR (não merge) para evitar duplicatas com itens hardcoded
-            if (Object.keys(novoItens).length > 0) {
-                Object.keys(state.itens).forEach(k => delete state.itens[k]);
-                Object.assign(state.itens, novoItens);
-                console.log('[Sheets] ✅ Cardápio carregado:', Object.keys(novoItens).length, 'itens');
+            } catch (err) {
+                console.warn(`[Sheets] Erro em "${action}":`, err.message);
+                return null;
             }
         }
 
-        // 3. Carregar usuários
-        const usuarios = await sheetsAPI('getUsuarios');
-        if (usuarios && usuarios.length > 0) {
-            usuarios.forEach(u => {
-                state.usuarios[u.login] = {
-                    nome: u.login,
-                    senha: String(u.senha),
-                    perfil: u.nivel === 'admin' ? 'Admin' : 'Atendente'
-                };
-            });
-            console.log('[Sheets] ✅ Usuários carregados:', usuarios.length);
-        }
+        async function loadFromSheets() {
+            console.log('[Sheets] Carregando dados...');
+            try {
+                const config = await sheetsAPI('getConfig');
+                if (config) {
+                    const diasMap = { seg:0, ter:1, qua:2, qui:3, sex:4, sab:5, dom:6 };
+                    Object.entries(diasMap).forEach(([sigla, idx]) => {
+                        if (config[`carnes_${sigla}`])
+                            state.marnitasDia[idx] = config[`carnes_${sigla}`].split(',').map(c=>c.trim()).filter(Boolean);
+                    });
+                    console.log('[Sheets] ✅ Config carregada');
+                }
 
-        // 4. Carregar comandas abertas do dia
-        const comandas = await sheetsAPI('getComandasAbertas');
-        if (comandas && comandas.length > 0) {
-            for (const c of comandas) {
-                // Buscar itens de cada comanda
-                const itensComanda = await sheetsAPI('getItensDaComanda', { comanda_id: c.id });
+                const cardapio = await sheetsAPI('getCardapio');
+                if (cardapio && cardapio.length > 0) {
+                    const novoItens = {};
+                    cardapio.forEach(item => {
+                        const codigo = String(item.codigo).padStart(3, '0');
+                        novoItens[codigo] = {
+                            nome: item.nome,
+                            preco: parseFloat(item.preco) || 0,
+                            icone: item.icone || '🍽️',
+                            categoria: item.categoria || 'Geral',
+                            tipo: item.tipo || 'Fixo'
+                        };
+                    });
+                    if (Object.keys(novoItens).length > 0) {
+                        Object.keys(state.itens).forEach(k => delete state.itens[k]);
+                        Object.assign(state.itens, novoItens);
+                        console.log('[Sheets] ✅ Cardápio:', Object.keys(novoItens).length, 'itens');
+                    }
+                }
 
-                state.comandas[c.numero] = {
-                    _id: c.id,               // ID do Sheets para atualizações
-                    numero: c.numero,
-                    status: c.status === 'em_preparo' ? 'Em Preparo' : 'Aberta',
-                    data: c.timestamp_abertura ? c.timestamp_abertura.split('T')[0] : new Date().toISOString().split('T')[0],
-                    timestampAbertura: c.timestamp_abertura,
-                    preparoJa: String(c.preparo_ja).toLowerCase() === 'true',
-                    itens: (itensComanda || []).map(i => ({
-                        _id: i.id,
-                        codigo: i.codigo,
-                        nome: i.nome,
-                        quantidade: parseInt(i.quantidade) || 1,
-                        preco: parseFloat(i.preco_unit) || 0,
-                        total: parseFloat(i.total) || 0,
-                        observacao: i.observacao || '',
-                        preparoJa: String(i.preparo_ja).toLowerCase() === 'true',
-                        timestampPedido: i.timestamp_pedido,
-                        timestampInicioPreparo: i.timestamp_inicio_preparo,
-                        timestampConcluido: i.timestamp_concluido,
-                        usuarioPreparo: i.usuario_preparo
-                    }))
-                };
+                const usuarios = await sheetsAPI('getUsuarios');
+                if (usuarios && usuarios.length > 0) {
+                    usuarios.forEach(u => {
+                        state.usuarios[u.login] = {
+                            nome: u.login, senha: String(u.senha),
+                            perfil: u.nivel === 'admin' ? 'Admin' : 'Atendente'
+                        };
+                    });
+                    console.log('[Sheets] ✅ Usuários:', usuarios.length);
+                }
+
+                const comandas = await sheetsAPI('getComandasAbertas');
+                if (comandas && comandas.length > 0) {
+                    for (const cmd of comandas) {
+                        const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
+                        const data = cmd.timestamp_abertura ? cmd.timestamp_abertura.split('T')[0] : new Date().toISOString().split('T')[0];
+                        const chave = `${String(cmd.numero).padStart(3,'0')}-${data}`;
+                        state.comandas[chave] = {
+                            _id: cmd.id,
+                            numero: String(cmd.numero).padStart(3,'0'),
+                            status: cmd.status === 'em_preparo' ? 'Em Preparo' : 'Aberta',
+                            data, paid: false,
+                            itens: (itensCmd || []).map(i => ({
+                                _id: i.id,
+                                codigo: String(i.codigo).padStart(3,'0'),
+                                nome: i.nome,
+                                quantidade: parseInt(i.quantidade) || 1,
+                                preco: parseFloat(i.preco_unit) || 0,
+                                total: parseFloat(i.total) || 0,
+                                observacao: i.observacao || '',
+                                preparo_ja: String(i.preparo_ja).toLowerCase() === 'true',
+                                tipo: i.categoria || 'Fixo'
+                            }))
+                        };
+                    }
+                    console.log('[Sheets] ✅ Comandas:', comandas.length);
+                }
+                console.log('[Sheets] ✅ Carregamento completo!');
+            } catch (err) {
+                console.warn('[Sheets] Aviso:', err.message);
             }
-            console.log('[Sheets] ✅ Comandas abertas carregadas:', comandas.length);
         }
 
-        console.log('[Sheets] ✅ Carregamento completo!');
-
-    } catch (err) {
-        console.warn('[Sheets] Aviso no carregamento:', err.message);
-        console.log('[Sheets] Usando dados locais como fallback');
-    }
-}
-
-// ── Salvar usuários no Sheets ────────────────────────────────
-// Substitui o saveStorage() original (usado ao criar/editar usuários)
-async function saveStorage() {
-    // saveStorage no código original é chamado ao salvar usuários
-    // Aqui sincronizamos o usuário que foi modificado
-    // Como não sabemos qual foi, fazemos nada (as mudanças de usuário
-    // são enviadas pelas funções específicas abaixo)
-    console.log('[Sheets] saveStorage chamado (usuários gerenciados via Sheets)');
-}
-
-// ── Abrir comanda no Sheets ──────────────────────────────────
-// Chame esta função logo após criar a comanda em state.comandas
-async function sheets_novaComanda(numero) {
-    const resultado = await sheetsAPI('novaComanda', { numero: String(numero) });
-    if (resultado && resultado.id) {
-        // Guarda o ID do Sheets na comanda para operações futuras
-        if (state.comandas[numero]) {
-            state.comandas[numero]._id = resultado.id;
+        async function sheets_novaComanda(chave, numero) {
+            const res = await sheetsAPI('novaComanda', { numero: String(numero) });
+            if (res && res.id && state.comandas[chave]) {
+                state.comandas[chave]._id = res.id;
+                console.log('[Sheets] ✅ Comanda', numero, 'id:', res.id);
+            }
         }
-        console.log(`[Sheets] ✅ Comanda ${numero} criada no Sheets (id: ${resultado.id})`);
-        return resultado.id;
-    }
-    return null;
-}
 
-// ── Lançar item na comanda ───────────────────────────────────
-async function sheets_addItem(numeroComanda, item) {
-    const comanda = state.comandas[numeroComanda];
-    if (!comanda || !comanda._id) {
-        console.warn('[Sheets] Comanda sem _id, item não sincronizado');
-        return null;
-    }
+        async function sheets_addItem(chave, itemRef, dados) {
+            const comanda = state.comandas[chave];
+            if (!comanda || !comanda._id) return null;
+            const res = await sheetsAPI('addItem', {
+                comanda_id: comanda._id,
+                codigo: dados.codigo, nome: dados.nome,
+                categoria: state.itens[dados.codigo]?.categoria || '',
+                quantidade: dados.quantidade || 1,
+                preco_unit: dados.preco,
+                total: (dados.quantidade || 1) * dados.preco,
+                observacao: dados.observacao || '',
+                preparo_ja: dados.preparo_ja || false
+            });
+            if (res && res.id) itemRef._id = res.id;
+            return res;
+        }
 
-    const resultado = await sheetsAPI('addItem', {
-        comanda_id: comanda._id,
-        codigo: item.codigo,
-        nome: item.nome,
-        categoria: state.itens[item.codigo]?.categoria || '',
-        quantidade: item.quantidade || 1,
-        preco_unit: item.preco,
-        total: (item.quantidade || 1) * item.preco,
-        observacao: item.observacao || '',
-        preparo_ja: item.preparoJa || false
-    });
+        async function sheets_pagarComanda(chave, total, forma) {
+            const comanda = state.comandas[chave];
+            if (!comanda || !comanda._id) return;
+            await sheetsAPI('pagarComanda', { comanda_id: comanda._id, total, forma_pagamento: forma || '' });
+        }
 
-    if (resultado && resultado.id && comanda.itens) {
-        // Atualiza o _id do item na memória
-        const itemMemoria = comanda.itens[comanda.itens.length - 1];
-        if (itemMemoria) itemMemoria._id = resultado.id;
-        console.log(`[Sheets] ✅ Item "${item.nome}" lançado na comanda ${numeroComanda}`);
-    }
-    return resultado;
-}
+        async function sheets_salvarCarnesDia(dia, carnes) {
+            const siglas = ['seg','ter','qua','qui','sex','sab','dom'];
+            await sheetsAPI('atualizarConfig', { chave: `carnes_${siglas[dia]}`, valor: carnes.join(',') });
+        }
 
-// ── Iniciar preparo de uma marmita ───────────────────────────
-async function sheets_iniciarPreparo(itemId, usuario) {
-    return sheetsAPI('iniciarPreparo', {
-        item_id: itemId,
-        usuario: usuario || state.userLogado || ''
-    });
-}
-
-// ── Concluir preparo de uma marmita ─────────────────────────
-async function sheets_concluirPreparo(itemId) {
-    return sheetsAPI('concluirPreparo', { item_id: itemId });
-}
-
-// ── Pagar comanda ────────────────────────────────────────────
-async function sheets_pagarComanda(numeroComanda, total, formaPagamento) {
-    const comanda = state.comandas[numeroComanda];
-    if (!comanda || !comanda._id) {
-        console.warn('[Sheets] Comanda sem _id, pagamento não sincronizado');
-        return null;
-    }
-
-    const resultado = await sheetsAPI('pagarComanda', {
-        comanda_id: comanda._id,
-        total: total,
-        forma_pagamento: formaPagamento || ''
-    });
-
-    if (resultado && resultado.sucesso) {
-        console.log(`[Sheets] ✅ Comanda ${numeroComanda} paga no Sheets`);
-    }
-    return resultado;
-}
-
-// ── Atualizar carnes do dia no Sheets ────────────────────────
-async function sheets_salvarCarnesDia(diaSemana, carnes) {
-    const siglas = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'];
-    const chave = `carnes_${siglas[diaSemana]}`;
-    return sheetsAPI('atualizarConfig', {
-        chave,
-        valor: carnes.join(',')
-    });
-}
-
-// ── Atualizar item do cardápio no Sheets ─────────────────────
-async function sheets_atualizarCardapio(codigo, dados) {
-    return sheetsAPI('atualizarCardapio', {
-        operacao: 'atualizar',
-        codigo: String(codigo),
-        ...dados
-    });
-}
-
-// ── Criar item no cardápio no Sheets ─────────────────────────
-async function sheets_novoItemCardapio(item) {
-    return sheetsAPI('atualizarCardapio', {
-        operacao: 'novo',
-        codigo: item.codigo,
-        nome: item.nome,
-        categoria: item.categoria,
-        preco: item.preco
-    });
-}
-
-console.log('[Sheets] ✅ Módulo de integração carregado. API:', SHEETS_API_URL);
-
-// Carrega dados do Sheets após o sistema inicializar
-window.addEventListener('load', () => {
-    setTimeout(async () => {
-        console.log('[Sheets] Carregando dados da planilha...');
-        await loadFromSheets();
-    }, 800);
-});
+        window.addEventListener('load', () => setTimeout(loadFromSheets, 800));
+        // ====================================================
 
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
@@ -1914,8 +1783,8 @@ window.addEventListener('load', () => {
             };
 
             saveStorage();
-            // ☁️ SHEETS: gravar novo item no cardápio
-            sheets_novoItemCardapio({ codigo, nome, categoria: tipo, preco: preço });
+            // ☁️ SHEETS: novo item no cardápio
+            sheetsAPI('atualizarCardapio', { operacao: 'novo', codigo, nome, categoria: tipo, preco: preço });
 
             // Limpar campos
             document.getElementById('adminItemNome').value = '';
@@ -2219,18 +2088,15 @@ window.addEventListener('load', () => {
             };
 
             saveStorage();
-            // ☁️ SHEETS: gravar usuário
-            const isEdicao = usuarioEmEdicao !== null;
-            sheetsAPI(isEdicao ? 'atualizarUsuario' : 'novoUsuario', {
-                login: login,
-                senha: senha,
-                nivel: perfil === 'Admin' ? 'admin' : 'atendente',
-                ativo: true
-            }).then(r => {
-                if (r && r.sucesso) console.log('[Sheets] ✅ Usuário gravado:', login);
-                else console.warn('[Sheets] ⚠️ Usuário não gravado:', r);
-            });
+            // ☁️ SHEETS: criar ou atualizar usuário
+            const _nivel = perfil === 'Admin' ? 'admin' : 'atendente';
+            if (usuarioEmEdicao) {
+                sheetsAPI('atualizarUsuario', { login, senha, nivel: _nivel });
+            } else {
+                sheetsAPI('novoUsuario', { login, senha, nivel: _nivel });
+            }
 
+            const isEdicao = usuarioEmEdicao !== null;
             fecharModalUsuario();
             renderAdminUsuarios();
             showToast(`✅ Usuário @${login} ${isEdicao ? 'atualizado' : 'criado'}`, 'success');
@@ -2331,8 +2197,7 @@ window.addEventListener('load', () => {
 
             state.usuarios[login].senha = novaSenha;
             saveStorage();
-            // ☁️ SHEETS: atualizar senha
-            sheetsAPI('resetarSenha', { login, senha: novaSenha });
+            sheetsAPI('resetarSenha', { login, senha: novaSenha }); // ☁️ SHEETS
             renderAdminUsuarios();
             showToast(`✅ Senha de @${login} resetada`, 'success');
         }
@@ -2347,8 +2212,7 @@ window.addEventListener('load', () => {
             if (confirm(`⚠️ Tem certeza que deseja deletar @${login}?\n\nEsta ação não pode ser desfeita.`)) {
                 delete state.usuarios[login];
                 saveStorage();
-                // ☁️ SHEETS: inativar usuário
-                sheetsAPI('deletarUsuario', { login });
+                sheetsAPI('deletarUsuario', { login }); // ☁️ SHEETS
                 renderAdminUsuarios();
                 showToast(`✅ Usuário @${login} removido`, 'success');
             }
@@ -2429,10 +2293,7 @@ window.addEventListener('load', () => {
 
             // ✅ SALVAR
             saveStorage();
-            // ☁️ SHEETS: gravar comanda
-            sheets_novaComanda(numero).then(id => {
-                if (id && state.comandas[chave]) state.comandas[chave]._id = id;
-            });
+            sheets_novaComanda(chave, numero); // ☁️ SHEETS
 
             // ❌ REMOVER: Feedback positivo (operação silenciosa)
             // showToast(`#${numero} aberta`, 'success');
@@ -2486,14 +2347,11 @@ window.addEventListener('load', () => {
             const comanda = state.comandas[state.comandaAtual];
             if (!comanda) return;
             
-            // ☁️ SHEETS: remover item — aguarda _id se ainda estiver pendente
-            const itemRemovido = comanda.itens[indice];
-            if (itemRemovido && itemRemovido._pendingAdd) {
-                await itemRemovido._pendingAdd;
-            }
-            if (itemRemovido && itemRemovido._id) {
-                sheetsAPI('removerItem', { item_id: itemRemovido._id });
-            }
+            // ☁️ SHEETS: aguarda _id se ainda estiver em trânsito
+            const _itemDel = comanda.itens[indice];
+            if (_itemDel && _itemDel._pendingAdd) await _itemDel._pendingAdd;
+            if (_itemDel && _itemDel._id) sheetsAPI('removerItem', { item_id: _itemDel._id });
+
             comanda.itens.splice(indice, 1);
             atualizarTotalComanda(state.comandaAtual);
             saveStorage();
@@ -2875,14 +2733,13 @@ function carregarComanda() {
                 preparo_ja: preparoJa  // ✅ FLAG NOVA
             };
             comanda.itens.push(_itemMarmita);
+            _itemMarmita._pendingAdd = sheets_addItem(state.comandaAtual, _itemMarmita, {
+                codigo: marnitaEmEdicao, nome: item.nome, quantidade: 1,
+                preco: item.preco, observacao: observacao, preparo_ja: preparoJa
+            }).then(() => delete _itemMarmita._pendingAdd);
 
             atualizarTotalComanda(state.comandaAtual);
             saveStorage();
-            // ☁️ SHEETS: gravar marmita
-            _itemMarmita._pendingAdd = sheets_addItem(state.comandaAtual, {
-                codigo: marnitaEmEdicao, nome: item.nome, quantidade: 1,
-                preco: item.preco, observacao: observacao, preparo_ja: preparoJa
-            }).then(res => { if (res && res.id) _itemMarmita._id = res.id; delete _itemMarmita._pendingAdd; });
             renderizarListaLançada();
             
             // ✅ SE PREPARO JÁ → MOVE COMANDA PARA PREPARO SE AINDA NÃO ESTIVER
@@ -2950,22 +2807,16 @@ function carregarComanda() {
             // Fluxo por tipo normal (não é Quilo)
             if (item.tipo === 'Fixo') {
                 const _itemFixo = {
-                    codigo: codigo,
-                    nome: item.nome,
-                    tipo: item.tipo,
-                    preco: item.preco,
-                    quantidade: 1,
-                    observacao: '',
+                    codigo: codigo, nome: item.nome, tipo: item.tipo,
+                    preco: item.preco, quantidade: 1, observacao: '',
                     icone: getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo))
                 };
                 comanda.itens.push(_itemFixo);
+                _itemFixo._pendingAdd = sheets_addItem(state.comandaAtual, _itemFixo, {
+                    codigo, nome: item.nome, quantidade: 1, preco: item.preco, observacao: '', preparo_ja: false
+                }).then(() => delete _itemFixo._pendingAdd);
                 atualizarTotalComanda(state.comandaAtual);
                 showToast(`${item.nome} lançado`, 'success');
-                // ☁️ SHEETS: gravar item fixo
-                _itemFixo._pendingAdd = sheets_addItem(state.comandaAtual, {
-                    codigo, nome: item.nome, quantidade: 1,
-                    preco: item.preco, observacao: '', preparo_ja: false
-                }).then(res => { if (res && res.id) _itemFixo._id = res.id; delete _itemFixo._pendingAdd; });
             } else if (item.tipo === 'Gramas') {
                 // Solicitar peso
                 const peso = prompt(`Peso (kg) para ${item.nome}:`);
@@ -2977,23 +2828,18 @@ function carregarComanda() {
                     }
                     const total = pesoNum * item.preco;
                     const _itemGramas = {
-                        codigo: codigo,
-                        nome: item.nome,
-                        tipo: item.tipo,
-                        preco: item.preco,
-                        quantidade: pesoNum,
-                        total: total,
+                        codigo: codigo, nome: item.nome, tipo: item.tipo,
+                        preco: item.preco, quantidade: pesoNum, total: total,
                         observacao: `${pesoNum}kg`,
                         icone: getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo))
                     };
                     comanda.itens.push(_itemGramas);
-                    atualizarTotalComanda(state.comandaAtual);
-                    showToast(`${item.nome} (${pesoNum}kg) lançado`, 'success');
-                    // ☁️ SHEETS: gravar item por peso
-                    _itemGramas._pendingAdd = sheets_addItem(state.comandaAtual, {
+                    _itemGramas._pendingAdd = sheets_addItem(state.comandaAtual, _itemGramas, {
                         codigo, nome: item.nome, quantidade: pesoNum,
                         preco: item.preco, observacao: `${pesoNum}kg`, preparo_ja: false
-                    }).then(res => { if (res && res.id) _itemGramas._id = res.id; delete _itemGramas._pendingAdd; });
+                    }).then(() => delete _itemGramas._pendingAdd);
+                    atualizarTotalComanda(state.comandaAtual);
+                    showToast(`${item.nome} (${pesoNum}kg) lançado`, 'success');
                 }
                 document.getElementById('lançarCodigoItem').value = '';
                 document.getElementById('lançarCodigoItem').focus();
@@ -3423,12 +3269,9 @@ function carregarComanda() {
             }
             
             saveStorage();
-            // ☁️ SHEETS: gravar pagamento
-            sheets_pagarComanda(
-                comandaCheckoutAtual,
-                comanda.total,
-                formaPagamentoSelecionada
-            );
+            // ☁️ SHEETS: registrar pagamento
+            const _totalPago = (comanda.itens || []).reduce((s,i)=>s+(i.total||(i.preco*i.quantidade)||0),0);
+            sheets_pagarComanda(comandaCheckoutAtual, _totalPago, formaPagamentoSelecionada);
             
             // FEEDBACK
             showToast('✓ Pagamento confirmado!', 'success');
@@ -3516,8 +3359,7 @@ function carregarComanda() {
             
             state.marnitasDia[diaMarnitaSelecionado] = carnes;
             saveStorage();
-            // ☁️ SHEETS: gravar carnes do dia
-            sheets_salvarCarnesDia(diaMarnitaSelecionado, carnes);
+            sheets_salvarCarnesDia(diaMarnitaSelecionado, carnes); // ☁️ SHEETS
             showToast('✓ Carnes salvas!', 'success');
         }
 
@@ -3669,11 +3511,10 @@ function carregarComanda() {
             comanda.atendentePreparo = state.user || 'Atendente'; // ✅ PEGA NOME DO USUÁRIO LOGADO
             
             saveStorage();
-            // ☁️ SHEETS: gravar início de preparo nos itens de marmita
-            if (comanda._id) {
-                const marmitas = comanda.itens.filter(i => i.tipo === 'Marmita' && i._id);
-                marmitas.forEach(i => sheets_iniciarPreparo(i._id, state.userLogado));
-            }
+            // ☁️ SHEETS: marcar marmitas como em preparo
+            (comanda.itens || []).filter(i => i._id).forEach(i =>
+                sheetsAPI('iniciarPreparo', { item_id: i._id, usuario: state.userLogado || '' })
+            );
             renderizarPreapro();
         }
 
@@ -3685,11 +3526,10 @@ function carregarComanda() {
             comanda.dataConclusaoPreparo = new Date().toISOString();
             
             saveStorage();
-            // ☁️ SHEETS: gravar conclusão de preparo
-            if (comanda._id) {
-                const marmitas = comanda.itens.filter(i => i.tipo === 'Marmita' && i._id);
-                marmitas.forEach(i => sheets_concluirPreparo(i._id));
-            }
+            // ☁️ SHEETS: marcar marmitas como concluídas
+            (comanda.itens || []).filter(i => i._id).forEach(i =>
+                sheetsAPI('concluirPreparo', { item_id: i._id })
+            );
             renderizarPreapro();
             renderizarFullscreen(); // Atualizar fullscreen também
             showToast(`✓ Comanda #${comanda.numero} pronta!`, 'success');
@@ -4272,28 +4112,21 @@ function carregarComanda() {
             const total = kg * item.preco;
             
             const _itemQuilo = {
-                codigo: codigo,
-                nome: item.nome,
-                tipo: item.tipo,
-                preco: item.preco,
-                quantidade: kg,
-                total: total,
-                observacao: peso + 'g',
-                icone: item.icone
+                codigo: codigo, nome: item.nome, tipo: item.tipo,
+                preco: item.preco, quantidade: kg, total: total,
+                observacao: peso + 'g', icone: item.icone
             };
             comanda.itens.push(_itemQuilo);
-            
+            _itemQuilo._pendingAdd = sheets_addItem(state.comandaAtual, _itemQuilo, {
+                codigo, nome: item.nome, quantidade: kg,
+                preco: item.preco, observacao: peso + 'g', preparo_ja: false
+            }).then(() => delete _itemQuilo._pendingAdd);
+
             atualizarTotalComanda(state.comandaAtual);
             saveStorage();
             renderizarListaLançada();
             renderizarItensDisponiveis();
             
-            // ☁️ SHEETS: gravar item buffet por peso
-            _itemQuilo._pendingAdd = sheets_addItem(state.comandaAtual, {
-                codigo, nome: item.nome, quantidade: kg,
-                preco: item.preco, observacao: peso + 'g', preparo_ja: false
-            }).then(res => { if (res && res.id) _itemQuilo._id = res.id; delete _itemQuilo._pendingAdd; });
-
             showToast(item.nome + ' (' + peso + 'g) - R$ ' + total.toFixed(2), 'success');
             
             fecharModalBuffet();
@@ -4769,4 +4602,95 @@ function carregarComanda() {
                 return;
             }
 
-            const coma
+            const comanda = state.comandas[state.comandaCheckout];
+
+            if (!comanda || comanda.itens.length === 0) {
+                showToast('Comanda sem itens', 'error');
+                return;
+            }
+
+            // Marcar como paga
+            comanda.status = 'Fechada/Paga';
+            comanda.paid = true;
+            comanda.formaPagamento = state.formaPagamentoSelecionada;
+            comanda.dataPagamento = new Date().toISOString();
+
+            saveStorage();
+
+            // Feedback
+            showToast(`✓ Pagamento confirmado (#${comanda.numero})`, 'success');
+
+            // Limpar
+            state.comandaCheckout = null;
+            state.formaPagamentoSelecionada = null;
+            document.getElementById('areaDetalhes').style.display = 'none';
+            document.getElementById('areaPagamento').style.display = 'none';
+            document.getElementById('areaVazia').style.display = 'flex';
+
+            // Recarregar lista
+            renderizarCheckout();
+
+            // Fechar collapse se aberto
+            document.getElementById('listaComandas').style.display = 'none';
+            document.getElementById('iconColapse').textContent = '▼';
+        }
+
+        // ===== MODAL BUFFET QUILO =====
+        let codigoBuffetAtual = null;
+
+        function fecharModalBuffet() {
+            document.getElementById('modalBuffetQuilo').style.display = 'none';
+            codigoBuffetAtual = null;
+            document.getElementById('lançarCodigoItem').value = '';
+            document.getElementById('lançarCodigoItem').focus();
+        }
+
+        function calcularTotalBuffet() {
+            const peso = parseFloat(document.getElementById('pesoQuilo').value) || 0;
+            const item = state.itens[codigoBuffetAtual];
+            if (peso > 0) {
+                const kg = peso / 1000;
+                const total = kg * item.preco;
+                document.getElementById('exibirTotal').textContent = total.toFixed(2);
+            } else {
+                document.getElementById('exibirTotal').textContent = '0,00';
+            }
+        }
+
+        function confirmarBuffet() {
+            const peso = parseFloat(document.getElementById('pesoQuilo').value);
+            
+            if (!peso || peso <= 0) {
+                showToast('Informe o peso', 'error');
+                return;
+            }
+            
+            const item = state.itens[codigoBuffetAtual];
+            const kg = peso / 1000;
+            const total = kg * item.preco;
+            const comanda = state.comandas[state.comandaAtual];
+            
+            comanda.itens.push({
+                codigo: codigoBuffetAtual,
+                nome: item.nome,
+                tipo: item.tipo,
+                preco: item.preco,
+                quantidade: kg,
+                total: total,
+                observacao: peso + 'g',
+                icone: item.icone
+            });
+            
+            atualizarTotalComanda(state.comandaAtual);
+            saveStorage();
+            renderizarListaLançada();
+            renderizarItensDisponiveis();
+            
+            showToast(item.nome + ' (' + peso + 'g) - R$ ' + total.toFixed(2), 'success');
+            
+            fecharModalBuffet();
+        }
+
+</script>
+</body>
+</html>
