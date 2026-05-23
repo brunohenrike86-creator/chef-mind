@@ -1911,6 +1911,8 @@ window.addEventListener('load', () => {
             };
 
             saveStorage();
+            // ☁️ SHEETS: gravar novo item no cardápio
+            sheets_novoItemCardapio({ codigo, nome, categoria: tipo, preco: preço });
 
             // Limpar campos
             document.getElementById('adminItemNome').value = '';
@@ -2214,8 +2216,12 @@ window.addEventListener('load', () => {
             };
 
             saveStorage();
-
+            // ☁️ SHEETS: gravar usuário
             const isEdicao = usuarioEmEdicao !== null;
+            sheetsAPI(isEdicao ? 'atualizarUsuario' : 'novoUsuario', {
+                login, senha, nivel: perfil === 'Admin' ? 'admin' : 'atendente', ativo: true
+            });
+
             fecharModalUsuario();
             renderAdminUsuarios();
             showToast(`✅ Usuário @${login} ${isEdicao ? 'atualizado' : 'criado'}`, 'success');
@@ -2316,6 +2322,8 @@ window.addEventListener('load', () => {
 
             state.usuarios[login].senha = novaSenha;
             saveStorage();
+            // ☁️ SHEETS: atualizar senha
+            sheetsAPI('resetarSenha', { login, senha: novaSenha });
             renderAdminUsuarios();
             showToast(`✅ Senha de @${login} resetada`, 'success');
         }
@@ -2330,6 +2338,8 @@ window.addEventListener('load', () => {
             if (confirm(`⚠️ Tem certeza que deseja deletar @${login}?\n\nEsta ação não pode ser desfeita.`)) {
                 delete state.usuarios[login];
                 saveStorage();
+                // ☁️ SHEETS: inativar usuário
+                sheetsAPI('deletarUsuario', { login });
                 renderAdminUsuarios();
                 showToast(`✅ Usuário @${login} removido`, 'success');
             }
@@ -2410,6 +2420,10 @@ window.addEventListener('load', () => {
 
             // ✅ SALVAR
             saveStorage();
+            // ☁️ SHEETS: gravar comanda
+            sheets_novaComanda(numero).then(id => {
+                if (id && state.comandas[chave]) state.comandas[chave]._id = id;
+            });
 
             // ❌ REMOVER: Feedback positivo (operação silenciosa)
             // showToast(`#${numero} aberta`, 'success');
@@ -2846,6 +2860,11 @@ function carregarComanda() {
 
             atualizarTotalComanda(state.comandaAtual);
             saveStorage();
+            // ☁️ SHEETS: gravar marmita
+            sheets_addItem(state.comandaAtual, {
+                codigo: marnitaEmEdicao, nome: item.nome, quantidade: 1,
+                preco: item.preco, observacao: observacao, preparo_ja: preparoJa
+            });
             renderizarListaLançada();
             
             // ✅ SE PREPARO JÁ → MOVE COMANDA PARA PREPARO SE AINDA NÃO ESTIVER
@@ -2923,6 +2942,11 @@ function carregarComanda() {
                 });
                 atualizarTotalComanda(state.comandaAtual);
                 showToast(`${item.nome} lançado`, 'success');
+                // ☁️ SHEETS: gravar item fixo
+                sheets_addItem(state.comandaAtual, {
+                    codigo, nome: item.nome, quantidade: 1,
+                    preco: item.preco, observacao: '', preparo_ja: false
+                });
             } else if (item.tipo === 'Gramas') {
                 // Solicitar peso
                 const peso = prompt(`Peso (kg) para ${item.nome}:`);
@@ -2945,6 +2969,11 @@ function carregarComanda() {
                     });
                     atualizarTotalComanda(state.comandaAtual);
                     showToast(`${item.nome} (${pesoNum}kg) lançado`, 'success');
+                    // ☁️ SHEETS: gravar item por peso
+                    sheets_addItem(state.comandaAtual, {
+                        codigo, nome: item.nome, quantidade: pesoNum,
+                        preco: item.preco, observacao: `${pesoNum}kg`, preparo_ja: false
+                    });
                 }
                 document.getElementById('lançarCodigoItem').value = '';
                 document.getElementById('lançarCodigoItem').focus();
@@ -3374,6 +3403,12 @@ function carregarComanda() {
             }
             
             saveStorage();
+            // ☁️ SHEETS: gravar pagamento
+            sheets_pagarComanda(
+                comandaCheckoutAtual,
+                comanda.total,
+                formaPagamentoSelecionada
+            );
             
             // FEEDBACK
             showToast('✓ Pagamento confirmado!', 'success');
@@ -3461,6 +3496,8 @@ function carregarComanda() {
             
             state.marnitasDia[diaMarnitaSelecionado] = carnes;
             saveStorage();
+            // ☁️ SHEETS: gravar carnes do dia
+            sheets_salvarCarnesDia(diaMarnitaSelecionado, carnes);
             showToast('✓ Carnes salvas!', 'success');
         }
 
@@ -3612,6 +3649,11 @@ function carregarComanda() {
             comanda.atendentePreparo = state.user || 'Atendente'; // ✅ PEGA NOME DO USUÁRIO LOGADO
             
             saveStorage();
+            // ☁️ SHEETS: gravar início de preparo nos itens de marmita
+            if (comanda._id) {
+                const marmitas = comanda.itens.filter(i => i.tipo === 'Marmita' && i._id);
+                marmitas.forEach(i => sheets_iniciarPreparo(i._id, state.userLogado));
+            }
             renderizarPreapro();
         }
 
@@ -3623,6 +3665,11 @@ function carregarComanda() {
             comanda.dataConclusaoPreparo = new Date().toISOString();
             
             saveStorage();
+            // ☁️ SHEETS: gravar conclusão de preparo
+            if (comanda._id) {
+                const marmitas = comanda.itens.filter(i => i.tipo === 'Marmita' && i._id);
+                marmitas.forEach(i => sheets_concluirPreparo(i._id));
+            }
             renderizarPreapro();
             renderizarFullscreen(); // Atualizar fullscreen também
             showToast(`✓ Comanda #${comanda.numero} pronta!`, 'success');
