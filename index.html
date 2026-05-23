@@ -1247,7 +1247,7 @@ async function sheetsAPI(action, dados = {}) {
 
 // ── Carregar dados iniciais do Google Sheets ─────────────────
 // Substitui o loadStorage() original
-async function loadStorage() {
+async function loadFromSheets() {
     console.log('[Sheets] Carregando dados...');
 
     try {
@@ -1465,7 +1465,7 @@ console.log('[Sheets] ✅ Módulo de integração carregado. API:', SHEETS_API_U
 window.addEventListener('load', () => {
     setTimeout(async () => {
         console.log('[Sheets] Carregando dados da planilha...');
-        await loadStorage();
+        await loadFromSheets();
     }, 800);
 });
 
