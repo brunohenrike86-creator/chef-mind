@@ -1273,7 +1273,9 @@ async function loadFromSheets() {
             // Limpa o cardápio padrão e usa o do Sheets
             const novoItens = {};
             cardapio.forEach(item => {
-                novoItens[String(item.codigo)] = {
+                // Garantir código com zeros à esquerda (Sheets remove zeros de números)
+                const codigo = String(item.codigo).padStart(3, '0');
+                novoItens[codigo] = {
                     nome: item.nome,
                     preco: parseFloat(item.preco) || 0,
                     icone: item.icone || '🍽️',
@@ -1281,8 +1283,9 @@ async function loadFromSheets() {
                     tipo: item.tipo || 'Fixo'
                 };
             });
-            // Só substitui se vieram dados válidos
+            // SUBSTITUIR (não merge) para evitar duplicatas com itens hardcoded
             if (Object.keys(novoItens).length > 0) {
+                Object.keys(state.itens).forEach(k => delete state.itens[k]);
                 Object.assign(state.itens, novoItens);
                 console.log('[Sheets] ✅ Cardápio carregado:', Object.keys(novoItens).length, 'itens');
             }
@@ -2219,7 +2222,13 @@ window.addEventListener('load', () => {
             // ☁️ SHEETS: gravar usuário
             const isEdicao = usuarioEmEdicao !== null;
             sheetsAPI(isEdicao ? 'atualizarUsuario' : 'novoUsuario', {
-                login, senha, nivel: perfil === 'Admin' ? 'admin' : 'atendente', ativo: true
+                login: login,
+                senha: senha,
+                nivel: perfil === 'Admin' ? 'admin' : 'atendente',
+                ativo: true
+            }).then(r => {
+                if (r && r.sucesso) console.log('[Sheets] ✅ Usuário gravado:', login);
+                else console.warn('[Sheets] ⚠️ Usuário não gravado:', r);
             });
 
             fecharModalUsuario();
@@ -2477,6 +2486,11 @@ window.addEventListener('load', () => {
             const comanda = state.comandas[state.comandaAtual];
             if (!comanda) return;
             
+            // ☁️ SHEETS: remover item se tiver _id
+            const itemRemovido = comanda.itens[indice];
+            if (itemRemovido && itemRemovido._id) {
+                sheetsAPI('removerItem', { item_id: itemRemovido._id });
+            }
             comanda.itens.splice(indice, 1);
             atualizarTotalComanda(state.comandaAtual);
             saveStorage();
