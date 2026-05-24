@@ -1312,7 +1312,13 @@
 
         async function sheets_addItem(chave, itemRef, dados) {
             const comanda = state.comandas[chave];
-            if (!comanda || !comanda._id) return null;
+            if (!comanda) return null;
+            // ⏳ aguarda comanda ser criada no Sheets se ainda estiver pendente
+            if (comanda._pendingNovaComanda) await comanda._pendingNovaComanda;
+            if (!comanda._id) {
+                console.warn('[Sheets] sheets_addItem: comanda._id não disponível, item não salvo', chave);
+                return null;
+            }
             const res = await sheetsAPI('addItem', {
                 comanda_id: comanda._id,
                 codigo: dados.codigo, nome: dados.nome,
@@ -2293,7 +2299,7 @@
 
             // ✅ SALVAR
             saveStorage();
-            sheets_novaComanda(chave, numero); // ☁️ SHEETS
+            state.comandas[chave]._pendingNovaComanda = sheets_novaComanda(chave, numero); // ☁️ SHEETS
 
             // ❌ REMOVER: Feedback positivo (operação silenciosa)
             // showToast(`#${numero} aberta`, 'success');
@@ -2349,8 +2355,15 @@
             
             // ☁️ SHEETS: aguarda _id se ainda estiver em trânsito
             const _itemDel = comanda.itens[indice];
+            console.log('[Sheets] removerItem: item=', _itemDel?.nome, '_id=', _itemDel?._id, '_pendingAdd=', !!_itemDel?._pendingAdd);
             if (_itemDel && _itemDel._pendingAdd) await _itemDel._pendingAdd;
-            if (_itemDel && _itemDel._id) sheetsAPI('removerItem', { item_id: _itemDel._id });
+            console.log('[Sheets] removerItem após await: _id=', _itemDel?._id);
+            if (_itemDel && _itemDel._id) {
+                sheetsAPI('removerItem', { item_id: _itemDel._id });
+                console.log('[Sheets] removerItem chamado para item_id=', _itemDel._id);
+            } else {
+                console.warn('[Sheets] removerItem: _id não encontrado no item, delete não sincronizado com Sheets');
+            }
 
             comanda.itens.splice(indice, 1);
             atualizarTotalComanda(state.comandaAtual);
