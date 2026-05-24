@@ -2871,7 +2871,7 @@ function carregarComanda() {
             renderizarListaLançada();
         }
 
-                function removerTodosItem(idx) {
+                async function removerTodosItem(idx) {
             // BLOQUEAR SE ESTIVER EM MODO LEITURA
             if (state.modoLeitura) {
                 showToast('Modo consulta - edição desativada', 'warning');
@@ -2880,7 +2880,20 @@ function carregarComanda() {
 
             const comanda = state.comandas[state.comandaAtual];
             const item = comanda.itens[idx];
-            
+
+            // ☁️ SHEETS: marcar todos os itens com mesmo código como removidos
+            const itensParaRemover = comanda.itens.filter(i => i.codigo === item.codigo && i.tipo === item.tipo);
+            for (const _itemDel of itensParaRemover) {
+                console.log('[Sheets] removerTodosItem: item=', _itemDel.nome, '_id=', _itemDel._id, '_pendingAdd=', !!_itemDel._pendingAdd);
+                if (_itemDel._pendingAdd) await _itemDel._pendingAdd;
+                if (_itemDel._id) {
+                    sheetsAPI('removerItem', { item_id: _itemDel._id });
+                    console.log('[Sheets] removerItem chamado para item_id=', _itemDel._id);
+                } else {
+                    console.warn('[Sheets] removerTodosItem: _id não encontrado, item não sincronizado', _itemDel.nome);
+                }
+            }
+
             // Remover todos os itens com mesmo código e tipo
             comanda.itens = comanda.itens.filter(i => !(i.codigo === item.codigo && i.tipo === item.tipo));
             saveStorage();
