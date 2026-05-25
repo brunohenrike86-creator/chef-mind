@@ -1244,12 +1244,17 @@
                     const novoItens = {};
                     cardapio.forEach(item => {
                         const codigo = String(item.codigo).padStart(3, '0');
+                        // Inferir tipo da categoria quando coluna tipo não existe no Sheets
+                        const cat = (item.categoria || '').toLowerCase();
+                        const tipoInferido = item.tipo ||
+                            (cat === 'marmita' || cat === 'marmitas' ? 'Marmita' :
+                             cat === 'gramas' ? 'Gramas' : 'Fixo');
                         novoItens[codigo] = {
                             nome: item.nome,
                             preco: parseFloat(item.preco) || 0,
                             icone: item.icone || '🍽️',
                             categoria: item.categoria || 'Geral',
-                            tipo: item.tipo || 'Fixo'
+                            tipo: tipoInferido
                         };
                     });
                     if (Object.keys(novoItens).length > 0) {
@@ -1275,10 +1280,11 @@
                     for (const cmd of comandas) {
                         const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
                         const data = cmd.timestamp_abertura ? cmd.timestamp_abertura.split('T')[0] : new Date().toISOString().split('T')[0];
-                        const chave = `${String(cmd.numero).padStart(3,'0')}-${data}`;
+                        const numeroNormSheets = String(parseInt(cmd.numero, 10));
+                        const chave = `${numeroNormSheets}-${data}`;
                         state.comandas[chave] = {
                             _id: cmd.id,
-                            numero: String(cmd.numero).padStart(3,'0'),
+                            numero: numeroNormSheets,
                             status: cmd.status === 'em_preparo' ? 'Em Preparo' : 'Aberta',
                             data, paid: false,
                             itens: (itensCmd || []).map(i => ({
@@ -1290,7 +1296,11 @@
                                 total: parseFloat(i.total) || 0,
                                 observacao: i.observacao || '',
                                 preparo_ja: String(i.preparo_ja).toLowerCase() === 'true',
-                                tipo: i.categoria || 'Fixo'
+                                tipo: (() => {
+                                    const cat = (i.categoria || '').toLowerCase();
+                                    return cat === 'marmita' || cat === 'marmitas' ? 'Marmita' :
+                                           cat === 'gramas' ? 'Gramas' : 'Fixo';
+                                })()
                             }))
                         };
                     }
@@ -2273,9 +2283,12 @@
                 return;
             }
 
+            // Normalizar número: remover zeros à esquerda (1 = 01 = 001)
+            const numeroNorm = String(parseInt(numero, 10));
+
             // Validação: comanda já utilizada no dia
             const dataAtual = new Date().toISOString().split('T')[0];
-            const chave = `${numero}-${dataAtual}`;
+            const chave = `${numeroNorm}-${dataAtual}`;
             
             if (state.comandas[chave]) {
                 showToast('Comanda já aberta hoje', 'error');
@@ -2287,7 +2300,7 @@
             // ✅ CRIAR COMANDA NOVA
             state.comandas[chave] = {
                 id: chave,
-                numero: numero,
+                numero: numeroNorm,
                 data: dataAtual,
                 status: 'Aberta',
                 itens: [],
@@ -2299,7 +2312,7 @@
 
             // ✅ SALVAR
             saveStorage();
-            state.comandas[chave]._pendingNovaComanda = sheets_novaComanda(chave, numero); // ☁️ SHEETS
+            state.comandas[chave]._pendingNovaComanda = sheets_novaComanda(chave, numeroNorm); // ☁️ SHEETS
 
             // ❌ REMOVER: Feedback positivo (operação silenciosa)
             // showToast(`#${numero} aberta`, 'success');
@@ -2382,7 +2395,8 @@ function carregarComanda() {
             }
 
             const dataAtual = new Date().toISOString().split('T')[0];
-            const key = `${numero}-${dataAtual}`;
+            const numeroNorm = String(parseInt(numero, 10));
+            const key = `${numeroNorm}-${dataAtual}`;
 
             // VERIFICAR SE EXISTE
             if (!state.comandas[key]) {
