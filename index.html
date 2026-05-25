@@ -1273,7 +1273,7 @@
                 if (usuarios && usuarios.length > 0) {
                     usuarios.forEach(u => {
                         state.usuarios[u.login] = {
-                            nome: u.login, senha: String(u.senha),
+                            nome: u.nome || u.login, senha: String(u.senha),
                             perfil: u.nivel === 'admin' ? 'Admin' : 'Atendente'
                         };
                     });
@@ -2112,9 +2112,15 @@
             // ☁️ SHEETS: criar ou atualizar usuário
             const _nivel = perfil === 'Admin' ? 'admin' : 'atendente';
             if (usuarioEmEdicao) {
-                sheetsAPI('atualizarUsuario', { login, senha, nivel: _nivel });
+                if (usuarioEmEdicao !== login) {
+                    // Login mudou: deletar antigo e criar novo no Sheets
+                    sheetsAPI('deletarUsuario', { login: usuarioEmEdicao });
+                    sheetsAPI('novoUsuario', { login, nome, senha, nivel: _nivel });
+                } else {
+                    sheetsAPI('atualizarUsuario', { login, nome, senha, nivel: _nivel });
+                }
             } else {
-                sheetsAPI('novoUsuario', { login, senha, nivel: _nivel });
+                sheetsAPI('novoUsuario', { login, nome, senha, nivel: _nivel });
             }
 
             const isEdicao = usuarioEmEdicao !== null;
