@@ -1004,16 +1004,28 @@
     </div>
     
     <!-- FULLSCREEN PREPARO - PARA CLIENTE/TV -->
-    <div id="fullscreenPreparo" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); z-index: 9999; overflow: hidden; color: white; padding: 0; margin: 0;">
-        
-        <!-- HEADER FULLSCREEN - COMPACTO -->
-        <div style="padding: 16px 20px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); border-bottom: 3px solid #F5A962; position: relative;">
-            <div style="font-size: 32px; font-weight: bold;">👨‍🍳 FILA DE PREPARO</div>
-            <button onclick="fecharFullscreen()" style="position: absolute; top: 16px; right: 20px; padding: 8px 16px; background: rgba(255,255,255,0.2); color: white; border: 2px solid white; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">✕ FECHAR</button>
+    <div id="fullscreenPreparo" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #111; z-index: 9999; overflow: hidden; color: white; padding: 0; margin: 0; flex-direction: column;">
+
+        <!-- HEADER -->
+        <div style="padding: 10px 20px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); border-bottom: 3px solid #F5A962; position: relative; flex-shrink: 0; display: flex; align-items: center;">
+            <div style="font-size: 28px; font-weight: bold;">👨‍🍳 FILA DE PREPARO</div>
+            <button onclick="fecharFullscreen()" style="position: absolute; top: 10px; right: 20px; padding: 6px 14px; background: rgba(255,255,255,0.2); color: white; border: 2px solid white; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold;">✕ FECHAR</button>
         </div>
 
-        <!-- LISTA FULLSCREEN - SEM SCROLL, PREENCHE 100% -->
-        <div id="areaFullscreen" style="padding: 12px; height: calc(100vh - 70px); display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; grid-auto-rows: min-content; overflow: hidden; align-content: start;">
+        <!-- CORPO: ativos (esquerda) + concluídos (direita) -->
+        <div style="flex: 1; display: flex; flex-direction: row; overflow: hidden;">
+
+            <!-- ÁREA ATIVOS: Aguardando + Em Preparo -->
+            <div id="areaFullscreenAtivos" style="flex: 1; padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; align-content: start; overflow-y: auto;">
+                <div style="grid-column:1/-1; text-align:center; padding:40px; font-size:22px; color:rgba(255,255,255,0.4);">✓ Todos os pedidos prontos!</div>
+            </div>
+
+            <!-- COLUNA LATERAL CONCLUÍDOS -->
+            <div id="areaFullscreenConcluidos" style="width: 260px; flex-shrink: 0; background: #1a2e1a; border-left: 3px solid #27AE60; padding: 10px 8px; display: none; flex-direction: column; gap: 8px; overflow-y: auto;">
+                <div style="font-size: 13px; font-weight: bold; color: #27AE60; text-align: center; padding-bottom: 6px; border-bottom: 1px solid #27AE6066;">✓ PRONTOS</div>
+                <div id="listaFullscreenConcluidos" style="display: flex; flex-direction: column; gap: 8px;"></div>
+            </div>
+
         </div>
     </div>
 
@@ -1093,7 +1105,7 @@
                 <div id="togglePreparoJa" style="width: 24px; height: 24px; border: 2px solid var(--primary); border-radius: 4px; display: flex; align-items: center; justify-content: center; background: white; transition: all 0.2s;">
                     <span id="toggleIcon" style="font-size: 14px;">☐</span>
                 </div>
-                <span style="font-size: 12px; font-weight: bold; color: var(--text-dark);">⚡ Preparo Já (sem esperar pagamento)</span>
+                <span style="font-size: 12px; font-weight: bold; color: var(--text-dark);">⚡ Preparo p/ mesa (sem esperar pagamento)</span>
                 <input type="hidden" id="checkboxPreparoJa" value="false">
             </div>
             
@@ -2461,7 +2473,7 @@ function carregarComanda() {
                 renderizarListaLançada();
                 renderizarItensDisponiveis();
                 
-                showToast('⚡ Comanda com Preparo Já - continue lançando', 'info');
+                showToast('⚡ Comanda com Preparo p/ mesa - continue lançando', 'info');
                 return;
             }
 
@@ -2790,7 +2802,7 @@ function carregarComanda() {
                     saveStorage();
                     renderizarPreapro(); // Atualiza fila de preparo
                 }
-                showToast(`⚡ ${item.nome} (Preparo Já!)`, 'success');
+                showToast(`⚡ ${item.nome} (Preparo p/ mesa!)`, 'success');
             } else {
                 showToast(`${item.nome}`, 'success');
             }
@@ -3437,11 +3449,13 @@ function carregarComanda() {
                     cmd.statusPreparo !== null && cmd.statusPreparo !== undefined  // ✅ COM CARD
                 )
                 .sort((a, b) => {
-                    // Ordenar por: Aguardando → Em Preparo → Concluído
+                    // Ordenar por status, depois por hora de chegada (mais antiga = mais urgente)
                     const ordem = { 'Aguardando': 0, 'Em Preparo': 1, 'Concluído': 2 };
                     const statusA = a[1].statusPreparo || 'Aguardando';
                     const statusB = b[1].statusPreparo || 'Aguardando';
-                    return (ordem[statusA] || 0) - (ordem[statusB] || 0);
+                    const diff = (ordem[statusA] || 0) - (ordem[statusB] || 0);
+                    if (diff !== 0) return diff;
+                    return new Date(a[1].dataInicioEspera) - new Date(b[1].dataInicioEspera);
                 });
             
             const area = document.getElementById('areaPreparando');
@@ -3515,7 +3529,11 @@ function carregarComanda() {
                 ${statusPreparo === 'Concluído' ? 'animation: piscar 0.5s infinite;' : ''}
             `;
 
+            const temPreparoJa = comanda.itens.some(i => i.preparo_ja);
+
             card.innerHTML = `
+                <!-- BADGE PREPARO JÁ -->
+                ${temPreparoJa ? `<div style="background:#5D6D7E; color:white; font-size:9px; font-weight:bold; text-align:center; padding:2px 6px; border-radius:3px; margin-bottom:4px; letter-spacing:0.5px;">⚡ PREP. P/ MESA</div>` : ''}
                 <!-- HEADER: Número + Tempo -->
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid ${corTexto === 'white' ? 'rgba(255,255,255,0.3)' : 'var(--border)'};">
                     <div style="font-size: 14px; font-weight: bold;">#${comanda.numero}</div>
@@ -3580,14 +3598,9 @@ function carregarComanda() {
             renderizarFullscreen(); // Atualizar fullscreen também
             showToast(`✓ Comanda #${comanda.numero} pronta!`, 'success');
             
-            // ✅ DESAPARECER EM 1 MINUTO E MEIO (90000ms) - SEMPRE!
-            // Independente de pagamento, o card sai da tela após 1:30min
-            // Se foi paga antes, a comanda já saiu do "Em Preparo" de qualquer forma
-            // Se não foi paga, o card desaparece mesmo assim
+            // ✅ DESAPARECER EM 45 SEGUNDOS
             setTimeout(() => {
                 if (comanda.statusPreparo === 'Concluído') {
-                    // ✅ SEMPRE remove o statusPreparo após 1:30min
-                    // Isso faz o card desaparecer da tela de preparo
                     comanda.statusPreparo = null;
                     comanda.dataConclusaoPreparo = null;
                     
@@ -3598,10 +3611,9 @@ function carregarComanda() {
                     
                     saveStorage();
                     renderizarPreapro();
-                    renderizarFullscreen(); // Atualizar fullscreen também
-                    console.log('✓ Card desapareceu após 1:30min');
+                    renderizarFullscreen();
                 }
-            }, 90000);
+            }, 45000);
         }
 
         function iniciarTimerPreparo() {
@@ -3625,7 +3637,7 @@ function carregarComanda() {
 
         function abrirFullscreen() {
             const fsElement = document.getElementById('fullscreenPreparo');
-            fsElement.style.display = 'block';
+            fsElement.style.display = 'flex';
             renderizarFullscreen();
             iniciarTimerFullscreen();
             
@@ -3667,109 +3679,120 @@ function carregarComanda() {
 
         function renderizarFullscreen() {
             const dataAtual = new Date().toISOString().split('T')[0];
-            
-            // ✅ FILTRAR APENAS COMANDAS QUE TÊM CARD VISÍVEL (statusPreparo !== null)
-            const comandasEmPreparo = Object.entries(state.comandas)
-                .filter(([key, cmd]) => 
-                    cmd.data === dataAtual && 
+
+            // (relógio removido do header)
+
+            const todasComandas = Object.entries(state.comandas)
+                .filter(([key, cmd]) =>
+                    cmd.data === dataAtual &&
                     cmd.status === 'Em Preparo' &&
-                    cmd.statusPreparo !== null && cmd.statusPreparo !== undefined  // ✅ COM CARD
+                    cmd.statusPreparo !== null && cmd.statusPreparo !== undefined
                 )
                 .sort((a, b) => {
                     const ordem = { 'Aguardando': 0, 'Em Preparo': 1, 'Concluído': 2 };
-                    const statusA = a[1].statusPreparo || 'Aguardando';
-                    const statusB = b[1].statusPreparo || 'Aguardando';
-                    return (ordem[statusA] || 0) - (ordem[statusB] || 0);
+                    const sA = a[1].statusPreparo || 'Aguardando';
+                    const sB = b[1].statusPreparo || 'Aguardando';
+                    const diff = (ordem[sA] || 0) - (ordem[sB] || 0);
+                    if (diff !== 0) return diff;
+                    return new Date(a[1].dataInicioEspera) - new Date(b[1].dataInicioEspera);
                 });
-            
-            const area = document.getElementById('areaFullscreen');
-            
-            if (comandasEmPreparo.length === 0) {
-                area.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; font-size: 24px; color: rgba(255,255,255,0.5);">✓ Todos os pedidos prontos!</div>';
+
+            const ativos     = todasComandas.filter(([,c]) => c.statusPreparo !== 'Concluído');
+            const concluidos = todasComandas.filter(([,c]) => c.statusPreparo === 'Concluído');
+
+            // Bloco ativos
+            const areaAtivos = document.getElementById('areaFullscreenAtivos');
+            if (ativos.length === 0) {
+                areaAtivos.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:40px; font-size:22px; color:rgba(255,255,255,0.4);">✓ Todos os pedidos prontos!</div>';
             } else {
-                area.innerHTML = '';
-                comandasEmPreparo.forEach(([key, comanda]) => {
+                areaAtivos.innerHTML = '';
+                ativos.forEach(([key, comanda]) => {
                     const card = criarCardFullscreen(key, comanda);
-                    // ✅ SÓ ADICIONAR SE O CARD NÃO FOR NULL
-                    if (card !== null) {
-                        area.appendChild(card);
-                    }
+                    if (card) areaAtivos.appendChild(card);
+                });
+            }
+
+            // Faixa concluídos
+            const areaConcluidos = document.getElementById('areaFullscreenConcluidos');
+            const listaConcluidos = document.getElementById('listaFullscreenConcluidos');
+            if (concluidos.length === 0) {
+                areaConcluidos.style.display = 'none';
+            } else {
+                areaConcluidos.style.display = 'flex';
+                listaConcluidos.innerHTML = '';
+                concluidos.forEach(([key, comanda]) => {
+                    const card = criarCardFullscreen(key, comanda);
+                    if (card) listaConcluidos.appendChild(card);
                 });
             }
         }
 
         function criarCardFullscreen(key, comanda) {
-            // ✅ SE STATUSREPARO FOR NULL, SIGNIFICA QUE JÁ EXPIROU
-            // NÃO RENDERIZAR NADA
-            if (comanda.statusPreparo === null || comanda.statusPreparo === undefined) {
-                return null;  // Retorna null, não cria card
-            }
-            
-            const card = document.createElement('div');
-            
-            const statusPreparo = comanda.statusPreparo;
-            
-            // Definir cores e emojis
-            let corFundo = '#2d3436';
-            let corBorda = 'var(--primary)';
-            let emoji = '⏳';
-            
-            if (statusPreparo === 'Em Preparo') {
-                corBorda = '#F39C12';
-                emoji = '👨‍🍳';
-            } else if (statusPreparo === 'Concluído') {
-                corBorda = '#27AE60';
-                corFundo = '#27AE60';
-                emoji = '✓';
-            }
-            
-            // Calcular tempo - VERSÃO COMPACTA
-            const dataEspera = new Date(comanda.dataInicioEspera);
-            const agora = new Date();
-            const diff = Math.floor((agora - dataEspera) / 1000);
-            const minutos = Math.floor(diff / 60);
-            const segundos = diff % 60;
-            const tempoEspera = `${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
+            if (comanda.statusPreparo === null || comanda.statusPreparo === undefined) return null;
 
-            // Marmitas
-            const marmitas = comanda.itens.filter(item => item.tipo === 'Marmita');
+            const card = document.createElement('div');
+            const statusPreparo = comanda.statusPreparo;
+
+            // Cores fortes por status
+            let corFundo, corBorda, corLabel, labelTxt;
+            if (statusPreparo === 'Concluído') {
+                corFundo  = '#0a1f0a';
+                corBorda  = '#27AE60';
+                corLabel  = '#27AE60';
+                labelTxt  = '🍽️ Bom almoço!';
+            } else if (statusPreparo === 'Em Preparo') {
+                corFundo  = '#1a1200';
+                corBorda  = '#F39C12';
+                corLabel  = '#F39C12';
+                labelTxt  = '👨‍🍳 EM PREPARO';
+            } else { // Aguardando
+                corFundo  = '#1a0800';
+                corBorda  = '#E74C3C';
+                corLabel  = '#E74C3C';
+                labelTxt  = '⏳ AGUARDANDO';
+            }
+
+            // Timer — congela no momento da conclusão
+            const dataEspera = new Date(comanda.dataInicioEspera);
+            const dataFim = statusPreparo === 'Concluído' && comanda.dataConclusaoPreparo
+                ? new Date(comanda.dataConclusaoPreparo)
+                : new Date();
+            const diff = Math.floor((dataFim - dataEspera) / 1000);
+            const min = Math.floor(diff / 60);
+            const seg = diff % 60;
+            const tempoEspera = `${String(min).padStart(2,'0')}:${String(seg).padStart(2,'0')}`;
+
+            const marmitas = comanda.itens.filter(i => i.tipo === 'Marmita');
 
             card.style.cssText = `
                 background: ${corFundo};
                 border: 3px solid ${corBorda};
-                border-radius: 6px;
-                padding: 12px;
+                border-left: 8px solid ${corBorda};
+                border-radius: 8px;
+                padding: 14px 12px;
                 color: white;
                 display: flex;
                 flex-direction: column;
-                min-height: 120px;
-                ${statusPreparo === 'Concluído' ? 'animation: piscar 0.5s infinite;' : ''}
+                gap: 8px;
+                ${statusPreparo === 'Concluído' ? 'animation: piscar 0.8s infinite;' : ''}
             `;
 
             card.innerHTML = `
-                <!-- CABEÇALHO: Número + Tempo -->
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid ${corBorda};">
-                    <div style="font-size: 20px; font-weight: bold; color: #F5A962;">#${comanda.numero}</div>
-                    <div style="font-size: 16px; font-weight: bold; white-space: nowrap;">⏱️ ${tempoEspera}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-size:36px; font-weight:900; color:${corBorda}; line-height:1;">#${comanda.numero}</div>
+                    <div style="font-size:20px; font-weight:bold; color:#ccc;">⏱ ${tempoEspera}</div>
                 </div>
-                
-                <!-- MARMITAS -->
-                <div style="flex: 1; overflow-y: auto; margin-bottom: 8px; max-height: 50px;">
-                    ${marmitas.map((item, i) => `
-                        <div style="font-size: 12px; margin: 3px 0; color: rgba(255,255,255,0.95); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            <strong>${i + 1}.</strong> ${item.nome}${item.observacao ? ` (${item.observacao})` : ''}
+                <div style="border-top:1px solid ${corBorda}33; padding-top:6px; flex:1;">
+                    ${marmitas.length > 0 ? marmitas.map((item, i) => `
+                        <div style="font-size:15px; margin:4px 0; line-height:1.4; word-break:break-word;">
+                            <span style="color:${corBorda}; font-weight:bold;">${i+1}.</span>
+                            ${item.nome}${item.observacao ? `<span style="color:#aaa;"> · ${item.observacao}</span>` : ''}
                         </div>
-                    `).join('')}
+                    `).join('') : '<div style="font-size:13px; color:#888;">—</div>'}
                 </div>
-                
-                <!-- RODAPÉ: Status + Atendente (SEM BOTÕES) -->
-                <div style="padding-top: 6px; border-top: 2px solid ${corBorda};">
-                    <div style="font-size: 12px; font-weight: bold;">
-                        ${emoji} ${statusPreparo}
-                    </div>
-                    ${comanda.atendentePreparo ? `
-                        <div style="font-size: 10px; opacity: 0.85; margin-top: 2px;">por ${comanda.atendentePreparo}</div>
-                    ` : ''}
+                <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid ${corBorda}33; padding-top:6px;">
+                    <div style="font-size:13px; font-weight:bold; color:${corLabel};">${labelTxt}</div>
+                    ${comanda.atendentePreparo ? `<div style="font-size:12px; color:#888;">por ${comanda.atendentePreparo}</div>` : ''}
                 </div>
             `;
 
@@ -4507,7 +4530,7 @@ function carregarComanda() {
                 let badge = '';
                 if (comanda.status === 'Em Preparo' && !comanda.paid) {
                     borderColor = '#F39C12';  // Laranja para Preparo Já
-                    badge = '<div style="font-size: 6px; color: #F39C12; font-weight: bold;">⚡ PREPARO JÁ</div>';
+                    badge = '<div style="font-size: 6px; color: #F39C12; font-weight: bold;">⚡ PREP. P/ MESA</div>';
                 }
                 
                 btn.style.cssText = `
