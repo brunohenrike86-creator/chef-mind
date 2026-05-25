@@ -2112,13 +2112,8 @@
             // ☁️ SHEETS: criar ou atualizar usuário
             const _nivel = perfil === 'Admin' ? 'admin' : 'atendente';
             if (usuarioEmEdicao) {
-                if (usuarioEmEdicao !== login) {
-                    // Login mudou: deletar antigo e criar novo no Sheets
-                    sheetsAPI('deletarUsuario', { login: usuarioEmEdicao });
-                    sheetsAPI('novoUsuario', { login, nome, senha, nivel: _nivel });
-                } else {
-                    sheetsAPI('atualizarUsuario', { login, nome, senha, nivel: _nivel });
-                }
+                // Login mudou ou não: atualiza na mesma linha via loginAntigo
+                sheetsAPI('atualizarUsuario', { loginAntigo: usuarioEmEdicao, login, nome, senha, nivel: _nivel });
             } else {
                 sheetsAPI('novoUsuario', { login, nome, senha, nivel: _nivel });
             }
