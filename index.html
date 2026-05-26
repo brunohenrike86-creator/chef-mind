@@ -2842,14 +2842,16 @@ function carregarComanda() {
                     // Move comanda para preparo (sem pagamento)
                     comanda.status = 'Em Preparo';
                     comanda.dataInicioEspera = comanda.dataInicioEspera || new Date().toISOString();
-                    // ✅ NÃO RESETAR statusPreparo se for null (já expirou)
-                    // Só setar se for undefined/falsy E não for null explícito
                     if (comanda.statusPreparo === null || comanda.statusPreparo === undefined) {
                         comanda.statusPreparo = 'Aguardando';
                     }
-                    // Se for 'Concluído' ou qualquer outro valor, MANTÉM como está
                     saveStorage();
-                    renderizarPreapro(); // Atualiza fila de preparo
+                    renderizarPreapro();
+                    // ✅ Sincroniza status com servidor para outros devices verem no preparo
+                    ;(async () => {
+                        if (comanda._pendingNovaComanda) await comanda._pendingNovaComanda;
+                        if (comanda._id) sheetsAPI('atualizarStatusComanda', { id: comanda._id, status: 'em_preparo' });
+                    })();
                 }
                 showToast(`⚡ ${item.nome} (Preparo p/ mesa!)`, 'success');
             } else {
@@ -3950,61 +3952,95 @@ function carregarComanda() {
                     const local = state.comandas[chave];
                     const novoPaid = !!(cmd.timestamp_pagamento);
 
-                    // Mapeamento de status: 'paga' no servidor NÃO diz se é 'Fechada/Paga' ou 'Em Preparo'
-                    // (marmita paga fica Em Preparo localmente). Preserva o status local para pagas.
-                    let novoStatus;
-                    if (cmd.status === 'em_preparo') {
-                        novoStatus = 'Em Preparo';
-                    } else if (novoPaid) {
-                        // Já paga: preserva o status local (Fechada/Paga ou Em Preparo/marmita)
-                        novoStatus = local ? local.status : 'Fechada/Paga';
-                    } else {
-                        novoStatus = 'Aberta';
-                    }
-
                     if (!local) {
-                        // Comanda nova (aberta em outro device) — buscar itens
+                        // ── COMANDA NOVA (aberta em outro device) ──
                         const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
                         const data = cmd.timestamp_abertura ? cmd.timestamp_abertura.split('T')[0] : dataAtual;
+                        const itens = (itensCmd || [])
+                            .filter(i => String(i.removido).toLowerCase() !== 'true')
+                            .map(mapItemSheets);
+                        const temMarmita   = itens.some(i => i.tipo === 'Marmita');
+                        const temPreparoJa = itens.some(i => i.preparo_ja);
+
+                        // Status correto: marmita paga → Em Preparo; preparo_já → Em Preparo
+                        let statusFinal = cmd.status === 'em_preparo' ? 'Em Preparo'
+                                        : novoPaid ? 'Fechada/Paga'
+                                        : 'Aberta';
+                        let statusPreparoFinal = null;
+                        let dataInicioFinal = null;
+
+                        if ((novoPaid && temMarmita) || cmd.status === 'em_preparo') {
+                            statusFinal       = 'Em Preparo';
+                            statusPreparoFinal = 'Aguardando';
+                            dataInicioFinal   = cmd.timestamp_pagamento || cmd.timestamp_abertura || null;
+                        } else if (!novoPaid && temPreparoJa) {
+                            statusFinal       = 'Em Preparo';
+                            statusPreparoFinal = 'Aguardando';
+                            dataInicioFinal   = cmd.timestamp_abertura || null;
+                        }
+
                         state.comandas[chave] = {
                             _id:              cmd.id,
                             numero:           String(parseInt(cmd.numero, 10)),
-                            status:           novoStatus,
+                            status:           statusFinal,
                             data,
                             paid:             novoPaid,
                             encerramento:     null,
-                            itens:            (itensCmd || [])
-                                                .filter(i => String(i.removido).toLowerCase() !== 'true')
-                                                .map(mapItemSheets),
+                            itens,
                             total:            parseFloat(cmd.total) || 0,
                             dataCriacao:      cmd.timestamp_abertura || null,
-                            dataInicioEspera: cmd.timestamp_inicio_preparo || null,
-                            statusPreparo:    null,
+                            dataInicioEspera: dataInicioFinal,
+                            statusPreparo:    statusPreparoFinal,
                             formaPagamento:   cmd.forma_pagamento || null,
                             dataPagamento:    cmd.timestamp_pagamento || null
                         };
                         mudou = true;
+
                     } else {
+                        // ── COMANDA EXISTENTE ──
                         let localMudou = false;
 
-                        // Status: só atualiza se a comanda ainda não foi paga localmente.
-                        // Comanda paga localmente nunca tem status revertido pelo servidor
-                        // (evita race condition entre pagamento local e confirmação no Sheets).
-                        if (!local.paid && local.status !== novoStatus) {
-                            local.status = novoStatus;
-                            localMudou = true;
-                        }
-
-                        // Paid: só avança de false → true, nunca reverte true → false.
-                        // Protege contra race condition: poll roda antes do pagarComanda chegar ao Sheets.
+                        // CASO 1: Pagamento detectado em outro device
                         if (!local.paid && novoPaid) {
+                            // Busca itens para detectar marmita e definir status correto
+                            const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
+                            if (itensCmd) {
+                                local.itens = itensCmd
+                                    .filter(i => String(i.removido).toLowerCase() !== 'true')
+                                    .map(mapItemSheets);
+                                local.total = parseFloat(cmd.total) || local.total;
+                            }
+                            const temMarmita = (local.itens || []).some(i => i.tipo === 'Marmita');
+
                             local.paid         = true;
                             local.formaPagamento = cmd.forma_pagamento || local.formaPagamento;
                             local.dataPagamento  = cmd.timestamp_pagamento || local.dataPagamento;
+
+                            if (temMarmita || cmd.status === 'em_preparo') {
+                                local.status = 'Em Preparo';
+                                if (!local.statusPreparo) {
+                                    local.statusPreparo   = 'Aguardando';
+                                    local.dataInicioEspera = cmd.timestamp_pagamento || new Date().toISOString();
+                                }
+                            } else {
+                                local.status = 'Fechada/Paga';
+                            }
                             localMudou = true;
+
+                        // CASO 2: Status mudou sem ser pagamento (ex: preparo_já de outro device)
+                        } else if (!local.paid) {
+                            const novoStatus = cmd.status === 'em_preparo' ? 'Em Preparo' : 'Aberta';
+                            if (local.status !== novoStatus) {
+                                local.status = novoStatus;
+                                if (novoStatus === 'Em Preparo' && !local.statusPreparo) {
+                                    local.statusPreparo   = 'Aguardando';
+                                    local.dataInicioEspera = local.dataInicioEspera || new Date().toISOString();
+                                }
+                                localMudou = true;
+                            }
                         }
 
-                        // Sincroniza itens se total mudou E não é a comanda ativa
+                        // CASO 3: Sincroniza itens se total mudou E não é a comanda ativa
                         const totalServer = parseFloat(cmd.total) || 0;
                         if (chave !== state.comandaAtual && Math.abs(totalServer - (local.total || 0)) > 0.001) {
                             const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
@@ -4012,12 +4048,20 @@ function carregarComanda() {
                                 const serverItems  = itensCmd
                                     .filter(i => String(i.removido).toLowerCase() !== 'true')
                                     .map(mapItemSheets);
-                                // Preserva itens pendentes (ainda não confirmados pelo servidor)
                                 const pendingItems = local.itens.filter(i => !i._id);
                                 const serverIds    = new Set(serverItems.map(i => i._id));
                                 local.itens  = [...serverItems, ...pendingItems.filter(p => !serverIds.has(p._id))];
                                 local.total  = totalServer;
-                                localMudou   = true;
+                                // Detecta preparo_já lançado em outro device via flag no item
+                                if (!local.paid && !local.statusPreparo) {
+                                    const temPreparoJa = serverItems.some(i => i.preparo_ja);
+                                    if (temPreparoJa) {
+                                        local.status       = 'Em Preparo';
+                                        local.statusPreparo = 'Aguardando';
+                                        local.dataInicioEspera = local.dataInicioEspera || new Date().toISOString();
+                                    }
+                                }
+                                localMudou = true;
                             }
                         }
                         if (localMudou) mudou = true;
