@@ -1778,12 +1778,13 @@
                 pararTimerPreparo();
             }
 
-            // 2ª renderização após poll: garante dados frescos mesmo se mudou=false
-            if (state.user) {
-                pollFromSheets().then(() => {
-                    if (screenName === 'checkout')        renderizarCheckout();
-                    else if (screenName === 'preparo')    renderizarPreapro();
-                    else if (screenName === 'dashboard')  renderizarResumoDoDia();
+            // 2ª renderização: aguarda o poll ativo (ou inicia um novo) e re-renderiza
+            // com dados REALMENTE frescos do servidor
+            if (['checkout', 'preparo', 'dashboard'].includes(screenName)) {
+                reRenderAposPoll(() => {
+                    if (screenName === 'checkout')       renderizarCheckout();
+                    else if (screenName === 'preparo')   renderizarPreapro();
+                    else if (screenName === 'dashboard') renderizarResumoDoDia();
                 });
             }
 
@@ -3905,6 +3906,7 @@ function carregarComanda() {
 
         let _pollingInterval = null;
         let _pollingAtivo    = false;
+        let _pollWaiters     = [];   // callbacks a chamar quando o próximo poll terminar
 
         function iniciarPolling() {
             if (_pollingInterval) return;
@@ -3915,7 +3917,21 @@ function carregarComanda() {
         function pararPolling() {
             if (_pollingInterval) { clearInterval(_pollingInterval); _pollingInterval = null; }
             _pollingAtivo = false;
+            _pollWaiters = [];
             console.log('[Poll] ⏹ Parado');
+        }
+
+        // Chama fn() quando o próximo poll terminar (seja o atual em andamento ou um novo).
+        // Garante re-renderização com dados REALMENTE frescos, sem iniciar poll duplicado.
+        function reRenderAposPoll(fn) {
+            if (!state.user) return;
+            if (_pollingAtivo) {
+                // Já tem poll rolando → enfileira callback para quando ELE terminar
+                _pollWaiters.push(fn);
+            } else {
+                // Nenhum poll ativo → inicia um e re-renderiza ao final
+                pollFromSheets().then(fn);
+            }
         }
 
         // Converte linha de itens do Sheets para objeto local
@@ -4116,6 +4132,9 @@ function carregarComanda() {
                 console.warn('[Poll] Erro:', e);
             } finally {
                 _pollingAtivo = false;
+                // Notifica todos os waiters registrados por reRenderAposPoll()
+                const waiters = _pollWaiters.splice(0);
+                waiters.forEach(fn => { try { fn(); } catch(e) {} });
             }
         }
 
