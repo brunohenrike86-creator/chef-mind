@@ -1710,8 +1710,6 @@
         }
 
         function switchScreen(screenName, btn) {
-            // ✅ POLL IMEDIATO AO TROCAR DE TELA
-            if (state.user) pollFromSheets();
 
             // ✅ LIMPAR CHECKOUT quando ENTRA em Lançar (vindo de Checkout)
             // MAS manter comanda se vier de ABRIR
@@ -1768,6 +1766,7 @@
             }
 
             // Comportamentos específicos por tela
+            // 1ª renderização imediata com estado local (rápida)
             if (screenName === 'checkout') {
                 renderizarCheckout();
             } else if (screenName === 'preparo') {
@@ -1777,6 +1776,15 @@
                 renderizarResumoDoDia();
             } else {
                 pararTimerPreparo();
+            }
+
+            // 2ª renderização após poll: garante dados frescos mesmo se mudou=false
+            if (state.user) {
+                pollFromSheets().then(() => {
+                    if (screenName === 'checkout')        renderizarCheckout();
+                    else if (screenName === 'preparo')    renderizarPreapro();
+                    else if (screenName === 'dashboard')  renderizarResumoDoDia();
+                });
             }
 
             // Auto-focus no input apropriado
@@ -4025,14 +4033,17 @@ function carregarComanda() {
 
                         // CASO 1: Pagamento detectado em outro device
                         if (!local.paid && novoPaid) {
-                            // Busca itens para detectar marmita e definir status correto
-                            const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
-                            if (itensCmd) {
-                                local.itens = itensCmd
-                                    .filter(i => String(i.removido).toLowerCase() !== 'true')
-                                    .map(mapItemSheets);
-                                local.total = parseFloat(cmd.total) || local.total;
+                            // Usa itens já carregados (loadFromSheets) para detectar marmita
+                            // Só busca no servidor se local.itens estiver vazio
+                            if (!local.itens || local.itens.length === 0) {
+                                const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
+                                if (itensCmd) {
+                                    local.itens = itensCmd
+                                        .filter(i => String(i.removido).toLowerCase() !== 'true')
+                                        .map(mapItemSheets);
+                                }
                             }
+                            local.total = parseFloat(cmd.total) || local.total;
                             const temMarmita = (local.itens || []).some(i => i.tipo === 'Marmita');
 
                             local.paid         = true;
