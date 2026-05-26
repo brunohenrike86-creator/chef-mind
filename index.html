@@ -1295,7 +1295,7 @@
                     console.log('[Sheets] ✅ Usuários:', usuarios.length);
                 }
 
-                const comandas = await sheetsAPI('getComandasAbertas');
+                const comandas = await sheetsAPI('getComandasDoDia');
                 if (comandas && comandas.length > 0) {
                     for (const cmd of comandas) {
                         const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
@@ -1336,6 +1336,17 @@
 
         async function sheets_novaComanda(chave, numero) {
             const res = await sheetsAPI('novaComanda', { numero: String(numero), usuario: state.userLogado || state.user || '' });
+            if (res && res.jaAberta) {
+                // ⚠️ Outro device abriu essa comanda antes — desfaz criação local e sincroniza
+                console.warn('[Sheets] Comanda', numero, 'já aberta em outro device — revertendo');
+                delete state.comandas[chave];
+                if (state.comandaAtual === chave) state.comandaAtual = null;
+                saveStorage();
+                await pollFromSheets(); // sincroniza estado com servidor
+                showToast(`⚠️ Comanda #${numero} já foi aberta em outro dispositivo`, 'error');
+                limparTelaLançar();
+                return;
+            }
             if (res && res.id && state.comandas[chave]) {
                 state.comandas[chave]._id = res.id;
                 console.log('[Sheets] ✅ Comanda', numero, 'id:', res.id);
@@ -1495,10 +1506,16 @@
             // ✅ APLICAR CONTROLE DE ACESSO POR PERFIL
             atualizarVisibilidadeAbas();
 
-            showToast(`Bem-vindo, ${state.user}!`, 'success');
-
-            // ✅ INICIAR POLLING DE SINCRONIZAÇÃO
+            // ✅ INICIAR POLLING + POLL IMEDIATO AO LOGAR
             iniciarPolling();
+            // Força sincronização agora — garante que o usuário vê os dados atuais
+            // ao navegar para qualquer tela logo após o login
+            pollFromSheets().then(() => {
+                renderizarCheckout();
+                renderizarResumoDoDia();
+            });
+
+            showToast(`Bem-vindo, ${state.user}!`, 'success');
         }
 
         // ========== CONTROLE DE ACESSO POR PERFIL ==========
