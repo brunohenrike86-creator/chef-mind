@@ -1302,28 +1302,51 @@
                         const data = cmd.timestamp_abertura ? cmd.timestamp_abertura.split('T')[0] : new Date().toISOString().split('T')[0];
                         const numeroNormSheets = String(parseInt(cmd.numero, 10));
                         const chave = `${numeroNormSheets}-${data}`;
+
+                        // Mapeia itens usando a mesma função do poll (consistência)
+                        const itens = (itensCmd || [])
+                            .filter(i => String(i.removido).toLowerCase() !== 'true')
+                            .map(mapItemSheets);
+
+                        const isPaid       = !!(cmd.timestamp_pagamento);
+                        const isEmPreparo  = cmd.status === 'em_preparo';
+                        const temMarmita   = itens.some(i => i.tipo === 'Marmita');
+                        const temPreparoJa = itens.some(i => i.preparo_ja);
+
+                        // Determina status e statusPreparo corretamente
+                        let statusFinal, statusPreparo = null, dataInicioEspera = null;
+
+                        if (isPaid && temMarmita) {
+                            // Marmita paga → Em Preparo na fila
+                            statusFinal      = 'Em Preparo';
+                            statusPreparo    = 'Aguardando';
+                            dataInicioEspera = cmd.timestamp_pagamento || null;
+                        } else if (isPaid) {
+                            // Paga sem marmita → Fechada
+                            statusFinal = 'Fechada/Paga';
+                        } else if (isEmPreparo || temPreparoJa) {
+                            // Preparo Já (não paga) → Em Preparo na fila
+                            statusFinal      = 'Em Preparo';
+                            statusPreparo    = 'Aguardando';
+                            dataInicioEspera = cmd.timestamp_abertura || null;
+                        } else {
+                            statusFinal = 'Aberta';
+                        }
+
                         state.comandas[chave] = {
-                            _id: cmd.id,
-                            numero: numeroNormSheets,
-                            status: cmd.status === 'em_preparo' ? 'Em Preparo' : (cmd.status === 'paga' ? 'Paga' : 'Aberta'),
+                            _id:              cmd.id,
+                            numero:           numeroNormSheets,
+                            status:           statusFinal,
+                            statusPreparo:    statusPreparo,
+                            dataInicioEspera: dataInicioEspera,
                             data,
-                            paid: !!(cmd.timestamp_pagamento),
-                            encerramento: cmd.encerramento || null,
-                            itens: (itensCmd || []).map(i => ({
-                                _id: i.id,
-                                codigo: String(i.codigo).padStart(3,'0'),
-                                nome: i.nome,
-                                quantidade: parseInt(i.quantidade) || 1,
-                                preco: parseFloat(i.preco_unit) || 0,
-                                total: parseFloat(i.total) || 0,
-                                observacao: i.observacao || '',
-                                preparo_ja: String(i.preparo_ja).toLowerCase() === 'true',
-                                tipo: (() => {
-                                    const cat = (i.categoria || '').toLowerCase();
-                                    return cat === 'marmita' || cat === 'marmitas' ? 'Marmita' :
-                                           cat === 'gramas' ? 'Gramas' : 'Fixo';
-                                })()
-                            }))
+                            paid:             isPaid,
+                            encerramento:     cmd.encerramento || null,
+                            total:            parseFloat(cmd.total) || 0,
+                            dataCriacao:      cmd.timestamp_abertura || null,
+                            dataPagamento:    cmd.timestamp_pagamento || null,
+                            formaPagamento:   cmd.forma_pagamento || null,
+                            itens
                         };
                     }
                     console.log('[Sheets] ✅ Comandas:', comandas.length);
@@ -4037,6 +4060,11 @@ function carregarComanda() {
                                     local.dataInicioEspera = local.dataInicioEspera || new Date().toISOString();
                                 }
                                 localMudou = true;
+                            } else if (novoStatus === 'Em Preparo' && !local.statusPreparo) {
+                                // Status já é Em Preparo mas statusPreparo estava faltando (ex: loadFromSheets antigo)
+                                local.statusPreparo   = 'Aguardando';
+                                local.dataInicioEspera = local.dataInicioEspera || new Date().toISOString();
+                                localMudou = true;
                             }
                         }
 
@@ -4857,6 +4885,19 @@ function carregarComanda() {
                 .sort((a, b) => parseInt(a[1].numero) - parseInt(b[1].numero));
 
             document.getElementById('countComandas').textContent = comandasAbertas.length;
+
+            // Se a comanda selecionada no painel direito foi paga/encerrada em outro device,
+            // limpa o painel direito para evitar exibir comanda que já não está na lista
+            if (comandaCheckoutAtual) {
+                const aindaVisivel = comandasAbertas.some(([key]) => key === comandaCheckoutAtual);
+                if (!aindaVisivel) {
+                    comandaCheckoutAtual = null;
+                    formaPagamentoSelecionada = null;
+                    document.getElementById('areaDetalhes').style.display = 'none';
+                    document.getElementById('areaPagamento').style.display = 'none';
+                    document.getElementById('areaVazia').style.display = 'flex';
+                }
+            }
 
             const container = document.getElementById('listaComandas');
             container.innerHTML = '';
