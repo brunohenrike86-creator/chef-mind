@@ -3931,43 +3931,63 @@ function carregarComanda() {
                 // 2. Atualiza existentes / adiciona novas do servidor
                 for (const [chave, cmd] of Object.entries(serverMap)) {
                     const local = state.comandas[chave];
-                    const novoPaid   = !!(cmd.timestamp_pagamento);
-                    const novoStatus = cmd.status === 'em_preparo' ? 'Em Preparo' : 'Aberta';
+                    const novoPaid = !!(cmd.timestamp_pagamento);
+
+                    // Mapeamento de status: 'paga' no servidor NÃO diz se é 'Fechada/Paga' ou 'Em Preparo'
+                    // (marmita paga fica Em Preparo localmente). Preserva o status local para pagas.
+                    let novoStatus;
+                    if (cmd.status === 'em_preparo') {
+                        novoStatus = 'Em Preparo';
+                    } else if (novoPaid) {
+                        // Já paga: preserva o status local (Fechada/Paga ou Em Preparo/marmita)
+                        novoStatus = local ? local.status : 'Fechada/Paga';
+                    } else {
+                        novoStatus = 'Aberta';
+                    }
 
                     if (!local) {
-                        // Comanda aberta em outro device — buscar itens
+                        // Comanda nova (aberta em outro device) — buscar itens
                         const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
                         const data = cmd.timestamp_abertura ? cmd.timestamp_abertura.split('T')[0] : dataAtual;
                         state.comandas[chave] = {
-                            _id:             cmd.id,
-                            numero:          String(parseInt(cmd.numero, 10)),
-                            status:          novoStatus,
+                            _id:              cmd.id,
+                            numero:           String(parseInt(cmd.numero, 10)),
+                            status:           novoStatus,
                             data,
-                            paid:            novoPaid,
-                            encerramento:    null,
-                            itens:           (itensCmd || [])
-                                               .filter(i => String(i.removido).toLowerCase() !== 'true')
-                                               .map(mapItemSheets),
-                            total:           parseFloat(cmd.total) || 0,
-                            dataCriacao:     cmd.timestamp_abertura || null,
+                            paid:             novoPaid,
+                            encerramento:     null,
+                            itens:            (itensCmd || [])
+                                                .filter(i => String(i.removido).toLowerCase() !== 'true')
+                                                .map(mapItemSheets),
+                            total:            parseFloat(cmd.total) || 0,
+                            dataCriacao:      cmd.timestamp_abertura || null,
                             dataInicioEspera: cmd.timestamp_inicio_preparo || null,
-                            statusPreparo:   null,
-                            formaPagamento:  cmd.forma_pagamento || null,
-                            dataPagamento:   cmd.timestamp_pagamento || null
+                            statusPreparo:    null,
+                            formaPagamento:   cmd.forma_pagamento || null,
+                            dataPagamento:    cmd.timestamp_pagamento || null
                         };
                         mudou = true;
                     } else {
-                        // Atualiza campos de estado vindos do servidor (fonte de verdade)
                         let localMudou = false;
-                        if (local.status !== novoStatus) { local.status = novoStatus; localMudou = true; }
-                        if (local.paid   !== novoPaid)   { local.paid   = novoPaid;   localMudou = true;
-                            if (novoPaid) {
-                                local.formaPagamento = cmd.forma_pagamento || local.formaPagamento;
-                                local.dataPagamento  = cmd.timestamp_pagamento || local.dataPagamento;
-                            }
+
+                        // Status: só atualiza se a comanda ainda não foi paga localmente.
+                        // Comanda paga localmente nunca tem status revertido pelo servidor
+                        // (evita race condition entre pagamento local e confirmação no Sheets).
+                        if (!local.paid && local.status !== novoStatus) {
+                            local.status = novoStatus;
+                            localMudou = true;
                         }
 
-                        // Sincroniza itens se total mudou E não é a comanda ativa (evita conflito com lançamentos em curso)
+                        // Paid: só avança de false → true, nunca reverte true → false.
+                        // Protege contra race condition: poll roda antes do pagarComanda chegar ao Sheets.
+                        if (!local.paid && novoPaid) {
+                            local.paid         = true;
+                            local.formaPagamento = cmd.forma_pagamento || local.formaPagamento;
+                            local.dataPagamento  = cmd.timestamp_pagamento || local.dataPagamento;
+                            localMudou = true;
+                        }
+
+                        // Sincroniza itens se total mudou E não é a comanda ativa
                         const totalServer = parseFloat(cmd.total) || 0;
                         if (chave !== state.comandaAtual && Math.abs(totalServer - (local.total || 0)) > 0.001) {
                             const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
