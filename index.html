@@ -4024,17 +4024,17 @@ function carregarComanda() {
         // ========== RESET DE EMERGÊNCIA ==========
         async function executarReset() {
             const dataAtual = new Date().toISOString().split('T')[0];
+            // Reset encerra TUDO do dia — abertas, em preparo e pagas
             const abertas = Object.values(state.comandas).filter(c =>
-                c.data === dataAtual && !c.encerramento &&
-                (c.status === 'Aberta' || (c.status === 'Em Preparo' && !c.paid))
+                c.data === dataAtual && !c.encerramento
             );
 
             if (abertas.length === 0) {
-                showToast('Nenhuma comanda aberta para resetar', 'info');
+                showToast('Nenhuma comanda para resetar', 'info');
                 return;
             }
 
-            if (!confirm(`⚠️ RESET DE EMERGÊNCIA\n\nIsso vai encerrar ${abertas.length} comanda(s) aberta(s) agora.\nOs dados ficam no histórico mas saem da tela.\n\nTodos os devices serão atualizados em até 3 segundos.\n\nContinuar?`)) return;
+            if (!confirm(`⚠️ RESET TOTAL\n\nIsso vai encerrar TODAS as ${abertas.length} comanda(s) do dia (abertas e pagas).\nOs dados ficam no histórico mas saem da tela.\n\nTodos os devices serão atualizados em até 3 segundos.\n\nContinuar?`)) return;
 
             showToast('⏳ Executando reset...', 'info');
             try {
@@ -4042,11 +4042,23 @@ function carregarComanda() {
                 if (res && res.sucesso) {
                     // Marcar localmente para feedback imediato (poll vai confirmar)
                     abertas.forEach(c => { c.encerramento = 'reset'; });
-                    if (abertas.some(c => c.id === state.comandaAtual || Object.keys(state.comandas).find(k => state.comandas[k] === c) === state.comandaAtual)) {
+                    // Limpar comanda ativa se ela foi encerrada
+                    const chavesEncerradas = new Set(
+                        Object.entries(state.comandas)
+                            .filter(([k, c]) => c.encerramento === 'reset')
+                            .map(([k]) => k)
+                    );
+                    if (state.comandaAtual && chavesEncerradas.has(state.comandaAtual)) {
                         state.comandaAtual = null;
                     }
                     saveStorage();
+                    // Re-renderizar TODAS as telas relevantes imediatamente
                     renderizarResumoDoDia();
+                    renderizarPreapro();
+                    renderizarCheckout();
+                    renderizarFullscreen();
+                    // Forçar poll para atualizar outros devices o mais rápido possível
+                    pollFromSheets();
                     showToast(`✅ Reset concluído — ${res.encerradas} comanda(s) encerrada(s)`, 'success');
                 } else {
                     showToast('Erro ao executar reset', 'error');
@@ -4091,7 +4103,13 @@ function carregarComanda() {
                     abertas.forEach(c => { c.encerramento = 'fechamento'; });
                     state.comandaAtual = null;
                     saveStorage();
+                    // Re-renderizar TODAS as telas relevantes imediatamente
                     renderizarResumoDoDia();
+                    renderizarPreapro();
+                    renderizarCheckout();
+                    renderizarFullscreen();
+                    // Forçar poll para atualizar outros devices
+                    pollFromSheets();
                     const msg2 = res.encerradas > 0
                         ? `✅ Expediente fechado — ${res.encerradas} comanda(s) encerrada(s)`
                         : '✅ Expediente fechado com sucesso';
