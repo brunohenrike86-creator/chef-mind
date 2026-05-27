@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Michelin - Sistema Operacional</title>
     <style>
         * {
@@ -142,7 +142,9 @@
         /* ========== MAIN APP ========== */
         #mainApp {
             width: 100vw;
+            /* 100dvh = altura real visível, sem barra de navegação do Android/iOS */
             height: 100vh;
+            height: 100dvh;
             display: flex;
             flex-direction: column;
         }
@@ -266,6 +268,8 @@
             flex: 1;
             overflow-y: auto;
             padding: 6px;
+            /* Garante que o conteúdo não fica atrás da barra de gestos do Android/iOS */
+            padding-bottom: max(6px, env(safe-area-inset-bottom));
         }
 
         .screen.active {
@@ -1404,6 +1408,7 @@
             user: null,
             userLogado: null, // ✅ Login atual
             perfil: null,
+            _usuariosCarregados: false, // flag: getUsuarios do Sheets já completou?
             usuarios: {
                 'bruno': { nome: 'Bruno', senha: '1986', perfil: 'Admin' }
             },
@@ -1538,6 +1543,7 @@
                     });
                     console.log('[Sheets] ✅ Usuários:', usuarios.length);
                 }
+                state._usuariosCarregados = true;
 
                 const comandas = await sheetsAPI('getComandasDoDia');
                 if (comandas && comandas.length > 0) {
@@ -1751,6 +1757,32 @@
             }
 
             // ✅ VERIFICAR CREDENCIAIS
+            // Se o usuário não foi encontrado E os dados do Sheets ainda não carregaram,
+            // buscar usuários agora (dispositivos lentos podem tentar logar antes do load inicial)
+            if (!state.usuarios[user] && !state._usuariosCarregados) {
+                const btnLogin = document.getElementById('btnLogin');
+                const erroEl  = document.getElementById('loginErro');
+                btnLogin.disabled = true;
+                btnLogin.textContent = 'Verificando...';
+                erroEl.style.display = 'none';
+                try {
+                    const usuarios = await sheetsAPI('getUsuarios');
+                    if (usuarios && usuarios.length > 0) {
+                        usuarios.forEach(u => {
+                            state.usuarios[u.login] = {
+                                nome: u.nome || u.login, senha: String(u.senha),
+                                perfil: u.nivel === 'admin' ? 'Admin' : 'Atendente'
+                            };
+                        });
+                    }
+                    state._usuariosCarregados = true;
+                } catch(e) { /* falha silenciosa, vai cair no erro abaixo */ }
+                finally {
+                    btnLogin.disabled = false;
+                    btnLogin.textContent = 'Entrar';
+                }
+            }
+
             if (!state.usuarios[user]) {
                 mostrarErroLogin('❌ Usuário não encontrado. Verifique e tente novamente.', 'loginUser');
                 return;
