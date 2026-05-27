@@ -572,6 +572,225 @@
         button:active {
             transform: scale(0.96);
         }
+
+        /* =============================================
+           CLASSES RESPONSIVAS — itens lista Lançar
+           ============================================= */
+        .il-nome  { font-size: 13px; font-weight: bold; }
+        .il-det   { font-size: 13px; color: var(--gray); }
+        .il-obs   { font-size: 11px; color: var(--primary); }
+        .il-preco { font-weight: bold; color: #F39C12; margin: 0 8px; white-space: nowrap; font-size: 13px; }
+        .il-rm    { background: #E74C3C !important; color: white !important; border: none !important;
+                    padding: 4px 8px !important; border-radius: 2px !important; cursor: pointer !important;
+                    font-size: 10px !important; margin-bottom: 0 !important; flex-shrink: 0; }
+
+        /* CLASSES RESPONSIVAS — itens checkout detail */
+        .co-row   { display: grid; grid-template-columns: 1fr 44px 56px 56px;
+                    gap: 4px; padding: 7px 4px; border-bottom: 1px solid var(--border);
+                    font-size: 12px; align-items: center; }
+        .co-nome  { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .co-qtd   { text-align: center; font-weight: bold; color: var(--primary); }
+        .co-unit  { text-align: right; color: var(--gray); }
+        .co-total { text-align: right; font-weight: bold; color: #F39C12; }
+        .co-obs   { font-size: 10px; color: var(--primary); padding-left: 4px; margin-top: 2px; margin-bottom: 4px; }
+
+        /* CLASSES RESPONSIVAS — cards do cardápio */
+        .item-cat-btn { height: 100px; }
+        .cat-icone { font-size: 20px; line-height: 1; }
+        .cat-nome  { font-weight: bold; color: var(--text-dark); font-size: 10px; line-height: 1.1; word-break: break-word; }
+        .cat-cod   { font-size: 8px; color: var(--gray); }
+        .cat-preco { font-size: 11px; color: var(--primary); font-weight: bold; }
+
+        /* Título da lista de itens lançados na comanda */
+        .lnc-titulo { font-size: 13px; font-weight: bold; }
+
+        /* CLASSES RESPONSIVAS — cards de comanda abertas (checkout) */
+        .ck-num   { font-size: 11px; font-weight: 900; color: var(--primary); line-height: 1; }
+        .ck-val   { font-size: 10px; font-weight: 900; color: #F39C12; line-height: 1; }
+        .ck-itens { font-size: 7px; color: var(--gray); line-height: 1; }
+
+        /* CLASSES RESPONSIVAS — títulos de seção no checkout */
+        .co-hdr-abertas { font-size: 8px; font-weight: bold; color: var(--primary); margin-bottom: 3px; padding: 0 2px; }
+        .co-hdr-detalhe { font-size: 8px; font-weight: bold; color: var(--primary); padding: 1px 4px;
+                          background: var(--bg-light); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+
+        /* MOBILE — catálogo expande livremente (a tela toda faz scroll) */
+        #lancar-panel-right          { overflow: visible !important; }
+        #lancar-panel-right > div    { overflow: visible !important; min-height: unset !important; }
+        #listaItensDisponiveis       { overflow: visible !important; flex: none !important; min-height: unset !important;
+                                       grid-template-columns: repeat(auto-fill, 92px) !important; gap: 8px !important; }
+
+        /* =============================================
+           BREAKPOINT — Tablet portrait 600px+
+           Samsung A9+ portrait / telas médias
+           ============================================= */
+        @media (min-width: 600px) {
+            .sidebar { width: 78px !important; }
+            .menu-btn { min-height: 62px !important; font-size: 10px !important; padding: 8px 4px !important; }
+            .menu-icon { font-size: 16px !important; }
+            .header { font-size: 12px !important; padding: 10px 14px !important; }
+            .header-logo { font-size: 20px !important; }
+            .header-info { font-size: 11px !important; }
+            .header-user { font-size: 11px !important; }
+            .header-badge { font-size: 10px !important; padding: 2px 8px !important; }
+            .btn-logout { font-size: 10px !important; padding: 5px 10px !important; }
+
+            /* Itens da lista de lançamento */
+            .il-nome  { font-size: 16px; }
+            .il-det   { font-size: 16px; }
+            .il-obs   { font-size: 14px; }
+            .il-preco { font-size: 16px; margin: 0 14px; }
+            .il-rm    { font-size: 12px !important; padding: 6px 11px !important; }
+            .lnc-titulo { font-size: 15px; }
+
+            /* Itens do checkout detail */
+            .co-row   { font-size: 14px; grid-template-columns: 1fr 50px 65px 65px; padding: 9px 6px; }
+            .co-obs   { font-size: 12px; }
+
+            /* Cardápio — cards maiores no tablet */
+            #listaItensDisponiveis { grid-template-columns: repeat(auto-fill, 115px) !important; gap: 10px !important; }
+            .item-cat-btn { height: 120px; }
+            .cat-icone { font-size: 26px; }
+            .cat-nome  { font-size: 13px; }
+            .cat-cod   { font-size: 11px; }
+            .cat-preco { font-size: 14px; }
+
+            /* Inputs lançar */
+            #lançarComandaNum { font-size: 22px !important; }
+            #lançarCodigoItem { font-size: 18px !important; }
+            #btnCarregarComanda { font-size: 14px !important; min-width: 70px !important; }
+        }
+
+        /* =============================================
+           BREAKPOINT — Tablet landscape / laptop 1024px+
+           Samsung A9+ landscape ~1200px e notebooks
+           ============================================= */
+        @media (min-width: 1024px) {
+            .sidebar { width: 92px !important; }
+            .menu-btn { min-height: 68px !important; font-size: 11px !important; }
+            .menu-icon { font-size: 20px !important; }
+
+            .il-nome  { font-size: 14px; }
+            .il-det   { font-size: 14px; }
+            .il-preco { font-size: 14px; }
+            .co-row   { font-size: 13px; grid-template-columns: 1fr 48px 66px 66px; padding: 9px 8px; }
+            .co-obs   { font-size: 12px; }
+
+            /* Cardápio — cards maiores + scroll restaurado no painel */
+            #listaItensDisponiveis {
+                grid-template-columns: repeat(auto-fill, 120px) !important;
+                overflow-y: auto !important; flex: 1 !important; min-height: 0 !important;
+            }
+            .item-cat-btn { height: 115px; }
+            .cat-icone { font-size: 24px; }
+            .cat-nome  { font-size: 12px; }
+            .cat-cod   { font-size: 10px; }
+            .cat-preco { font-size: 13px; }
+
+            /* Restaurar overflow do painel direito em layout de colunas */
+            #lancar-panel-right       { overflow: hidden !important; }
+            #lancar-panel-right > div { overflow: hidden !important; min-height: 0 !important; }
+
+            /* ── LANÇAR: layout duas colunas ── */
+            #screen-lançar { flex-direction: row !important; overflow: hidden !important; }
+            #lancar-panel-left {
+                width: 390px !important; min-width: 320px !important;
+                flex-shrink: 0 !important; flex-direction: column !important;
+                display: flex !important; overflow: hidden !important;
+                border-right: 2px solid var(--border) !important;
+            }
+            #lancar-panel-right {
+                flex: 1 !important; display: flex !important;
+                flex-direction: column !important; overflow: hidden !important; min-width: 0 !important;
+            }
+            /* A lista de itens no painel esquerdo ocupa o espaço disponível */
+            #lancar-panel-left > div:nth-child(3) { flex: 1 !important; min-height: 0 !important; }
+
+            /* ── CHECKOUT: layout duas colunas ── */
+            /* O scroll fica apenas na lista de comandas; o painel direito é fixo */
+            #checkout-main-body {
+                flex-direction: row !important; align-items: stretch !important;
+                gap: 10px !important; padding: 8px !important;
+                overflow: hidden !important;  /* sem barra na extrema direita */
+            }
+            #checkout-panel-left {
+                width: 230px !important; flex-shrink: 0 !important;
+                display: flex !important; flex-direction: column !important;
+                gap: 4px !important; overflow: hidden !important;
+            }
+            #checkout-panel-left #listaComandas {
+                grid-template-columns: 1fr 1fr !important;
+                max-height: none !important; flex: 1 !important;
+                overflow-y: auto !important;  /* scroll aqui, ao lado das comandas */
+            }
+            #checkout-panel-right {
+                flex: 1 !important; display: flex !important;
+                flex-direction: column !important; gap: 4px !important;
+                min-width: 0 !important; overflow: hidden !important;
+            }
+            /* Detalhe da comanda cresce e deixa o item-list scrollar internamente */
+            #areaDetalhes { flex: 1 !important; min-height: 0 !important; }
+
+            /* Wrapper do painel esquerdo precisa ser flex para o listaComandas scrollar */
+            #checkout-panel-left > div {
+                flex: 1 !important; display: flex !important;
+                flex-direction: column !important; min-height: 0 !important; overflow: hidden !important;
+            }
+
+            /* Pagamento / confirmar mais confortáveis */
+            #areaPagamento .btnPagamento { font-size: 11px !important; padding: 8px 4px !important; }
+            #btnConfirmarPagamento { font-size: 13px !important; padding: 12px !important; }
+        }
+
+        /* =============================================
+           BREAKPOINT — Notebook 14-17" 1366px+
+           ============================================= */
+        @media (min-width: 1366px) {
+            .sidebar { width: 110px !important; }
+            .menu-btn { font-size: 12px !important; min-height: 76px !important; padding: 10px 6px !important; }
+            .menu-icon { font-size: 22px !important; }
+            .header { padding: 11px 18px !important; font-size: 13px !important; }
+            .header-logo { font-size: 24px !important; }
+            .header-info { font-size: 13px !important; }
+            .header-user { font-size: 12px !important; }
+            .header-badge { font-size: 11px !important; padding: 3px 10px !important; }
+            .btn-logout { font-size: 11px !important; padding: 6px 12px !important; }
+
+            .il-nome  { font-size: 15px; }
+            .il-det   { font-size: 15px; }
+            .il-obs   { font-size: 13px; }
+            .il-preco { font-size: 15px; margin: 0 14px; }
+            .il-rm    { font-size: 12px !important; padding: 6px 11px !important; }
+            .co-row   { font-size: 14px; grid-template-columns: 1fr 52px 72px 72px; padding: 10px 8px; }
+            .co-obs   { font-size: 13px; }
+
+            /* Painel lançar: mais espaço de lançamento, catálogo mais compacto */
+            #lancar-panel-left { width: 520px !important; }
+            /* Painel checkout: mais espaço para os cards de comanda */
+            #checkout-panel-left { width: 310px !important; }
+            #checkout-panel-left #listaComandas { grid-template-columns: 1fr 1fr 1fr !important; }
+
+            /* Cardápio — cards maiores no notebook */
+            #listaItensDisponiveis { grid-template-columns: repeat(auto-fill, 140px) !important; }
+            .item-cat-btn { height: 130px; }
+            .cat-icone { font-size: 28px; }
+            .cat-nome  { font-size: 13px; }
+            .cat-cod   { font-size: 11px; }
+            .cat-preco { font-size: 14px; }
+
+            /* Cards de comanda abertas — maiores no notebook */
+            .ck-num   { font-size: 15px; }
+            .ck-val   { font-size: 13px; }
+            .ck-itens { font-size: 10px; }
+            #listaComandas button { padding: 7px 4px !important; }
+
+            /* Títulos de seção checkout — maiores no notebook */
+            .co-hdr-abertas { font-size: 13px; padding: 2px 4px; margin-bottom: 5px; }
+            .co-hdr-detalhe { font-size: 13px; padding: 4px 8px; }
+
+            #lançarCodigoItem { font-size: 22px !important; padding: 13px !important; }
+            #lançarComandaNum { font-size: 26px !important; }
+        }
     </style>
 </head>
 <body>
@@ -660,7 +879,9 @@
 
                 <!-- LANÇAR -->
                 <div id="screen-lançar" class="screen" style="overflow-y: auto; -webkit-overflow-scrolling: touch;">
-                    
+
+                <!-- PAINEL ESQUERDO: comanda + código + lista (em telas grandes vira coluna) -->
+                <div id="lancar-panel-left" style="display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;">
                     <!-- SECTION 1: CAMPO DA COMANDA -->
                     <div style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); flex-shrink: 0;">
                         <div style="color: white; font-size: 10px; font-weight: bold; margin-bottom: 6px; opacity: 0.9;">📋 SELECIONE A COMANDA</div>
@@ -681,7 +902,7 @@
                     <div style="flex: 0 0 auto; min-height: 0; display: flex; flex-direction: column; background: white; border-bottom: 2px solid var(--border); overflow: hidden;">
                         <!-- HEADER LISTA -->
                         <div style="padding: 8px; background: var(--primary); color: white; border-bottom: 1px solid var(--border); flex-shrink: 0;">
-                            <div style="font-size: 11px; font-weight: bold;">📋 ITENS DA COMANDA</div>
+                            <div class="lnc-titulo">📋 ITENS DA COMANDA</div>
                         </div>
                         <!-- LISTA (flex: 1 para crescer, padding mínimo) -->
                         <div id="listaItensLançados" style="flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 6px;"></div>
@@ -695,8 +916,12 @@
                         </div>
                     </div>
 
+                </div><!-- /lancar-panel-left -->
+
+                <!-- PAINEL DIREITO: categorias + cardápio (em telas grandes vira coluna) -->
+                <div id="lancar-panel-right" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 200px;">
                     <!-- SECTION 4: CATEGORIAS + CARDÁPIO (dinâmico - ocupa resto) -->
-                    <div style="flex: 0 0 auto; display: flex; flex-direction: column; overflow: hidden; min-height: 200px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 200px;">
                         <!-- CATEGORIAS -->
                         <div style="padding: 6px; background: white; border-bottom: 1px solid var(--border); flex-shrink: 0;">
                             <div style="font-size: 9px; font-weight: bold; color: var(--gray); margin-bottom: 4px;">CATEGORIAS</div>
@@ -705,7 +930,8 @@
                         <!-- CARDÁPIO -->
                         <div id="listaItensDisponiveis" style="flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, 80px); gap: 6px; justify-content: start;"></div>
                     </div>
-                </div>
+                </div><!-- /lancar-panel-right -->
+                </div><!-- /screen-lançar -->
 
                 <!-- CHECKOUT -->
                 <div id="screen-checkout" class="screen">
@@ -717,20 +943,25 @@
                     </div>
 
                     <!-- CORPO FLEX (Scroll internal) -->
-                    <div style="flex: 1; display: flex; flex-direction: column; gap: 1px; padding: 2px 6px; overflow-y: auto; -webkit-overflow-scrolling: touch;">
-                        
+                    <div id="checkout-main-body" style="flex: 1; display: flex; flex-direction: column; gap: 1px; padding: 2px 6px; overflow-y: auto; -webkit-overflow-scrolling: touch;">
+
+                    <!-- PAINEL ESQUERDO: lista de comandas abertas -->
+                    <div id="checkout-panel-left">
                     <!-- SEÇÃO 1: LISTA DE COMANDAS ABERTAS - GRID 3 COLUNAS -->
                     <div style="background: white; border: 1px solid var(--border); border-radius: 2px; flex-shrink: 0; padding: 3px; margin-bottom: 6px;">
-                        <div style="font-size: 8px; font-weight: bold; color: var(--primary); margin-bottom: 3px; padding: 0 2px;">📋 ABERTAS (<span id="countComandas">0</span>)</div>
+                        <div class="co-hdr-abertas">📋 ABERTAS (<span id="countComandas">0</span>)</div>
                         <div id="listaComandas" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; max-height: 150px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 2px;" onscroll="event.stopPropagation()"></div>
                     </div>
+                    </div><!-- /checkout-panel-left -->
 
+                    <!-- PAINEL DIREITO: detalhes + pagamento -->
+                    <div id="checkout-panel-right" style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
                         <!-- SEÇÃO 2: DETALHES DA COMANDA -->
                         <div id="areaDetalhes" style="display: none; flex: 0 1 auto; background: white; border: 1px solid var(--border); border-radius: 2px; border-left: 3px solid var(--primary); overflow: hidden; display: flex; flex-direction: column; gap: 0;">
-                            <div style="font-size: 8px; font-weight: bold; color: var(--primary); padding: 1px 4px; background: var(--bg-light); border-bottom: 1px solid var(--border); flex-shrink: 0;">
+                            <div class="co-hdr-detalhe">
                                 📦 Comanda <span id="numComandaSelecionada">-</span>
                             </div>
-                            <div id="listaCheckoutItens" style="flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; font-size: 0;" onscroll="event.stopPropagation()"></div>
+                            <div id="listaCheckoutItens" style="flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;" onscroll="event.stopPropagation()"></div>
                             <div id="totalCheckout" style="padding: 2px 4px; background: linear-gradient(135deg, #704D34 0%, #8B6F47 100%); color: white; text-align: center; font-weight: bold; font-size: 10px; border-top: 1px solid var(--border); flex-shrink: 0;">
                                 <div style="font-size: 7px; opacity: 0.8;">TOTAL</div>
                                 <div style="font-size: 11px;">R$ 0,00</div>
@@ -742,7 +973,7 @@
                             Selecione uma comanda
                         </div>
 
-                        <!-- SEÇÃO 3: FORMAS DE PAGAMENTO - RECONSTRUÍDA DO ZERO -->
+                        <!-- SEÇÃO 3: FORMAS DE PAGAMENTO -->
                         <div id="areaPagamento" style="display: none; flex-shrink: 0; background: white; border: 1px solid var(--border); border-radius: 2px; padding: 4px;">
                             <div style="font-size: 8px; font-weight: bold; color: var(--primary); margin-bottom: 3px;">💳 FORMA DE PAGAMENTO</div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 2px;">
@@ -756,7 +987,9 @@
 
                         <!-- BOTÃO CONFIRMAR PAGAMENTO -->
                         <button type="button" id="btnConfirmarPagamento" onclick="confirmarPagamentoFinal()" style="width: 100%; padding: 8px; background: linear-gradient(135deg, #27AE60 0%, #1E8449 100%); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3); margin-top: 2px; opacity: 0.5; pointer-events: none;">✓ CONFIRMAR PAGAMENTO</button>
-                    </div>
+                    </div><!-- /checkout-panel-right -->
+
+                    </div><!-- /checkout-main-body -->
 
                     <!-- FOOTER FIXO - SÓ PARA ESPAÇO -->
                     <div style="padding: 1px 6px; background: white; border-top: 2px solid var(--primary); flex-shrink: 0; height: 2px;"></div>
@@ -3134,16 +3367,15 @@ function carregarComanda() {
 
             itensParaMostrar.forEach(([codigo, item]) => {
                 const btn = document.createElement('button');
+                btn.className = 'item-cat-btn';
                 btn.style.cssText = `
-                    width: 80px;
-                    height: 95px;
+                    width: 100%;
                     padding: 5px;
                     background: white;
                     border: 2px solid var(--border);
                     border-radius: 3px;
                     cursor: pointer;
                     text-align: center;
-                    font-size: 8px;
                     transition: all 0.2s;
                     display: flex;
                     flex-direction: column;
@@ -3152,13 +3384,13 @@ function carregarComanda() {
                     gap: 2px;
                     flex-shrink: 0;
                 `;
-                
+
                 const icone = getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo));
                 btn.innerHTML = `
-                    <div style="font-size: 18px;">${icone}</div>
-                    <div style="font-weight: bold; color: var(--text-dark); font-size: 8px; line-height: 1.1; word-break: break-word;">${item.nome}</div>
-                    <div style="font-size: 6px; color: var(--gray);">#${codigo}</div>
-                    <div style="font-size: 9px; color: var(--primary); font-weight: bold;">R$ ${item.preco.toFixed(1)}</div>
+                    <div class="cat-icone">${icone}</div>
+                    <div class="cat-nome">${item.nome}</div>
+                    <div class="cat-cod">#${codigo}</div>
+                    <div class="cat-preco">R$ ${item.preco.toFixed(1)}</div>
                 `;
 
                 btn.onmouseover = () => {
@@ -3248,20 +3480,16 @@ function carregarComanda() {
                 const precoTotal = item.quantidade * item.preco;
                 total += precoTotal;
                 const div = document.createElement('div');
-                div.style.cssText = `
-                    display: grid;
-                    grid-template-columns: 1fr 35px 45px 45px;
-                    gap: 4px;
-                    padding: 6px 4px;
-                    border-bottom: 1px solid var(--border);
-                    font-size: 9px;
-                    align-items: center;
-                `;
+                div.className = 'co-row';
+                // Usar observacao se disponível (ex.: "760g" p/ itens por peso), senão qty
+                const qtdDisplay = item.observacao
+                    ? item.observacao
+                    : `${item.quantidade.toFixed(1)}x`;
                 div.innerHTML = `
-                    <div style="font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.nome}</div>
-                    <div style="text-align: center; font-weight: bold; color: var(--primary);">${item.quantidade.toFixed(1)}x</div>
-                    <div style="text-align: right; color: var(--gray);">R$ ${item.preco.toFixed(2)}</div>
-                    <div style="text-align: right; font-weight: bold; color: #F39C12;">R$ ${precoTotal.toFixed(2)}</div>
+                    <div class="co-nome">${item.nome}</div>
+                    <div class="co-qtd">${qtdDisplay}</div>
+                    <div class="co-unit">R$ ${item.preco.toFixed(2)}</div>
+                    <div class="co-total">R$ ${precoTotal.toFixed(2)}</div>
                 `;
                 containerItens.appendChild(div);
             });
@@ -3276,16 +3504,16 @@ function carregarComanda() {
                 `;
                 
                 let html = `
-                    <div style="display: grid; grid-template-columns: 1fr 35px 45px 45px; gap: 4px; font-size: 9px; margin-bottom: 2px;">
-                        <div style="font-weight: 600; overflow: hidden; text-overflow: ellipsis;">${item.nome}</div>
-                        <div style="text-align: center; font-weight: bold; color: var(--primary);">${item.quantidade.toFixed(1)}x</div>
-                        <div style="text-align: right; color: var(--gray);">R$ ${item.preco.toFixed(2)}</div>
-                        <div style="text-align: right; font-weight: bold; color: #F39C12;">R$ ${precoTotal.toFixed(2)}</div>
+                    <div class="co-row" style="margin-bottom: 2px;">
+                        <div class="co-nome">${item.nome}</div>
+                        <div class="co-qtd">${item.quantidade.toFixed(1)}x</div>
+                        <div class="co-unit">R$ ${item.preco.toFixed(2)}</div>
+                        <div class="co-total">R$ ${precoTotal.toFixed(2)}</div>
                     </div>
                 `;
-                
+
                 if (item.observacoes && item.observacoes.length > 0) {
-                    html += `<div style="font-size: 8px; color: var(--primary); padding-left: 4px; margin-top: 2px;">`;
+                    html += `<div class="co-obs">`;
                     item.observacoes.forEach((obs, i) => {
                         if (obs && obs !== '-') {
                             html += `<div>${i + 1}. ${obs}</div>`;
@@ -3302,20 +3530,12 @@ function carregarComanda() {
                 const precoTotal = item.quantidade * item.preco;
                 total += precoTotal;
                 const div = document.createElement('div');
-                div.style.cssText = `
-                    display: grid;
-                    grid-template-columns: 1fr 35px 45px 45px;
-                    gap: 4px;
-                    padding: 6px 4px;
-                    border-bottom: 1px solid var(--border);
-                    font-size: 9px;
-                    align-items: center;
-                `;
+                div.className = 'co-row';
                 div.innerHTML = `
-                    <div style="font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.nome}</div>
-                    <div style="text-align: center; font-weight: bold; color: var(--primary);">${item.nome.toLowerCase().includes('quilo') ? (item.quantidade * 1000).toFixed(0) + 'g' : (item.quantidade).toFixed(0)+'g'}</div>
-                    <div style="text-align: right; color: var(--gray);">R$ ${item.preco.toFixed(2)}</div>
-                    <div style="text-align: right; font-weight: bold; color: #F39C12;">R$ ${precoTotal.toFixed(2)}</div>
+                    <div class="co-nome">${item.nome}</div>
+                    <div class="co-qtd">${(item.quantidade * 1000).toFixed(0)}g</div>
+                    <div class="co-unit">R$ ${item.preco.toFixed(2)}</div>
+                    <div class="co-total">R$ ${precoTotal.toFixed(2)}</div>
                 `;
                 containerItens.appendChild(div);
             });
@@ -4469,14 +4689,14 @@ function carregarComanda() {
 
                 const div = document.createElement('div');
                 div.style.cssText = 'padding: 8px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;';
-                
+
                 const html = `<div style="flex: 1;">
-                    <strong style="font-size: 9px;">${item.nome}</strong>
-                    <div style="font-size: 8px; color: var(--gray);">${item.observacao || item.quantidade + 'x'}</div>
+                    <strong class="il-nome">${item.nome}</strong>
+                    <div class="il-det">${item.observacao || item.quantidade + 'x'}</div>
                 </div>
-                <div style="font-weight: bold; color: #F39C12; margin: 0 8px;">R$ ${valor.toFixed(2)}</div>
-                <button onclick="removerItemComanda(${item.indice})" style="background: #E74C3C; color: white; border: none; padding: 2px 6px; border-radius: 2px; cursor: pointer; font-size: 8px;">✕</button>`;
-                
+                <span class="il-preco">R$ ${valor.toFixed(2)}</span>
+                <button class="il-rm" onclick="removerItemComanda(${item.indice})">✕</button>`;
+
                 div.innerHTML = html;
                 container.appendChild(div);
             });
@@ -4488,28 +4708,28 @@ function carregarComanda() {
 
                 const div = document.createElement('div');
                 div.style.cssText = 'padding: 8px; border-bottom: 1px solid var(--border);';
-                
+
                 let html = `<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
                     <div style="flex: 1;">
-                        <strong style="font-size: 9px;">${item.nome}</strong>
-                        <div style="font-size: 8px; color: var(--gray);">${item.quantidade}x R$ ${item.preco.toFixed(2)}</div>`;
-                
+                        <strong class="il-nome">${item.nome}</strong>
+                        <div class="il-det">${item.quantidade}x R$ ${item.preco.toFixed(2)}</div>`;
+
                 // Observações APENAS para marmitas
                 if (item.isMarmita && item.observacoes) {
                     html += '<div style="margin-top: 4px; padding-left: 4px; border-left: 2px solid var(--primary);">';
                     item.observacoes.forEach((obs, i) => {
                         if (obs && obs !== '-') {
-                            html += `<div style="font-size: 8px; color: var(--primary);">${i + 1}. ${obs}</div>`;
+                            html += `<div class="il-obs">${i + 1}. ${obs}</div>`;
                         }
                     });
                     html += '</div>';
                 }
-                
+
                 html += `</div>
-                    <div style="font-weight: bold; color: #F39C12; margin: 0 8px;">R$ ${precoTotal.toFixed(2)}</div>
-                    <button onclick="removerTodosItem(${item.indices[0]})" style="background: #E74C3C; color: white; border: none; padding: 2px 6px; border-radius: 2px; cursor: pointer; font-size: 8px;">✕</button>
+                    <span class="il-preco">R$ ${precoTotal.toFixed(2)}</span>
+                    <button class="il-rm" onclick="removerTodosItem(${item.indices[0]})">✕</button>
                 </div>`;
-                
+
                 div.innerHTML = html;
                 container.appendChild(div);
             });
@@ -4964,9 +5184,9 @@ function carregarComanda() {
                     border-radius: 2px;
                 `;
                 btn.innerHTML = `
-                    <div style="font-size: 11px; font-weight: 900; color: var(--primary); line-height: 1;">#${comanda.numero}</div>
-                    <div style="font-size: 10px; font-weight: 900; color: #F39C12; line-height: 1;">R$ ${total.toFixed(2)}</div>
-                    <div style="font-size: 6px; color: var(--gray); line-height: 1;">${comanda.itens.length} itens</div>
+                    <div class="ck-num">#${comanda.numero}</div>
+                    <div class="ck-val">R$ ${total.toFixed(2)}</div>
+                    <div class="ck-itens">${comanda.itens.length} itens</div>
                     ${badge}
                 `;
                 btn.onmouseover = () => btn.style.background = 'var(--bg-light)';
