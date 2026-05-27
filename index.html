@@ -318,6 +318,15 @@
             to { opacity: 1; }
         }
 
+        @keyframes loginShake {
+            0%   { transform: translateX(0); }
+            20%  { transform: translateX(-7px); }
+            40%  { transform: translateX(7px); }
+            60%  { transform: translateX(-5px); }
+            80%  { transform: translateX(5px); }
+            100% { transform: translateX(0); }
+        }
+
         @keyframes piscar {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.6; }
@@ -802,16 +811,18 @@
             
             <div class="form-group">
                 <label>Usuário</label>
-                <input type="text" id="loginUser" placeholder="Digite seu usuário" autofocus value="bruno">
+                <input type="text" id="loginUser" placeholder="Digite seu usuário" autofocus>
             </div>
 
             <div class="form-group">
                 <label>Senha</label>
                 <div class="password-wrapper">
-                    <input type="password" id="loginPassword" placeholder="Digite sua senha" value="1986">
+                    <input type="password" id="loginPassword" placeholder="Digite sua senha">
                     <button class="btn-toggle-password" id="btnTogglePassword">👁️</button>
                 </div>
             </div>
+
+            <div id="loginErro" style="display:none; margin-top: 10px; padding: 10px 14px; background: #FDECEA; border: 1px solid #E74C3C; border-radius: 4px; color: #C0392B; font-size: 13px; font-weight: 600; text-align: center;"></div>
 
             <button class="btn-login" id="btnLogin">Entrar</button>
         </div>
@@ -1680,6 +1691,12 @@
             document.getElementById('btnLogin').addEventListener('click', handleLogin);
             document.getElementById('loginUser').addEventListener('keypress', (e) => e.key === 'Enter' && handleLogin());
             document.getElementById('loginPassword').addEventListener('keypress', (e) => e.key === 'Enter' && handleLogin());
+            // Limpar mensagem de erro ao começar a digitar
+            ['loginUser', 'loginPassword'].forEach(id => {
+                document.getElementById(id).addEventListener('input', () => {
+                    document.getElementById('loginErro').style.display = 'none';
+                });
+            });
             document.getElementById('btnTogglePassword').addEventListener('click', togglePassword);
             document.getElementById('btnLogout').addEventListener('click', handleLogout);
 
@@ -1707,32 +1724,41 @@
         }
 
         // LOGIN
+        function mostrarErroLogin(msg, focusId) {
+            const el = document.getElementById('loginErro');
+            el.textContent = msg;
+            el.style.display = 'block';
+            // Shake no formulário
+            const box = el.closest('.login-box');
+            if (box) { box.style.animation = 'none'; box.offsetHeight; box.style.animation = 'loginShake 0.35s ease'; }
+            if (focusId) document.getElementById(focusId).focus();
+        }
+
         function handleLogin() {
             const user = document.getElementById('loginUser').value.toLowerCase().trim();
             const pass = document.getElementById('loginPassword').value;
+            // Limpar erro anterior
+            document.getElementById('loginErro').style.display = 'none';
 
             // ✅ VALIDAÇÕES
             if (!user) {
-                showToast('Digite seu usuário', 'error');
-                document.getElementById('loginUser').focus();
+                mostrarErroLogin('⚠️ Digite seu usuário para entrar.', 'loginUser');
                 return;
             }
             if (!pass) {
-                showToast('Digite sua senha', 'error');
-                document.getElementById('loginPassword').focus();
+                mostrarErroLogin('⚠️ Digite sua senha para entrar.', 'loginPassword');
                 return;
             }
 
             // ✅ VERIFICAR CREDENCIAIS
             if (!state.usuarios[user]) {
-                showToast('❌ Usuário não encontrado', 'error');
-                document.getElementById('loginUser').focus();
+                mostrarErroLogin('❌ Usuário não encontrado. Verifique e tente novamente.', 'loginUser');
                 return;
             }
 
             if (state.usuarios[user].senha !== pass) {
-                showToast('❌ Senha incorreta', 'error');
-                document.getElementById('loginPassword').focus();
+                mostrarErroLogin('❌ Senha incorreta. Tente novamente.', 'loginPassword');
+                document.getElementById('loginPassword').value = '';
                 return;
             }
 
@@ -1915,7 +1941,7 @@
 
             // ✅ Limpar dados sensíveis
             document.getElementById('loginPassword').value = '';
-            document.getElementById('loginUser').value = 'bruno';
+            document.getElementById('loginUser').value = '';
             document.getElementById('loginUser').focus();
 
             // ✅ Voltar para login
