@@ -1558,30 +1558,30 @@
                             .filter(i => String(i.removido).toLowerCase() !== 'true')
                             .map(mapItemSheets);
 
-                        const isPaid       = !!(cmd.timestamp_pagamento);
-                        const isEmPreparo  = cmd.status === 'em_preparo';
-                        const temMarmita   = itens.some(i => i.tipo === 'Marmita');
-                        const temPreparoJa = itens.some(i => i.preparo_ja);
+                        const isPaid = !!(cmd.timestamp_pagamento);
 
-                        // Determina status e statusPreparo corretamente
-                        let statusFinal, statusPreparo = null, dataInicioEspera = null;
+                        // FASE 2 — PREPARO: status de preparo desativado para GoLive Fase 1
+                        // Reativar o bloco abaixo quando o fluxo de preparo for para produção.
+                        // const isEmPreparo  = cmd.status === 'em_preparo';
+                        // const temMarmita   = itens.some(i => i.tipo === 'Marmita');
+                        // const temPreparoJa = itens.some(i => i.preparo_ja);
+                        // let statusFinal, statusPreparo = null, dataInicioEspera = null;
+                        // if (isPaid && temMarmita) {
+                        //     statusFinal = 'Em Preparo'; statusPreparo = 'Aguardando';
+                        //     dataInicioEspera = cmd.timestamp_pagamento || null;
+                        // } else if (isPaid) {
+                        //     statusFinal = 'Fechada/Paga';
+                        // } else if (isEmPreparo || temPreparoJa) {
+                        //     statusFinal = 'Em Preparo'; statusPreparo = 'Aguardando';
+                        //     dataInicioEspera = cmd.timestamp_abertura || null;
+                        // } else {
+                        //     statusFinal = 'Aberta';
+                        // }
 
-                        if (isPaid && temMarmita) {
-                            // Marmita paga → Em Preparo na fila
-                            statusFinal      = 'Em Preparo';
-                            statusPreparo    = 'Aguardando';
-                            dataInicioEspera = cmd.timestamp_pagamento || null;
-                        } else if (isPaid) {
-                            // Paga sem marmita → Fechada
-                            statusFinal = 'Fechada/Paga';
-                        } else if (isEmPreparo || temPreparoJa) {
-                            // Preparo Já (não paga) → Em Preparo na fila
-                            statusFinal      = 'Em Preparo';
-                            statusPreparo    = 'Aguardando';
-                            dataInicioEspera = cmd.timestamp_abertura || null;
-                        } else {
-                            statusFinal = 'Aberta';
-                        }
+                        // Fase 1: status simples — paga ou aberta
+                        const statusFinal     = isPaid ? 'Fechada/Paga' : 'Aberta';
+                        const statusPreparo   = null;
+                        const dataInicioEspera = null;
 
                         state.comandas[chave] = {
                             _id:              cmd.id,
@@ -2964,8 +2964,12 @@ function carregarComanda() {
         let marnitaEmEdicao = null;
         let marnitaCarnesSelecionadas = [];
 
-        
-                        function abrirModalMarnitaCarnes(codigoItem) {
+        /* ═══════════════════════════════════════════════════════════════════
+           FASE 2 — PREPARO: funções do modal de carnes e Preparo Já
+           Desativadas para GoLive Fase 1. Reativar quando o fluxo de preparo
+           for para produção (remover os delimitadores de comentário).
+           ═══════════════════════════════════════════════════════════════════
+        function abrirModalMarnitaCarnes(codigoItem) {
             const item = state.itens[codigoItem];
             if (!item || item.tipo !== 'Marmita') {
                 showToast('Item inválido', 'error');
@@ -3096,8 +3100,8 @@ function carregarComanda() {
             
             console.log('🎯 Preparo Já toggled:', novoEstado);
         }
+        ═══════════════════════════════════════════════════════════════════ */
 
-        
         function atualizarTotalComanda(chaveComanda) {
             const comanda = state.comandas[chaveComanda];
             if (!comanda) return;
@@ -3265,10 +3269,29 @@ function carregarComanda() {
                 saveStorage();
                 renderizarListaLançada();
                 return;
+            // ═══════════════════════════════════════════════════════════════
+            // FASE 2 — PREPARO (GoLive Fase 1: modal de carnes desativado)
+            // Reativar quando o fluxo de preparo for para produção.
+            // } else if (item.tipo === 'Marmita') {
+            //     abrirModalMarnitaCarnes(codigo);
+            //     return;
+            // }
+            // ───────────────────────────────────────────────────────────────
+            // Fase 1: Marmita lançada diretamente, sem modal e sem fila de preparo
             } else if (item.tipo === 'Marmita') {
-                // Abrir modal para selecionar carnes
-                abrirModalMarnitaCarnes(codigo);
-                return;
+                const _itemMarmita = {
+                    codigo: codigo, nome: item.nome, tipo: item.tipo,
+                    preco: item.preco, quantidade: 1, observacao: '',
+                    icone: getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo)),
+                    preparo_ja: false
+                };
+                comanda.itens.push(_itemMarmita);
+                _itemMarmita._pendingAdd = sheets_addItem(state.comandaAtual, _itemMarmita, {
+                    codigo, nome: item.nome, quantidade: 1,
+                    preco: item.preco, observacao: '', preparo_ja: false
+                }).then(() => delete _itemMarmita._pendingAdd);
+                atualizarTotalComanda(state.comandaAtual);
+                showToast(`${item.nome} lançado`, 'success');
             }
 
             saveStorage();
@@ -3665,27 +3688,22 @@ function carregarComanda() {
             comanda.formaPagamento = formaPagamentoSelecionada;
             comanda.dataPagamento = new Date().toISOString();
             
-            // ✅ VERIFICAR SE TEM MARMITA
-            const temMarmita = comanda.itens.some(item => item.tipo === 'Marmita');
-            
-            if (temMarmita) {
-                // Se tem marmita → EM PREPARO (se ainda não estiver)
-                if (comanda.status !== 'Em Preparo') {
-                    comanda.status = 'Em Preparo';
-                    comanda.dataInicioEspera = new Date().toISOString();
-                    // ✅ SÓ SETAR statusPreparo se for null/undefined
-                    // Se já foi "Concluído" e expirou (virou null), não reseta para "Aguardando"
-                    if (!comanda.statusPreparo) {
-                        comanda.statusPreparo = 'Aguardando';
-                    }
-                    comanda.atendentePreparo = null;
-                }
-                // ✅ Se já estava em preparo (por causa de Preparo Já), mantém como está
-                // Apenas marca como paga
-            } else {
-                // Se não tem marmita → Fechada
-                comanda.status = 'Fechada/Paga';
-            }
+            // FASE 2 — PREPARO: ao pagar, marmitas não vão para fila de preparo
+            // Reativar o bloco abaixo quando o fluxo de preparo for para produção.
+            // const temMarmita = comanda.itens.some(item => item.tipo === 'Marmita');
+            // if (temMarmita) {
+            //     if (comanda.status !== 'Em Preparo') {
+            //         comanda.status = 'Em Preparo';
+            //         comanda.dataInicioEspera = new Date().toISOString();
+            //         if (!comanda.statusPreparo) { comanda.statusPreparo = 'Aguardando'; }
+            //         comanda.atendentePreparo = null;
+            //     }
+            // } else {
+            //     comanda.status = 'Fechada/Paga';
+            // }
+
+            // Fase 1: pagamento sempre fecha a comanda
+            comanda.status = 'Fechada/Paga';
             
             saveStorage();
             // ☁️ SHEETS: registrar pagamento
@@ -4284,25 +4302,24 @@ function carregarComanda() {
                         const itens = (itensCmd || [])
                             .filter(i => String(i.removido).toLowerCase() !== 'true')
                             .map(mapItemSheets);
-                        const temMarmita   = itens.some(i => i.tipo === 'Marmita');
-                        const temPreparoJa = itens.some(i => i.preparo_ja);
+                        // FASE 2 — PREPARO: status de preparo desativado para GoLive Fase 1
+                        // const temMarmita   = itens.some(i => i.tipo === 'Marmita');
+                        // const temPreparoJa = itens.some(i => i.preparo_ja);
+                        // let statusFinal = cmd.status === 'em_preparo' ? 'Em Preparo'
+                        //                 : novoPaid ? 'Fechada/Paga' : 'Aberta';
+                        // let statusPreparoFinal = null, dataInicioFinal = null;
+                        // if ((novoPaid && temMarmita) || cmd.status === 'em_preparo') {
+                        //     statusFinal = 'Em Preparo'; statusPreparoFinal = 'Aguardando';
+                        //     dataInicioFinal = cmd.timestamp_pagamento || cmd.timestamp_abertura || null;
+                        // } else if (!novoPaid && temPreparoJa) {
+                        //     statusFinal = 'Em Preparo'; statusPreparoFinal = 'Aguardando';
+                        //     dataInicioFinal = cmd.timestamp_abertura || null;
+                        // }
 
-                        // Status correto: marmita paga → Em Preparo; preparo_já → Em Preparo
-                        let statusFinal = cmd.status === 'em_preparo' ? 'Em Preparo'
-                                        : novoPaid ? 'Fechada/Paga'
-                                        : 'Aberta';
+                        // Fase 1: status simples
+                        let statusFinal       = novoPaid ? 'Fechada/Paga' : 'Aberta';
                         let statusPreparoFinal = null;
-                        let dataInicioFinal = null;
-
-                        if ((novoPaid && temMarmita) || cmd.status === 'em_preparo') {
-                            statusFinal       = 'Em Preparo';
-                            statusPreparoFinal = 'Aguardando';
-                            dataInicioFinal   = cmd.timestamp_pagamento || cmd.timestamp_abertura || null;
-                        } else if (!novoPaid && temPreparoJa) {
-                            statusFinal       = 'Em Preparo';
-                            statusPreparoFinal = 'Aguardando';
-                            dataInicioFinal   = cmd.timestamp_abertura || null;
-                        }
+                        let dataInicioFinal    = null;
 
                         state.comandas[chave] = {
                             _id:              cmd.id,
@@ -4327,50 +4344,37 @@ function carregarComanda() {
 
                         // CASO 1: Pagamento detectado em outro device
                         if (!local.paid && novoPaid) {
-                            // Usa itens já carregados (loadFromSheets) para detectar marmita
-                            // Só busca no servidor se local.itens estiver vazio
-                            if (!local.itens || local.itens.length === 0) {
-                                const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
-                                if (itensCmd) {
-                                    local.itens = itensCmd
-                                        .filter(i => String(i.removido).toLowerCase() !== 'true')
-                                        .map(mapItemSheets);
-                                }
-                            }
-                            local.total = parseFloat(cmd.total) || local.total;
-                            const temMarmita = (local.itens || []).some(i => i.tipo === 'Marmita');
-
-                            local.paid         = true;
+                            local.total          = parseFloat(cmd.total) || local.total;
+                            local.paid           = true;
                             local.formaPagamento = cmd.forma_pagamento || local.formaPagamento;
                             local.dataPagamento  = cmd.timestamp_pagamento || local.dataPagamento;
-
-                            if (temMarmita || cmd.status === 'em_preparo') {
-                                local.status = 'Em Preparo';
-                                if (!local.statusPreparo) {
-                                    local.statusPreparo   = 'Aguardando';
-                                    local.dataInicioEspera = cmd.timestamp_pagamento || new Date().toISOString();
-                                }
-                            } else {
-                                local.status = 'Fechada/Paga';
-                            }
+                            local.status         = 'Fechada/Paga';
+                            // FASE 2 — PREPARO: detecção de marmita/preparo desativada para Fase 1
+                            // if (!local.itens || local.itens.length === 0) {
+                            //     const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
+                            //     if (itensCmd) local.itens = itensCmd.filter(i => String(i.removido).toLowerCase() !== 'true').map(mapItemSheets);
+                            // }
+                            // const temMarmita = (local.itens || []).some(i => i.tipo === 'Marmita');
+                            // if (temMarmita || cmd.status === 'em_preparo') {
+                            //     local.status = 'Em Preparo';
+                            //     if (!local.statusPreparo) { local.statusPreparo = 'Aguardando'; local.dataInicioEspera = cmd.timestamp_pagamento || new Date().toISOString(); }
+                            // } else { local.status = 'Fechada/Paga'; }
                             localMudou = true;
 
-                        // CASO 2: Status mudou sem ser pagamento (ex: preparo_já de outro device)
-                        } else if (!local.paid) {
-                            const novoStatus = cmd.status === 'em_preparo' ? 'Em Preparo' : 'Aberta';
-                            if (local.status !== novoStatus) {
-                                local.status = novoStatus;
-                                if (novoStatus === 'Em Preparo' && !local.statusPreparo) {
-                                    local.statusPreparo   = 'Aguardando';
-                                    local.dataInicioEspera = local.dataInicioEspera || new Date().toISOString();
-                                }
-                                localMudou = true;
-                            } else if (novoStatus === 'Em Preparo' && !local.statusPreparo) {
-                                // Status já é Em Preparo mas statusPreparo estava faltando (ex: loadFromSheets antigo)
-                                local.statusPreparo   = 'Aguardando';
-                                local.dataInicioEspera = local.dataInicioEspera || new Date().toISOString();
-                                localMudou = true;
-                            }
+                        // CASO 2: Status mudou sem ser pagamento
+                        // FASE 2 — PREPARO: detecção de preparo_já desativada para Fase 1
+                        // } else if (!local.paid) {
+                        //     const novoStatus = cmd.status === 'em_preparo' ? 'Em Preparo' : 'Aberta';
+                        //     if (local.status !== novoStatus) {
+                        //         local.status = novoStatus;
+                        //         if (novoStatus === 'Em Preparo' && !local.statusPreparo) {
+                        //             local.statusPreparo = 'Aguardando'; local.dataInicioEspera = local.dataInicioEspera || new Date().toISOString();
+                        //         }
+                        //         localMudou = true;
+                        //     } else if (novoStatus === 'Em Preparo' && !local.statusPreparo) {
+                        //         local.statusPreparo = 'Aguardando'; local.dataInicioEspera = local.dataInicioEspera || new Date().toISOString();
+                        //         localMudou = true;
+                        //     }
                         }
 
                         // CASO 3: Sincroniza itens se total mudou E não é a comanda ativa
