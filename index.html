@@ -1740,7 +1740,7 @@
             if (focusId) document.getElementById(focusId).focus();
         }
 
-        function handleLogin() {
+        async function handleLogin() {
             const user = document.getElementById('loginUser').value.toLowerCase().trim();
             const pass = document.getElementById('loginPassword').value;
             // Limpar erro anterior
