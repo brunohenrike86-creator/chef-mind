@@ -3600,13 +3600,19 @@ function carregarComanda() {
             let total = 0;
 
             comanda.itens.forEach((item, idx) => {
-                if (item.tipo === 'Fixo') {
+                // Mesmas 4 heurísticas usadas em renderizarCheckoutItens e na tela Lançar
+                const isQuiloItem = item.tipo === 'Gramas'
+                    || (item.nome && item.nome.toLowerCase().includes('quilo'))
+                    || /^\d+(\.\d+)?g$/.test(item.observacao || '')
+                    || (item.quantidade > 0 && item.quantidade < 1 && item.observacao);
+
+                if (isQuiloItem) {
+                    gramas.push(item);
+                } else if (item.tipo === 'Fixo') {
                     if (!agrupados[item.codigo]) {
                         agrupados[item.codigo] = { ...item, quantidade: 0 };
                     }
                     agrupados[item.codigo].quantidade += item.quantidade;
-                } else if (item.tipo === 'Gramas') {
-                    gramas.push(item);
                 } else if (item.tipo === 'Marmita') {
                     if (!marmitas[item.codigo]) {
                         marmitas[item.codigo] = { ...item, quantidade: 0, observacoes: [] };
@@ -5379,14 +5385,22 @@ function carregarComanda() {
             const marmitas = {};
 
             comanda.itens.forEach((item, idx) => {
-                if (item.tipo === 'Fixo') {
+                // Detecta itens de quilo/gramas independentemente do tipo salvo no cardápio.
+                // Usa as mesmas 4 heurísticas da tela Lançar para ser resiliente ao ciclo de polling
+                // (mapItemSheets pode retornar tipo:'Fixo' se categoria no Sheets não for 'gramas')
+                const isQuiloItem = item.tipo === 'Gramas'
+                    || (item.nome && item.nome.toLowerCase().includes('quilo'))
+                    || /^\d+(\.\d+)?g$/.test(item.observacao || '')
+                    || (item.quantidade > 0 && item.quantidade < 1 && item.observacao);
+
+                if (isQuiloItem) {
+                    gramas.push(item);
+                } else if (item.tipo === 'Fixo') {
                     if (!agrupados[item.codigo]) {
                         agrupados[item.codigo] = { ...item, quantidade: 0, indices: [] };
                     }
                     agrupados[item.codigo].quantidade += item.quantidade;
                     agrupados[item.codigo].indices.push(idx);
-                } else if (item.tipo === 'Gramas') {
-                    gramas.push(item);
                 } else if (item.tipo === 'Marmita') {
                     if (!marmitas[item.codigo]) {
                         marmitas[item.codigo] = { ...item, quantidade: 0, observacoes: [], indices: [] };
