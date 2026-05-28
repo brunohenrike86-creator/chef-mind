@@ -854,9 +854,90 @@
             #lançarCodigoItem { font-size: 22px !important; padding: 13px !important; }
             #lançarComandaNum { font-size: 26px !important; }
         }
+
+        /* ── Sync banner ── */
+        /* ── Sync loading central ── */
+        @keyframes syncSpin {
+            from { transform: rotate(0deg); } to { transform: rotate(360deg); }
+        }
+        @keyframes syncBounce {
+            0%, 100% { transform: translateY(0) scale(1);   opacity: 0.5; }
+            50%       { transform: translateY(-12px) scale(1.2); opacity: 1;   }
+        }
+        @keyframes syncFadeIn {
+            from { opacity: 0; transform: scale(0.85); }
+            to   { opacity: 1; transform: scale(1);    }
+        }
+        @keyframes syncDots {
+            0%, 20%  { opacity: 0.2; transform: scale(0.8); }
+            50%      { opacity: 1;   transform: scale(1.1); }
+            80%,100% { opacity: 0.2; transform: scale(0.8); }
+        }
+        #syncBanner {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(3px);
+            z-index: 99999;
+            pointer-events: none;       /* não bloqueia interação */
+            align-items: center;
+            justify-content: center;
+        }
+        #syncBanner.visible { display: flex; }
+        #syncCard {
+            background: white;
+            border-radius: 20px;
+            padding: 32px 40px 28px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: syncFadeIn 0.3s ease-out;
+            min-width: 200px;
+        }
+        #syncIcons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            font-size: 26px;
+            margin-bottom: 16px;
+        }
+        #syncIcons span { display: inline-block; animation: syncBounce 1.2s ease-in-out infinite; }
+        #syncIcons span:nth-child(2) { animation-delay: 0.2s; }
+        #syncIcons span:nth-child(3) { animation-delay: 0.4s; }
+        #syncIcons span:nth-child(4) { animation-delay: 0.6s; }
+        #syncTitle {
+            font-size: 15px; font-weight: 700;
+            color: var(--primary); margin-bottom: 4px;
+        }
+        #syncSubtitle {
+            font-size: 12px; color: #888; margin-bottom: 14px;
+        }
+        .sync-dot-row { display: flex; justify-content: center; gap: 6px; }
+        .sync-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--primary);
+            animation: syncDots 1.4s ease-in-out infinite;
+        }
+        .sync-dot:nth-child(2) { animation-delay: 0.2s; }
+        .sync-dot:nth-child(3) { animation-delay: 0.4s; }
     </style>
 </head>
 <body>
+    <!-- SYNC LOADING CENTRAL (pós-login, não bloqueia interação) -->
+    <div id="syncBanner">
+        <div id="syncCard">
+            <div id="syncIcons">
+                <span>🍽️</span><span>👨‍🍳</span><span>🥘</span><span>✨</span>
+            </div>
+            <div id="syncTitle">Chef Mind</div>
+            <div id="syncSubtitle">Carregando dados do dia...</div>
+            <div class="sync-dot-row">
+                <div class="sync-dot"></div>
+                <div class="sync-dot"></div>
+                <div class="sync-dot"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- LOGIN SCREEN -->
     <div id="loginScreen">
         <div class="login-box">
@@ -1548,9 +1629,17 @@
         }
 
         async function loadFromSheets() {
-            console.log('[Sheets] Carregando dados...');
+            console.log('[Sheets] Carregando dados em paralelo...');
             try {
-                const config = await sheetsAPI('getConfig');
+                // ── Batch 1: 4 chamadas independentes em paralelo ──────────
+                const [config, cardapio, usuarios, comandas] = await Promise.all([
+                    sheetsAPI('getConfig'),
+                    sheetsAPI('getCardapio'),
+                    sheetsAPI('getUsuarios'),
+                    sheetsAPI('getComandasDoDia')
+                ]);
+
+                // Processar config
                 if (config) {
                     const diasMap = { seg:0, ter:1, qua:2, qui:3, sex:4, sab:5, dom:6 };
                     Object.entries(diasMap).forEach(([sigla, idx]) => {
@@ -1560,7 +1649,7 @@
                     console.log('[Sheets] ✅ Config carregada');
                 }
 
-                const cardapio = await sheetsAPI('getCardapio');
+                // Processar cardápio
                 if (cardapio && cardapio.length > 0) {
                     const novoItens = {};
                     cardapio.forEach(item => {
@@ -1590,7 +1679,7 @@
                     }
                 }
 
-                const usuarios = await sheetsAPI('getUsuarios');
+                // Processar usuários
                 if (usuarios && usuarios.length > 0) {
                     usuarios.forEach(u => {
                         state.usuarios[u.login] = {
@@ -1602,10 +1691,14 @@
                 }
                 state._usuariosCarregados = true;
 
-                const comandas = await sheetsAPI('getComandasDoDia');
+                // ── Batch 2: itens de todas as comandas em paralelo ────────
                 if (comandas && comandas.length > 0) {
-                    for (const cmd of comandas) {
-                        const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
+                    const itensPorComanda = await Promise.all(
+                        comandas.map(cmd => sheetsAPI('getItensDaComanda', { comanda_id: cmd.id }))
+                    );
+                    for (let i = 0; i < comandas.length; i++) {
+                        const cmd = comandas[i];
+                        const itensCmd = itensPorComanda[i];
                         const data = cmd.timestamp_abertura ? cmd.timestamp_abertura.split('T')[0] : new Date().toISOString().split('T')[0];
                         const numeroNormSheets = String(parseInt(cmd.numero, 10));
                         const chave = `${numeroNormSheets}-${data}`;
@@ -1722,7 +1815,11 @@
             await sheetsAPI('atualizarConfig', { chave: `carnes_${siglas[dia]}`, valor: carnes.join(',') });
         }
 
-        window.addEventListener('load', () => setTimeout(loadFromSheets, 800));
+        // Salvar como Promise global para o handleLogin poder aguardar o término
+        let _loadFromSheetsPromise = null;
+        window.addEventListener('load', () => {
+            _loadFromSheetsPromise = new Promise(resolve => setTimeout(() => loadFromSheets().then(resolve).catch(resolve), 800));
+        });
         // ====================================================
 
         // INIT
@@ -1742,11 +1839,43 @@
             updateDate();
             setupEvents();
             setupAdminTabs();
-            
+
             // Renderizar listas admin
-            gerarFiltrosCategorias(); // ✅ Gerar filtros dinamicamente
+            gerarFiltrosCategorias();
             renderAdminItensComFiltro();
             renderAdminUsuarios();
+
+            // ── Auto-login: restaurar sessão após F5 ─────────────────────
+            if (state.user && state.perfil) {
+                console.log('[Sessão] Restaurando sessão de', state.user);
+
+                // Atualizar header
+                document.getElementById('headerUser').textContent = state.user;
+                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : '👤 Atendente';
+
+                // Mostrar app diretamente
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden');
+
+                atualizarVisibilidadeAbas();
+                iniciarPolling();
+
+                // Renderizar com cache imediatamente
+                renderizarCheckout();
+                renderizarResumoDoDia();
+
+                // Sync em background
+                const syncBanner = document.getElementById('syncBanner');
+                syncBanner.classList.add('visible');
+                Promise.all([
+                    _loadFromSheetsPromise || Promise.resolve(),
+                    pollFromSheets()
+                ]).catch(() => {}).finally(() => {
+                    syncBanner.classList.remove('visible');
+                    renderizarCheckout();
+                    renderizarResumoDoDia();
+                });
+            }
         });
 
         function setupEvents() {
@@ -1856,6 +1985,13 @@
             state.user = state.usuarios[user].nome;
             state.perfil = state.usuarios[user].perfil;
 
+            // Persistir sessão imediatamente para sobreviver ao F5
+            localStorage.setItem('michelin-session', JSON.stringify({
+                user:       state.user,
+                userLogado: state.userLogado,
+                perfil:     state.perfil
+            }));
+
             // Esconder login
             document.getElementById('loginScreen').classList.add('hidden');
             
@@ -1877,16 +2013,30 @@
             // ✅ APLICAR CONTROLE DE ACESSO POR PERFIL
             atualizarVisibilidadeAbas();
 
-            // ✅ INICIAR POLLING + POLL IMEDIATO AO LOGAR
+            // ✅ INICIAR POLLING
             iniciarPolling();
-            // Força sincronização agora — garante que o usuário vê os dados atuais
-            // ao navegar para qualquer tela logo após o login
-            pollFromSheets().then(() => {
-                renderizarCheckout();
-                renderizarResumoDoDia();
-            });
 
+            // ── Renderizar imediatamente com dados do cache (localStorage) ──
+            renderizarCheckout();
+            renderizarResumoDoDia();
             showToast(`Bem-vindo, ${state.user}!`, 'success');
+
+            // ── Sincronizar com Sheets em background (banner discreto) ──────
+            const syncBanner = document.getElementById('syncBanner');
+            syncBanner.classList.add('visible');
+
+            try {
+                await Promise.all([
+                    _loadFromSheetsPromise || Promise.resolve(),
+                    pollFromSheets()
+                ]);
+            } catch(e) { /* usa o que tiver */ }
+
+            syncBanner.classList.remove('visible');
+
+            // Re-renderizar com dados frescos do servidor
+            renderizarCheckout();
+            renderizarResumoDoDia();
         }
 
         // ========== CONTROLE DE ACESSO POR PERFIL ==========
@@ -2027,6 +2177,7 @@
             state.user = null;
             state.userLogado = null;
             state.perfil = null;
+            localStorage.removeItem('michelin-session'); // Limpa sessão salva
 
             // ✅ Limpar dados sensíveis
             document.getElementById('loginPassword').value = '';
@@ -5034,6 +5185,14 @@ function carregarComanda() {
                 usuarios: state.usuarios,
                 marnitasDia: state.marnitasDia
             }));
+            // Persiste sessão separadamente para sobreviver ao F5
+            if (state.user) {
+                localStorage.setItem('michelin-session', JSON.stringify({
+                    user:      state.user,
+                    userLogado: state.userLogado,
+                    perfil:    state.perfil
+                }));
+            }
         }
 
         function loadStorage() {
@@ -5067,6 +5226,17 @@ function carregarComanda() {
             
             console.log('📦 Itens carregados:', Object.keys(state.itens).length, 'itens');
             console.log('🔍 Primeiros itens:', state.itens['001'], state.itens['002'], state.itens['003']);
+
+            // Restaurar sessão se existir
+            const sessao = localStorage.getItem('michelin-session');
+            if (sessao) {
+                try {
+                    const s = JSON.parse(sessao);
+                    state.user      = s.user      || null;
+                    state.userLogado = s.userLogado || null;
+                    state.perfil    = s.perfil    || null;
+                } catch(e) {}
+            }
         }
 
         // ========== SETUP ADMIN TABS ==========
