@@ -597,6 +597,49 @@
                     padding: 4px 8px !important; border-radius: 2px !important; cursor: pointer !important;
                     font-size: 10px !important; margin-bottom: 0 !important; flex-shrink: 0; }
 
+        /* Botão editar preço (admin only) */
+        .il-edit-preco {
+            background: none !important; border: none !important;
+            padding: 2px 5px !important; cursor: pointer !important;
+            font-size: 13px !important; flex-shrink: 0;
+            opacity: 0.55; line-height: 1; color: inherit;
+        }
+        .il-edit-preco:hover, .il-edit-preco:active { opacity: 1; }
+
+        /* Popup edição de preço */
+        #popupEditPreco {
+            position: fixed; z-index: 9999;
+            background: white; border: 2px solid var(--primary);
+            border-radius: 10px; padding: 14px 16px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+            display: none; width: 230px;
+        }
+        #popupEditPreco .pep-titulo {
+            font-size: 12px; font-weight: bold; color: var(--primary); margin-bottom: 4px;
+        }
+        #popupEditPreco .pep-nome {
+            font-size: 11px; color: var(--gray); margin-bottom: 10px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        #popupEditPreco input {
+            width: 100%; padding: 9px 10px; font-size: 18px; font-weight: bold;
+            border: 1px solid var(--border); border-radius: 6px;
+            box-sizing: border-box; text-align: right;
+        }
+        #popupEditPreco .pep-btns {
+            display: flex; gap: 8px; margin-top: 10px;
+        }
+        #popupEditPreco .pep-btns button {
+            flex: 1; padding: 9px; border: none; border-radius: 6px;
+            font-size: 13px; font-weight: bold; cursor: pointer;
+        }
+        #popupEditPreco .pep-salvar {
+            background: var(--primary) !important; color: white !important;
+        }
+        #popupEditPreco .pep-cancelar {
+            background: var(--bg-light) !important; color: var(--text-dark) !important;
+        }
+
         /* CLASSES RESPONSIVAS — itens checkout detail */
         .co-row   { display: grid; grid-template-columns: 1fr 44px 56px 56px;
                     gap: 4px; padding: 7px 4px; border-bottom: 1px solid var(--border);
@@ -4379,7 +4422,10 @@ function carregarComanda() {
 
                         // CASO 3: Sincroniza itens se total mudou E não é a comanda ativa
                         const totalServer = parseFloat(cmd.total) || 0;
-                        if (chave !== state.comandaAtual && Math.abs(totalServer - (local.total || 0)) > 0.001) {
+                        // Se admin editou preço manualmente há menos de 60s, bloquear re-sync
+                        // para não sobrescrever com valores antigos do Sheets enquanto a API atualiza
+                        const bloqueadoPorEdicao = local._editadoEm && (Date.now() - local._editadoEm) < 60000;
+                        if (!bloqueadoPorEdicao && chave !== state.comandaAtual && Math.abs(totalServer - (local.total || 0)) > 0.001) {
                             const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
                             if (itensCmd) {
                                 const serverItems  = itensCmd
@@ -4388,6 +4434,16 @@ function carregarComanda() {
                                 const pendingItems = local.itens.filter(i => !i._id);
                                 const serverIds    = new Set(serverItems.map(i => i._id));
                                 local.itens  = [...serverItems, ...pendingItems.filter(p => !serverIds.has(p._id))];
+                                // Re-aplicar overrides de preço editados manualmente pelo admin
+                                if (local._precoOverrides) {
+                                    local.itens.forEach(item => {
+                                        const k = item._id ? String(item._id) : ('codigo_' + item.codigo);
+                                        if (local._precoOverrides[k] !== undefined) {
+                                            item.preco = local._precoOverrides[k];
+                                            item.total = item.preco * (item.quantidade || 1);
+                                        }
+                                    });
+                                }
                                 local.total  = totalServer;
                                 // Detecta preparo_já lançado em outro device via flag no item
                                 if (!local.paid && !local.statusPreparo) {
@@ -4716,6 +4772,7 @@ function carregarComanda() {
 
             container.innerHTML = '';
             let total = 0;
+            const _isAdmin = state.perfil === 'Admin';
 
             // REGRA: Buffet por kg NÃO agrupa. Tudo mais agrupa.
             const agrupados = {};
@@ -4728,7 +4785,7 @@ function carregarComanda() {
                 } else {
                     // TUDO MAIS - agrupar por código (inclusive Buffet Livre)
                     if (!agrupados[item.codigo]) {
-                        agrupados[item.codigo] = { 
+                        agrupados[item.codigo] = {
                             ...item,
                             quantidade: 0,
                             observacoes: [],
@@ -4749,6 +4806,13 @@ function carregarComanda() {
                 const valor = item.preco * (item.quantidade || 1);
                 total += valor;
 
+                // Botão editar preço: admin + não Gramas
+                const podeEditar = _isAdmin && item.tipo !== 'Gramas';
+                const nomeEsc = (item.nome || '').replace(/'/g, "\\'");
+                const btnEdit = podeEditar
+                    ? `<button class="il-edit-preco" title="Editar preço" onclick="abrirEdicaoPreco(this, ${item.indice}, ${item.preco}, 'individual', '${nomeEsc}')">✏️</button>`
+                    : '';
+
                 const div = document.createElement('div');
                 div.style.cssText = 'padding: 8px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;';
 
@@ -4757,6 +4821,7 @@ function carregarComanda() {
                     <div class="il-det">${item.observacao || item.quantidade + 'x'}</div>
                 </div>
                 <span class="il-preco">R$ ${valor.toFixed(2)}</span>
+                ${btnEdit}
                 <button class="il-rm" onclick="removerItemComanda(${item.indice})">✕</button>`;
 
                 div.innerHTML = html;
@@ -4767,6 +4832,13 @@ function carregarComanda() {
             Object.entries(agrupados).forEach(([codigo, item]) => {
                 const precoTotal = item.quantidade * item.preco;
                 total += precoTotal;
+
+                // Botão editar preço: admin + não Gramas
+                const podeEditar = _isAdmin && item.tipo !== 'Gramas';
+                const nomeEsc = (item.nome || '').replace(/'/g, "\\'");
+                const btnEdit = podeEditar
+                    ? `<button class="il-edit-preco" title="Editar preço" onclick="abrirEdicaoPreco(this, '${codigo}', ${item.preco}, 'agrupado', '${nomeEsc}')">✏️</button>`
+                    : '';
 
                 const div = document.createElement('div');
                 div.style.cssText = 'padding: 8px; border-bottom: 1px solid var(--border);';
@@ -4789,6 +4861,7 @@ function carregarComanda() {
 
                 html += `</div>
                     <span class="il-preco">R$ ${precoTotal.toFixed(2)}</span>
+                    ${btnEdit}
                     <button class="il-rm" onclick="removerTodosItem(${item.indices[0]})">✕</button>
                 </div>`;
 
@@ -5340,158 +5413,125 @@ function carregarComanda() {
                 const precoTotal = item.quantidade * item.preco;
                 total += precoTotal;
                 const icone = getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo));
-                
                 const div = document.createElement('div');
-                div.style.cssText = `padding: 3px 4px; border-bottom: 1px solid var(--border); font-size: 7px;`;
-                div.innerHTML = `
-                    <div style="font-weight: bold; font-size: 9px; margin-bottom: 1px;">${icone} ${item.nome}</div>
-                    <div style="color: var(--gray); display: flex; justify-content: space-between; gap: 2px;">
-                        <span>P:${(item.quantidade/1000).toFixed(2)}kg</span>
-                        <span>V:R$${item.preco.toFixed(1)}</span>
-                        <span style="font-weight: bold; color: #3498DB;">R$${precoTotal.toFixed(0)}</span>
-                    </div>
-                `;
+                div.style.cssText = 'padding: 3px 4px; border-bottom: 1px solid var(--border); font-size: 7px;';
+                div.innerHTML = '<div style="font-weight: bold; font-size: 9px; margin-bottom: 1px;">' + icone + ' ' + item.nome + '</div><div style="color: var(--gray); display: flex; justify-content: space-between; gap: 2px;"><span>Q:' + (item.quantidade * 1000).toFixed(0) + 'g</span><span>U:R$' + item.preco.toFixed(1) + '</span><span style="font-weight: bold; color: #9B59B6;">R$' + precoTotal.toFixed(0) + '</span></div>';
                 container.appendChild(div);
             });
-
-            // Total
-            document.getElementById('totalCheckout').innerHTML = `
-                <div style="font-size: 9px;">TOTAL</div>
-                <div style="font-size: 13px;">R$ ${total.toFixed(2)}</div>
-            `;
         }
 
-        
-        function selecionarFormaPagamentoAntigo(forma) {
-            state.formaPagamentoSelecionada = forma;
 
-            // Limpar seleção anterior
-            document.querySelectorAll('[id^="btn"]').forEach(btn => {
-                if (btn.id.startsWith('btn') && !btn.id.includes('Confirmar') && !btn.id.includes('Collapse')) {
-                    btn.style.borderColor = 'var(--border)';
-                    btn.style.background = 'var(--bg-light)';
+        // ========== EDICAO DE PRECO (ADMIN) ==========
+
+        let _editPrecoCtx = null;
+
+        function abrirEdicaoPreco(btnEl, ref, precoAtual, tipo, nomeItem) {
+            fecharEdicaoPreco();
+            _editPrecoCtx = { tipo: tipo, ref: ref, nomeItem: nomeItem };
+            var popup = document.getElementById('popupEditPreco');
+            popup.querySelector('.pep-nome').textContent = nomeItem;
+            var input = document.getElementById('pepInput');
+            input.value = precoAtual.toFixed(2);
+            var popupW = 230;
+            var rect = btnEl.getBoundingClientRect();
+            var left = rect.left - popupW + rect.width;
+            if (left < 4) left = 4;
+            if (left + popupW > window.innerWidth - 4) left = window.innerWidth - popupW - 4;
+            var top = rect.bottom + 6;
+            if (top + 200 > window.innerHeight) top = rect.top - 200;
+            popup.style.left = left + 'px';
+            popup.style.top = top + 'px';
+            popup.style.display = 'block';
+            setTimeout(function() { input.focus(); input.select(); }, 80);
+        }
+
+        function fecharEdicaoPreco() {
+            var popup = document.getElementById('popupEditPreco');
+            if (popup) popup.style.display = 'none';
+            _editPrecoCtx = null;
+        }
+
+        function salvarEdicaoPreco() {
+            if (!_editPrecoCtx) return;
+            var input = document.getElementById('pepInput');
+            var novoPreco = parseFloat(input.value.replace(',', '.'));
+            if (isNaN(novoPreco) || novoPreco < 0) {
+                showToast('Preco invalido', 'error');
+                return;
+            }
+            var comanda = state.comandas[state.comandaAtual];
+            if (!comanda) return;
+            var tipo = _editPrecoCtx.tipo;
+            var ref = _editPrecoCtx.ref;
+            var itensAfetar = [];
+            if (tipo === 'individual') {
+                var item = comanda.itens[ref];
+                if (item) itensAfetar.push(item);
+            } else {
+                comanda.itens.forEach(function(item) {
+                    if (item.codigo === ref) itensAfetar.push(item);
+                });
+            }
+            if (itensAfetar.length === 0) {
+                showToast('Item nao encontrado', 'error');
+                fecharEdicaoPreco();
+                return;
+            }
+            // Bloquear polling re-sync por 60s (tempo suficiente p/ Sheets atualizar)
+            comanda._editadoEm = Date.now();
+            // Guardar overrides como segurança adicional
+            comanda._precoOverrides = comanda._precoOverrides || {};
+            itensAfetar.forEach(function(item) {
+                item.preco = novoPreco;
+                item.total = novoPreco * (item.quantidade || 1);
+                var overrideKey = item._id ? String(item._id) : ('codigo_' + item.codigo);
+                comanda._precoOverrides[overrideKey] = novoPreco;
+                if (item._id) {
+                    sheetsAPI('atualizarPrecoItem', { item_id: item._id, novo_preco: novoPreco })
+                        .catch(function(err) { console.warn('Erro ao atualizar preco no Sheets:', err); });
                 }
             });
-
-            // Destacar selecionada
-            const btnMap = {
-                'pix': 'btnPix',
-                'dinheiro': 'btnDinheiro',
-                'credito': 'btnCredito',
-                'debito': 'btnDebito',
-                'voucher': 'btnVoucher'
-            };
-
-            const btn = document.getElementById(btnMap[forma]);
-            if (btn) {
-                btn.style.borderColor = 'var(--primary)';
-                btn.style.background = 'rgba(212, 114, 79, 0.1)';
-            }
-
-            // Habilitar botão confirmar
-            document.getElementById('btnConfirmarPagamento').disabled = false;
-        }
-
-        function confirmarPagamento() {
-            if (!state.comandaCheckout) {
-                showToast('Selecione uma comanda', 'error');
-                return;
-            }
-
-            if (!state.formaPagamentoSelecionada) {
-                showToast('Selecione forma de pagamento', 'error');
-                return;
-            }
-
-            const comanda = state.comandas[state.comandaCheckout];
-
-            if (!comanda || comanda.itens.length === 0) {
-                showToast('Comanda sem itens', 'error');
-                return;
-            }
-
-            // Marcar como paga
-            comanda.status = 'Fechada/Paga';
-            comanda.paid = true;
-            comanda.formaPagamento = state.formaPagamentoSelecionada;
-            comanda.dataPagamento = new Date().toISOString();
-
-            saveStorage();
-
-            // Feedback
-            showToast(`✓ Pagamento confirmado (#${comanda.numero})`, 'success');
-
-            // Limpar
-            state.comandaCheckout = null;
-            state.formaPagamentoSelecionada = null;
-            document.getElementById('areaDetalhes').style.display = 'none';
-            document.getElementById('areaPagamento').style.display = 'none';
-            document.getElementById('areaVazia').style.display = 'flex';
-
-            // Recarregar lista
-            renderizarCheckout();
-
-            // Fechar collapse se aberto
-            document.getElementById('listaComandas').style.display = 'none';
-            document.getElementById('iconColapse').textContent = '▼';
-        }
-
-        // ===== MODAL BUFFET QUILO =====
-        let codigoBuffetAtual = null;
-
-        function fecharModalBuffet() {
-            document.getElementById('modalBuffetQuilo').style.display = 'none';
-            codigoBuffetAtual = null;
-            document.getElementById('lançarCodigoItem').value = '';
-            document.getElementById('lançarCodigoItem').focus();
-        }
-
-        function calcularTotalBuffet() {
-            const peso = parseFloat(document.getElementById('pesoQuilo').value) || 0;
-            const item = state.itens[codigoBuffetAtual];
-            if (peso > 0) {
-                const kg = peso / 1000;
-                const total = kg * item.preco;
-                document.getElementById('exibirTotal').textContent = total.toFixed(2);
-            } else {
-                document.getElementById('exibirTotal').textContent = '0,00';
-            }
-        }
-
-        function confirmarBuffet() {
-            const peso = parseFloat(document.getElementById('pesoQuilo').value);
-            
-            if (!peso || peso <= 0) {
-                showToast('Informe o peso', 'error');
-                return;
-            }
-            
-            const item = state.itens[codigoBuffetAtual];
-            const kg = peso / 1000;
-            const total = kg * item.preco;
-            const comanda = state.comandas[state.comandaAtual];
-            
-            comanda.itens.push({
-                codigo: codigoBuffetAtual,
-                nome: item.nome,
-                tipo: item.tipo,
-                preco: item.preco,
-                quantidade: kg,
-                total: total,
-                observacao: peso + 'g',
-                icone: item.icone
-            });
-            
             atualizarTotalComanda(state.comandaAtual);
             saveStorage();
             renderizarListaLançada();
-            renderizarItensDisponiveis();
-            
-            showToast(item.nome + ' (' + peso + 'g) - R$ ' + total.toFixed(2), 'success');
-            
-            fecharModalBuffet();
+            fecharEdicaoPreco();
+            showToast('Preco atualizado', 'success');
         }
 
-</script>
-</body>
+        document.addEventListener('click', function(e) {
+            var popup = document.getElementById('popupEditPreco');
+            if (popup && popup.style.display === 'block') {
+                if (!popup.contains(e.target) && !e.target.classList.contains('il-edit-preco')) {
+                    fecharEdicaoPreco();
+                }
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            var modal = document.getElementById('modalBuffetQuilo');
+            if (modal && modal.style.display === 'flex' && e.key === 'Enter') {
+                e.preventDefault();
+                confirmarPesoModal();
+                return;
+            }
+            if (e.key === 'Escape') {
+                fecharEdicaoPreco();
+            }
+        });
+
+        </script>
+
+        <!-- Popup editar preco (admin only) -->
+        <div id="popupEditPreco" style="display:none;">
+            <div class="pep-titulo">✏️ Editar Preço Unitário</div>
+            <div class="pep-nome"></div>
+            <input id="pepInput" type="number" step="0.01" min="0" placeholder="0,00"
+                   onkeydown="if(event.key==='Enter'){salvarEdicaoPreco();} if(event.key==='Escape'){fecharEdicaoPreco();}">
+            <div class="pep-btns">
+                <button class="pep-salvar" onclick="salvarEdicaoPreco()">✓ Salvar</button>
+                <button class="pep-cancelar" onclick="fecharEdicaoPreco()">Cancelar</button>
+            </div>
+        </div>
+
+    </body>
 </html>
