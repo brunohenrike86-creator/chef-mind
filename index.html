@@ -2875,6 +2875,8 @@ function carregarComanda() {
                 renderizarListaLançada();
                 renderizarItensDisponiveis();
                 
+                // Ocultar teclado mobile após carregar consulta
+                document.getElementById('lançarComandaNum').blur();
                 showToast('Comanda em modo consulta (paga)', 'info');
                 return;
             }
@@ -3322,7 +3324,7 @@ function carregarComanda() {
                     showToast(`${item.nome} (${pesoNum}kg) lançado`, 'success');
                 }
                 document.getElementById('lançarCodigoItem').value = '';
-                document.getElementById('lançarCodigoItem').focus();
+                document.getElementById('lançarCodigoItem').blur();
                 saveStorage();
                 renderizarListaLançada();
                 return;
@@ -3353,7 +3355,7 @@ function carregarComanda() {
 
             saveStorage();
             document.getElementById('lançarCodigoItem').value = '';
-            document.getElementById('lançarCodigoItem').focus();
+            document.getElementById('lançarCodigoItem').blur();
             renderizarListaLançada();
         }
 
