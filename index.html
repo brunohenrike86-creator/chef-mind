@@ -570,6 +570,8 @@
         }
 
         button {
+            -webkit-appearance: none;
+            appearance: none;
             padding: 6px 8px;
             background: var(--primary);
             color: white;
@@ -719,7 +721,7 @@
             /* Inputs lançar */
             #lançarComandaNum { font-size: 22px !important; }
             #lançarCodigoItem { font-size: 18px !important; }
-            #btnCarregarComanda { font-size: 14px !important; min-width: 70px !important; }
+            #btnLimparComanda { font-size: 14px !important; min-width: 70px !important; }
         }
 
         /* =============================================
@@ -1068,8 +1070,8 @@
                     <div style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); flex-shrink: 0;">
                         <div style="color: white; font-size: 10px; font-weight: bold; margin-bottom: 6px; opacity: 0.9;">📋 SELECIONE A COMANDA</div>
                         <div style="display: grid; grid-template-columns: 1fr auto; gap: 6px;">
-                            <input type="number" id="lançarComandaNum" placeholder="NÚMERO DA COMANDA" style="font-size: 18px; font-weight: bold; padding: 12px; border: 3px solid white; background: white; color: var(--primary); text-align: center; border-radius: 4px;">
-                            <button id="btnCarregarComanda" onclick="carregarComanda()" style="padding: 12px 16px; background: white; color: var(--primary); border: none; border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; min-width: 60px;">OK</button>
+                            <input type="number" id="lançarComandaNum" placeholder="NÚMERO DA COMANDA" style="font-size: 18px; font-weight: bold; padding: 12px; border: 3px solid white; background: white; color: var(--primary); text-align: center; border-radius: 4px;" onkeypress="if(event.key==='Enter'){event.preventDefault();carregarComanda();}">
+                            <button id="btnLimparComanda" onclick="limparComanda()" style="padding: 12px 16px; background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.6); border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; min-width: 70px;">✕ Limpar</button>
                         </div>
                         <div id="statusComanda" style="display: none; padding: 8px; background: #27AE60; color: white; font-size: 11px; font-weight: bold; text-align: center; border-radius: 3px; margin-top: 6px;"></div>
                     </div>
@@ -1160,6 +1162,9 @@
                         <div id="areaVazia" style="flex: 1; display: flex; align-items: center; justify-content: center; background: white; border: 1px dashed var(--border); border-radius: 2px; color: var(--gray); font-size: 9px;">
                             Selecione uma comanda
                         </div>
+
+                        <!-- ATALHO: IR PARA LANÇAR -->
+                        <button type="button" id="btnIrLancar" onclick="irParaLancarDoCheckout()" style="display:none; width:100%; padding:8px; background:linear-gradient(135deg,#E67E22 0%,#CA6F1E 100%); color:white; border:none; border-radius:3px; cursor:pointer; font-size:11px; font-weight:bold; letter-spacing:0.5px;">➕ LANÇAR ITEM NESTA COMANDA</button>
 
                         <!-- SEÇÃO 3: FORMAS DE PAGAMENTO -->
                         <div id="areaPagamento" style="display: none; flex-shrink: 0; background: white; border: 1px solid var(--border); border-radius: 2px; padding: 4px;">
@@ -1899,7 +1904,7 @@
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260530-B1fix2';  // Timestamp único
+            const timestampAtual = '20260601-BtnColorFix';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -3010,7 +3015,8 @@
                         document.getElementById('lançarCodigoItem').disabled = false;
 
                         renderizarItensDisponiveis();
-                        
+                        resetIdleTimer();
+
                         // ✅ MOSTRAR BOTÃO ATALHO (comanda nova aberta)
                         atualizarVisibilidadeBotaoAtalho();
 
@@ -3132,7 +3138,7 @@ function carregarComanda() {
                 // Renderizar itens
                 renderizarListaLançada();
                 renderizarItensDisponiveis();
-                
+                resetIdleTimer();
                 showToast('⚡ Comanda com Preparo p/ mesa - continue lançando', 'info');
                 return;
             }
@@ -3164,6 +3170,7 @@ function carregarComanda() {
             // Renderizar itens
             renderizarListaLançada();
             renderizarItensDisponiveis();
+            resetIdleTimer();
 
             // Focus no código
             setTimeout(() => document.getElementById('lançarCodigoItem').focus(), 100);
@@ -3203,6 +3210,16 @@ function carregarComanda() {
             
             // ✅ OCULTAR BOTÃO ATALHO (sem comanda carregada)
             atualizarVisibilidadeBotaoAtalho();
+        }
+
+        // ✅ LIMPAR COMANDA (botão Limpar na tela Lançar)
+        function limparComanda() {
+            cancelIdleTimer();
+            state.comandaAtual = null;
+            state.modoLeitura = false;
+            limparTelaLançar();
+            const input = document.getElementById('lançarComandaNum');
+            if (input) { input.value = ''; input.focus(); }
         }
 
         // ✅ LIMPAR TELA ABRIR
@@ -3528,6 +3545,7 @@ function carregarComanda() {
                 }).then(() => delete _itemFixo._pendingAdd);
                 atualizarTotalComanda(state.comandaAtual);
                 showToast(`${item.nome} lançado`, 'success');
+                resetIdleTimer();
             } else if (item.tipo === 'Gramas') {
                 // Solicitar peso
                 const peso = prompt(`Peso (kg) para ${item.nome}:`);
@@ -3551,6 +3569,7 @@ function carregarComanda() {
                     }).then(() => delete _itemGramas._pendingAdd);
                     atualizarTotalComanda(state.comandaAtual);
                     showToast(`${item.nome} (${pesoNum}kg) lançado`, 'success');
+                    resetIdleTimer();
                 }
                 document.getElementById('lançarCodigoItem').value = '';
                 document.getElementById('lançarCodigoItem').blur();
@@ -3580,6 +3599,7 @@ function carregarComanda() {
                 }).then(() => delete _itemMarmita._pendingAdd);
                 atualizarTotalComanda(state.comandaAtual);
                 showToast(`${item.nome} lançado`, 'success');
+                resetIdleTimer();
             }
 
             saveStorage();
@@ -3817,6 +3837,8 @@ function carregarComanda() {
             document.getElementById('areaVazia').style.display = 'none';
             document.getElementById('areaDetalhes').style.display = 'flex';
             document.getElementById('areaPagamento').style.display = 'block';
+            const btnIrLancar = document.getElementById('btnIrLancar');
+            if (btnIrLancar) btnIrLancar.style.display = comanda && !comanda.paid ? 'block' : 'none';
 
             document.getElementById('numComandaSelecionada').textContent = `#${comanda.numero}`;
 
@@ -3920,18 +3942,42 @@ function carregarComanda() {
                 <div style="font-size: 22px; color: #F39C12; font-weight: 900; line-height: 1.15;">R$ ${total.toFixed(2)}</div>
             `;
 
-            document.querySelectorAll('[id^="btn"]').forEach(btn => {
-                if (btn.id.startsWith('btn') && btn.id !== 'btnConfirmarPagamento' && btn.id !== 'btnCollapseComandas') {
-                    btn.style.borderColor = 'var(--border)';
-                    btn.style.background = 'var(--bg-light)';
-                }
-            });
         }
 
                                         
         
+        // ========== ATALHO CHECKOUT → LANÇAR ==========
+
+        function irParaLancarDoCheckout() {
+            if (!comandaCheckoutAtual) return;
+            // Carrega a comanda no estado como se viesse da tela Lançar
+            state.comandaAtual = comandaCheckoutAtual;
+            state.modoLeitura = false;
+            // Navega para a tela Lançar
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('screen-lançar').classList.add('active');
+            document.querySelector('[data-menu="lançar"]').classList.add('active');
+            // Popula o campo de número e renderiza
+            const comanda = state.comandas[comandaCheckoutAtual];
+            const inputNum = document.getElementById('lançarComandaNum');
+            if (inputNum && comanda) inputNum.value = comanda.numero;
+            const statusEl = document.getElementById('statusComanda');
+            if (statusEl && comanda) {
+                statusEl.textContent = `✅ Comanda #${comanda.numero} carregada`;
+                statusEl.style.display = 'block';
+            }
+            const inputCodigo = document.getElementById('lançarCodigoItem');
+            if (inputCodigo) { inputCodigo.disabled = false; inputCodigo.style.opacity = '1'; }
+            atualizarVisibilidadeBotaoAtalho();
+            renderizarListaLançada();
+            renderizarItensDisponiveis();
+            resetIdleTimer();
+            setTimeout(() => { if (inputCodigo) inputCodigo.focus(); }, 100);
+        }
+
         // ========== NOVO SISTEMA DE PAGAMENTO ==========
-        
+
         function escolherPagamento(tipo) {
             console.log('Escolhendo pagamento:', tipo);
             formaPagamentoSelecionada = tipo;
@@ -5251,7 +5297,7 @@ function carregarComanda() {
             renderizarItensDisponiveis();
             
             showToast(item.nome + ' (' + peso + 'g) - R$ ' + total.toFixed(2), 'success');
-            
+            resetIdleTimer();
             fecharModalBuffet();
         }
 
@@ -5744,6 +5790,28 @@ function carregarComanda() {
             });
         }
 
+
+        // ========== IDLE TIMER — auto-limpar comanda ociosa ==========
+        let _idleTimer = null;
+        const IDLE_MS = 60 * 1000; // 1 minuto
+
+        function resetIdleTimer() {
+            if (!state.comandaAtual) return;
+            clearTimeout(_idleTimer);
+            _idleTimer = setTimeout(function() {
+                const telaLancar = document.getElementById('screen-lançar');
+                const telaVisivel = telaLancar && telaLancar.classList.contains('active');
+                if (!telaVisivel || !state.comandaAtual) return;
+                const num = state.comandaAtual.split('-')[0];
+                limparComanda();
+                showToast('⏱ Comanda #' + num + ' limpa por inatividade (1 min)', 'warning');
+            }, IDLE_MS);
+        }
+
+        function cancelIdleTimer() {
+            clearTimeout(_idleTimer);
+            _idleTimer = null;
+        }
 
         // ========== EDICAO DE PRECO (ADMIN) ==========
 
