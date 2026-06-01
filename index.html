@@ -856,6 +856,37 @@
         }
 
         /* ── Sync banner ── */
+        /* ── Modal A Receber ── */
+        #modalAReceber {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
+            z-index: 99998; align-items: center; justify-content: center;
+        }
+        #modalAReceberCard {
+            background: white; border-radius: 16px; padding: 28px 24px 22px;
+            width: 90%; max-width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: syncFadeIn .25s ease-out;
+        }
+        #modalAReceberCard .mar-icon { font-size: 36px; text-align: center; margin-bottom: 10px; }
+        #modalAReceberCard .mar-titulo { font-size: 16px; font-weight: 700; text-align: center; margin-bottom: 4px; color: var(--text-dark); }
+        #modalAReceberCard .mar-sub { font-size: 12px; color: #888; text-align: center; margin-bottom: 18px; }
+        #inputAReceber {
+            width: 100%; padding: 12px 14px; border: 2px solid var(--border);
+            border-radius: 8px; font-size: 15px; outline: none;
+            transition: border-color .2s;
+        }
+        #inputAReceber:focus { border-color: var(--primary); }
+        .mar-btns { display: flex; gap: 10px; margin-top: 16px; }
+        .mar-btn-cancelar {
+            flex: 1; padding: 11px; background: #f3f4f6; color: #374151;
+            border: none; border-radius: 8px; font-size: 13px; font-weight: 600;
+            cursor: pointer;
+        }
+        .mar-btn-confirmar {
+            flex: 2; padding: 11px; background: linear-gradient(135deg,#27AE60,#1E8449);
+            color: white; border: none; border-radius: 8px; font-size: 13px;
+            font-weight: 700; cursor: pointer; letter-spacing: .3px;
+        }
         /* ── Sync loading central ── */
         @keyframes syncSpin {
             from { transform: rotate(0deg); } to { transform: rotate(360deg); }
@@ -1004,6 +1035,11 @@
                 <button class="menu-btn" data-menu="dashboard">
                     <div class="menu-icon">📊</div>
                     <div style="font-size: 10px;">Resumo</div>
+                </button>
+                <button class="menu-btn" data-menu="areceber" style="position:relative;">
+                    <div class="menu-icon">💰</div>
+                    <div style="font-size: 10px;">A Receber</div>
+                    <div id="badgeAReceber" style="display:none; position:absolute; top:6px; right:6px; background:#E74C3C; color:white; border-radius:50%; width:16px; height:16px; font-size:9px; font-weight:bold; line-height:16px; text-align:center;"></div>
                 </button>
                 <button class="menu-btn" data-menu="admin">
                     <div class="menu-icon">⚙️</div>
@@ -1301,6 +1337,43 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- A RECEBER -->
+                <div id="screen-areceber" class="screen" style="flex-direction: column; overflow: hidden; background: linear-gradient(135deg, rgba(39,174,96,0.04), rgba(46,204,113,0.06));">
+
+                    <!-- HEADER SUMÁRIO -->
+                    <div style="background: linear-gradient(135deg, #1e8449 0%, #27ae60 100%); padding: 12px 14px; flex-shrink: 0;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                            <div>
+                                <div style="color: rgba(255,255,255,0.75); font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Pendências</div>
+                                <div id="arTotalPendente" style="color: white; font-size: 24px; font-weight: bold; line-height: 1.1;">R$ 0,00</div>
+                                <div id="arQtdPendente" style="color: rgba(255,255,255,0.8); font-size: 11px;">0 comanda(s) pendente(s)</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="color: rgba(255,255,255,0.75); font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Recebido (mês)</div>
+                                <div id="arTotalRecebido" style="color: rgba(255,255,255,0.9); font-size: 18px; font-weight: bold;">R$ 0,00</div>
+                                <div id="arQtdRecebido" style="color: rgba(255,255,255,0.7); font-size: 11px;">0 baixa(s)</div>
+                            </div>
+                        </div>
+
+                        <!-- FILTRO TABS + BUSCA -->
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <div style="display: flex; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 2px; flex-shrink: 0;">
+                                <button id="arTabPendente" onclick="arMudarFiltro('pendente')" style="padding: 5px 10px; border: none; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; background: white; color: #1e8449;">Pendentes</button>
+                                <button id="arTabRecebido" onclick="arMudarFiltro('recebido')" style="padding: 5px 10px; border: none; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; background: transparent; color: rgba(255,255,255,0.8);">Recebidos</button>
+                            </div>
+                            <input id="arBusca" type="text" placeholder="🔍 Buscar devedor..." oninput="renderizarAReceber()"
+                                style="flex: 1; padding: 6px 10px; border: none; border-radius: 6px; font-size: 11px; background: rgba(255,255,255,0.9); min-width: 0;">
+                            <button onclick="carregarAReceber()" style="padding: 6px 10px; background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.4); border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; flex-shrink: 0;">↻</button>
+                        </div>
+                    </div>
+
+                    <!-- LISTA -->
+                    <div id="arLista" style="flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="text-align: center; color: var(--gray); padding: 40px 20px; font-size: 12px;">Carregando...</div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -1800,12 +1873,13 @@
             return res;
         }
 
-        async function sheets_pagarComanda(chave, total, forma) {
+        async function sheets_pagarComanda(chave, total, forma, obs) {
             const comanda = state.comandas[chave];
             if (!comanda || !comanda._id) return;
             await sheetsAPI('pagarComanda', {
                 comanda_id: comanda._id, total,
                 forma_pagamento: forma || '',
+                observacao: obs || '',
                 usuario: state.userLogado || state.user || ''
             });
         }
@@ -1825,7 +1899,7 @@
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260522-150000';  // Timestamp único
+            const timestampAtual = '20260530-B1fix2';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -2086,7 +2160,7 @@
             
             // ✅ MAPA DE PERMISSÕES
             const permissoes = {
-                'Admin': ['abrir', 'lançar', 'checkout', 'preparo', 'dashboard', 'admin'],
+                'Admin':     ['abrir', 'lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'],
                 'Atendente': ['abrir', 'lançar', 'preparo']
             };
             
@@ -2273,17 +2347,21 @@
                 iniciarTimerPreparo();
             } else if (screenName === 'dashboard') {
                 renderizarResumoDoDia();
+            } else if (screenName === 'areceber') {
+                pararTimerPreparo();
+                carregarAReceber();
             } else {
                 pararTimerPreparo();
             }
 
             // 2ª renderização: aguarda o poll ativo (ou inicia um novo) e re-renderiza
             // com dados REALMENTE frescos do servidor
-            if (['checkout', 'preparo', 'dashboard'].includes(screenName)) {
+            if (['checkout', 'preparo', 'dashboard', 'areceber'].includes(screenName)) {
                 reRenderAposPoll(() => {
-                    if (screenName === 'checkout')       renderizarCheckout();
-                    else if (screenName === 'preparo')   renderizarPreapro();
-                    else if (screenName === 'dashboard') renderizarResumoDoDia();
+                    if (screenName === 'checkout')        renderizarCheckout();
+                    else if (screenName === 'preparo')    renderizarPreapro();
+                    else if (screenName === 'dashboard')  renderizarResumoDoDia();
+                    else if (screenName === 'areceber')   renderizarAReceber();
                 });
             }
 
@@ -3882,7 +3960,7 @@ function carregarComanda() {
             }
         }
         
-        function confirmarPagamentoFinal() {
+        function confirmarPagamentoFinal(obsAReceber) {
             if (!comandaCheckoutAtual) {
                 showToast('Nenhuma comanda selecionada', 'error');
                 return;
@@ -3890,6 +3968,12 @@ function carregarComanda() {
             
             if (!formaPagamentoSelecionada) {
                 showToast('Selecione forma de pagamento', 'error');
+                return;
+            }
+
+            // A Receber: pedir identificação do devedor antes de confirmar
+            if (formaPagamentoSelecionada === 'a_receber' && !obsAReceber) {
+                abrirModalAReceber();
                 return;
             }
             
@@ -3903,6 +3987,7 @@ function carregarComanda() {
             comanda.paid = true;
             comanda.formaPagamento = formaPagamentoSelecionada;
             comanda.dataPagamento = new Date().toISOString();
+            if (obsAReceber) comanda.obsAReceber = obsAReceber;
             
             // FASE 2 — PREPARO: ao pagar, marmitas não vão para fila de preparo
             // Reativar o bloco abaixo quando o fluxo de preparo for para produção.
@@ -3924,7 +4009,7 @@ function carregarComanda() {
             saveStorage();
             // ☁️ SHEETS: registrar pagamento
             const _totalPago = (comanda.itens || []).reduce((s,i)=>s+(i.total||(i.preco*i.quantidade)||0),0);
-            sheets_pagarComanda(comandaCheckoutAtual, _totalPago, formaPagamentoSelecionada);
+            sheets_pagarComanda(comandaCheckoutAtual, _totalPago, formaPagamentoSelecionada, obsAReceber || '');
             
             // FEEDBACK
             showToast('✓ Pagamento confirmado!', 'success');
@@ -3952,6 +4037,32 @@ function carregarComanda() {
         
         
         
+        // ========== MODAL A RECEBER ==========
+        function abrirModalAReceber() {
+            var modal = document.getElementById('modalAReceber');
+            var input = document.getElementById('inputAReceber');
+            input.value = '';
+            modal.style.display = 'flex';
+            setTimeout(function() { input.focus(); }, 120);
+        }
+
+        function fecharModalAReceber() {
+            document.getElementById('modalAReceber').style.display = 'none';
+        }
+
+        function confirmarModalAReceber() {
+            var input = document.getElementById('inputAReceber');
+            var obs = input.value.trim();
+            if (!obs) {
+                input.style.borderColor = '#e74c3c';
+                input.placeholder = 'Obrigatório — informe o nome';
+                input.focus();
+                return;
+            }
+            fecharModalAReceber();
+            confirmarPagamentoFinal(obs);
+        }
+
         // ========== MARMITAS DO DIA - CARNES CENTRALIZADAS ==========
         let diaMarnitaSelecionado = 0; // 0=seg, 1=ter, 2=qua, 3=qui, 4=sex, 5=sab
 
@@ -4948,6 +5059,7 @@ function carregarComanda() {
             container.innerHTML = '';
             let total = 0;
             const _isAdmin = state.perfil === 'Admin';
+            const _comandaPaga = comanda.status === 'Fechada/Paga'; // B1: sem edição em comanda fechada
 
             // REGRA: Buffet por kg NÃO agrupa. Tudo mais agrupa.
             const agrupados = {};
@@ -4984,7 +5096,7 @@ function carregarComanda() {
                 const isGramasItem = item.tipo === 'Gramas'
                     || /^\d+(\.\d+)?g$/.test(item.observacao || '')
                     || (item.quantidade > 0 && item.quantidade < 1 && item.observacao);
-                const podeEditar = _isAdmin && !isGramasItem;
+                const podeEditar = _isAdmin && !isGramasItem && !_comandaPaga;
                 const nomeEsc = (item.nome || '').replace(/'/g, "\\'");
                 const precoStyle = podeEditar
                     ? 'cursor:pointer; border-bottom: 1px dashed var(--primary); padding-bottom:1px;'
@@ -5016,7 +5128,7 @@ function carregarComanda() {
                 const isGramasItem = item.tipo === 'Gramas'
                     || /^\d+(\.\d+)?g$/.test(item.observacao || '')
                     || (item.quantidade > 0 && item.quantidade < 1 && item.observacao);
-                const podeEditar = _isAdmin && !isGramasItem;
+                const podeEditar = _isAdmin && !isGramasItem && !_comandaPaga;
                 const nomeEsc = (item.nome || '').replace(/'/g, "\\'");
                 const precoStyle = podeEditar
                     ? 'cursor:pointer; border-bottom: 1px dashed var(--primary); padding-bottom:1px;'
@@ -5673,23 +5785,19 @@ function carregarComanda() {
             }
             var comanda = state.comandas[state.comandaAtual];
             if (!comanda) return;
+            var ref  = _editPrecoCtx.ref;
             var tipo = _editPrecoCtx.tipo;
-            var ref = _editPrecoCtx.ref;
-            var itensAfetar = [];
+
+var itens = comanda.itens || [];
+            var itensAfetar;
             if (tipo === 'individual') {
-                var item = comanda.itens[ref];
-                if (item) itensAfetar.push(item);
+                // Item Gramas/Quilo individual — localizar pelo índice no array
+                var itemInd = itens[parseInt(ref)];
+                itensAfetar = itemInd ? [itemInd] : [];
             } else {
-                comanda.itens.forEach(function(item) {
-                    if (item.codigo === ref) itensAfetar.push(item);
-                });
+                // Item agrupado — localizar todos com o mesmo código
+                itensAfetar = itens.filter(function(i) { return String(i.codigo) === String(ref) && !i.removido; });
             }
-            if (itensAfetar.length === 0) {
-                showToast('Item nao encontrado', 'error');
-                fecharEdicaoPreco();
-                return;
-            }
-            comanda._editadoEm = Date.now();
             comanda._precoOverrides = comanda._precoOverrides || {};
             itensAfetar.forEach(function(item) {
                 item.preco = novoPreco;
@@ -5712,40 +5820,246 @@ function carregarComanda() {
             try { renderizarListaLançada(); } catch(e) { console.warn(e); }
         }
 
-        document.addEventListener('click', function(e) {
-            var popup = document.getElementById('popupEditPreco');
-            if (popup && popup.style.display === 'block') {
-                if (!popup.contains(e.target) && !e.target.classList.contains('il-preco')) {
-                    fecharEdicaoPreco();
+        // ================================================================
+        // A RECEBER — Controle de Pendências
+        // ================================================================
+        let _arFiltro = 'pendente';
+        let _arDados  = [];
+
+        async function carregarAReceber() {
+            document.getElementById('arLista').innerHTML =
+                '<div style="text-align:center;color:var(--gray);padding:40px 20px;font-size:12px;">Carregando...</div>';
+            try {
+                const dados = await sheetsAPI('getAReceber');
+                _arDados = Array.isArray(dados) ? dados : [];
+            } catch(e) {
+                _arDados = [];
+            }
+            renderizarAReceber();
+        }
+
+        function arMudarFiltro(filtro) {
+            _arFiltro = filtro;
+            document.getElementById('arTabPendente').style.background  = filtro === 'pendente' ? 'white' : 'transparent';
+            document.getElementById('arTabPendente').style.color       = filtro === 'pendente' ? '#1e8449' : 'rgba(255,255,255,0.8)';
+            document.getElementById('arTabRecebido').style.background  = filtro === 'recebido' ? 'white' : 'transparent';
+            document.getElementById('arTabRecebido').style.color       = filtro === 'recebido' ? '#1e8449' : 'rgba(255,255,255,0.8)';
+            renderizarAReceber();
+        }
+
+        function renderizarAReceber() {
+            const busca   = (document.getElementById('arBusca')?.value || '').toLowerCase();
+            const isAdmin = state.perfil === 'Admin';
+
+            const pendentes = _arDados.filter(c => !c.baixa_data);
+            const recebidos  = _arDados.filter(c =>  c.baixa_data);
+
+            const totalPend = pendentes.reduce((s, c) => s + (parseFloat(c.total) || 0), 0);
+            const totalRec  = recebidos.reduce( (s, c) => s + (parseFloat(c.total) || 0), 0);
+
+            document.getElementById('arTotalPendente').textContent = 'R$ ' + totalPend.toFixed(2).replace('.', ',');
+            document.getElementById('arQtdPendente').textContent   = pendentes.length + ' comanda(s) pendente(s)';
+            document.getElementById('arTotalRecebido').textContent  = 'R$ ' + totalRec.toFixed(2).replace('.', ',');
+            document.getElementById('arQtdRecebido').textContent    = recebidos.length + ' baixa(s)';
+
+            // Badge no botão do menu
+            const badge = document.getElementById('badgeAReceber');
+            if (badge) {
+                if (pendentes.length > 0) {
+                    badge.style.display = 'block';
+                    badge.textContent   = pendentes.length > 9 ? '9+' : String(pendentes.length);
+                } else {
+                    badge.style.display = 'none';
                 }
             }
-        });
 
-        document.addEventListener('keydown', function(e) {
-            var modal = document.getElementById('modalBuffetQuilo');
-            if (modal && modal.style.display === 'flex' && e.key === 'Enter') {
-                e.preventDefault();
-                confirmarPesoModal();
+            let lista = _arFiltro === 'pendente' ? pendentes : recebidos;
+            if (busca) {
+                lista = lista.filter(c =>
+                    (c.obs_pagamento || '').toLowerCase().includes(busca) ||
+                    String(c.numero  || '').includes(busca)
+                );
+            }
+
+            // Pendentes: mais antigo primeiro (follow-up urgente); Recebidos: mais recente primeiro
+            lista = lista.slice().sort((a, b) => {
+                const da = new Date(a.timestamp_pagamento || a.timestamp_abertura || 0);
+                const db = new Date(b.timestamp_pagamento || b.timestamp_abertura || 0);
+                return _arFiltro === 'pendente' ? da - db : db - da;
+            });
+
+            const container = document.getElementById('arLista');
+            if (!lista.length) {
+                container.innerHTML = `<div style="text-align:center;color:var(--gray);padding:60px 20px;font-size:13px;">
+                    ${_arFiltro === 'pendente' ? '✅ Nenhuma pendência em aberto' : '📋 Nenhum recebimento registrado'}
+                </div>`;
                 return;
             }
-            if (e.key === 'Escape') {
-                fecharEdicaoPreco();
+
+            const agora = new Date();
+            container.innerHTML = lista.map(c => {
+                const devedor = c.obs_pagamento || '(sem identificação)';
+                const dvedorJs = devedor.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const valor   = parseFloat(c.total) || 0;
+                const dtPag   = c.timestamp_pagamento ? new Date(c.timestamp_pagamento) : null;
+                const diasAtr = dtPag ? Math.floor((agora - dtPag) / 86400000) : null;
+                const alerta  = diasAtr !== null && diasAtr > 7;
+                const dtFmt   = dtPag ? dtPag.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' }) : '—';
+                const hrFmt   = dtPag ? dtPag.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) : '';
+
+                if (_arFiltro === 'pendente') {
+                    return `<div style="background:white;border-radius:10px;padding:14px 16px;box-shadow:0 1px 6px rgba(0,0,0,0.08);border-left:4px solid ${alerta ? '#E74C3C' : '#27ae60'};display:flex;align-items:center;gap:12px;">
+                        <div style="flex:1;min-width:0;">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                                <span style="background:#1e8449;color:white;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:bold;flex-shrink:0;">#${c.numero}</span>
+                                ${alerta ? `<span style="background:#E74C3C;color:white;border-radius:4px;padding:2px 6px;font-size:9px;font-weight:bold;">${diasAtr}d atrasado ⚠️</span>` : ''}
+                            </div>
+                            <div style="font-size:14px;font-weight:bold;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${devedor}</div>
+                            <div style="font-size:10px;color:#888;margin-top:3px;">Pago em ${dtFmt} às ${hrFmt}</div>
+                        </div>
+                        <div style="text-align:right;flex-shrink:0;">
+                            <div style="font-size:19px;font-weight:bold;color:#D4724F;">R$ ${valor.toFixed(2).replace('.', ',')}</div>
+                            ${isAdmin ? `<button onclick="abrirModalBaixaAR('${c.id}','${c.numero}','${dvedorJs}',${valor})"
+                                style="margin-top:7px;padding:7px 13px;background:linear-gradient(135deg,#1e8449,#27ae60);color:white;border:none;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;">✓ Dar Baixa</button>` : ''}
+                        </div>
+                    </div>`;
+                } else {
+                    const dtBaixa  = c.baixa_data ? new Date(c.baixa_data) : null;
+                    const dtBFmt   = dtBaixa ? dtBaixa.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' }) + ' ' + dtBaixa.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) : '—';
+                    const formaMap = { dinheiro:'💵 Dinheiro', pix:'📱 Pix', cartao:'💳 Cartão', transferencia:'🏦 Transf.' };
+                    const forma    = formaMap[c.baixa_forma] || c.baixa_forma || '—';
+                    return `<div style="background:white;border-radius:10px;padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,0.05);border-left:4px solid #bdc3c7;opacity:0.85;display:flex;align-items:center;gap:12px;">
+                        <div style="flex:1;min-width:0;">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                                <span style="background:#7f8c8d;color:white;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:bold;">#${c.numero}</span>
+                                <span style="background:#27ae60;color:white;border-radius:4px;padding:2px 6px;font-size:9px;font-weight:bold;">✓ RECEBIDO</span>
+                            </div>
+                            <div style="font-size:14px;font-weight:bold;color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${devedor}</div>
+                            <div style="font-size:10px;color:#888;margin-top:3px;">Baixa: ${dtBFmt} · ${forma}</div>
+                        </div>
+                        <div style="font-size:16px;font-weight:bold;color:#888;">R$ ${valor.toFixed(2).replace('.', ',')}</div>
+                    </div>`;
+                }
+            }).join('');
+        }
+
+        // ── Modal Dar Baixa ──
+        let _baixaCtx = null;
+        let _baixaForma = '';
+
+        function abrirModalBaixaAR(id, numero, devedor, valor) {
+            _baixaCtx = { id, numero, devedor, valor };
+            _baixaForma = '';
+            document.getElementById('barComanda').textContent = 'Comanda #' + numero;
+            document.getElementById('barDevedor').textContent = devedor;
+            document.getElementById('barValor').textContent   = 'R$ ' + parseFloat(valor).toFixed(2).replace('.', ',');
+            document.getElementById('btnConfirmarBaixaAR').disabled = true;
+            document.querySelectorAll('.bar-forma-btn').forEach(b => {
+                b.style.background = 'white'; b.style.borderColor = '#ddd'; b.style.color = '#333';
+            });
+            document.getElementById('modalBaixaAR').style.display = 'flex';
+        }
+
+        function fecharModalBaixaAR() {
+            document.getElementById('modalBaixaAR').style.display = 'none';
+            _baixaCtx = null;
+        }
+
+        function arSelecionarForma(btn) {
+            document.querySelectorAll('.bar-forma-btn').forEach(b => {
+                b.style.background = 'white'; b.style.borderColor = '#ddd'; b.style.color = '#333';
+            });
+            btn.style.background = '#1e8449'; btn.style.borderColor = '#1e8449'; btn.style.color = 'white';
+            _baixaForma = btn.dataset.forma;
+            document.getElementById('btnConfirmarBaixaAR').disabled = false;
+        }
+
+        async function confirmarBaixaAReceber() {
+            if (!_baixaCtx) return;
+            const forma = _baixaForma;
+            if (!forma) { showToast('Selecione a forma de recebimento', 'error'); return; }
+            const btn = document.getElementById('btnConfirmarBaixaAR');
+            btn.disabled = true; btn.textContent = '...';
+            try {
+                await sheetsAPI('darBaixaAReceber', {
+                    comanda_id: _baixaCtx.id,
+                    forma_baixa: forma,
+                    usuario: state.userLogado || state.user || ''
+                });
+                // Atualizar cache local imediatamente
+                const item = _arDados.find(c => String(c.id) === String(_baixaCtx.id));
+                if (item) {
+                    item.baixa_data    = new Date().toISOString();
+                    item.baixa_forma   = forma;
+                    item.baixa_usuario = state.userLogado || state.user || '';
+                }
+                fecharModalBaixaAR();
+                showToast('Baixa registrada com sucesso! ✅', 'success');
+                renderizarAReceber();
+            } catch(e) {
+                showToast('Erro ao registrar baixa', 'error');
+                btn.disabled = false; btn.textContent = '✓ Confirmar';
             }
-        });
+        }
 
         </script>
 
-        <!-- Popup editar preco (admin only) -->
-        <div id="popupEditPreco" style="display:none;">
-            <div class="pep-titulo">Editar Preco Unitario</div>
-            <div class="pep-nome"></div>
-            <input id="pepInput" type="number" step="0.01" min="0" placeholder="0,00"
-                   onkeydown="if(event.key==='Enter'){salvarEdicaoPreco();} if(event.key==='Escape'){fecharEdicaoPreco();}">
-            <div class="pep-btns">
-                <button class="pep-salvar" onclick="salvarEdicaoPreco()">Salvar</button>
-                <button class="pep-cancelar" onclick="fecharEdicaoPreco()">Cancelar</button>
+    <!-- Modal A Receber -->
+    <div id="modalAReceber">
+        <div id="modalAReceberCard">
+            <div class="mar-icon">📋</div>
+            <div class="mar-titulo">A Receber</div>
+            <div class="mar-sub">Informe quem irá realizar o pagamento posterior</div>
+            <input id="inputAReceber" type="text" placeholder="Nome da pessoa ou empresa..."
+                maxlength="80"
+                onkeydown="if(event.key==='Enter') confirmarModalAReceber(); if(event.key==='Escape') fecharModalAReceber();">
+            <div class="mar-btns">
+                <button class="mar-btn-cancelar" onclick="fecharModalAReceber()">Cancelar</button>
+                <button class="mar-btn-confirmar" onclick="confirmarModalAReceber()">✓ Confirmar</button>
             </div>
         </div>
+    </div>
+
+    <!-- MODAL DAR BAIXA A RECEBER -->
+    <div id="modalBaixaAR" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:9998; justify-content:center; align-items:center;">
+        <div style="background:white; border-radius:14px; width:94%; max-width:400px; padding:24px; box-shadow:0 12px 40px rgba(0,0,0,0.35); position:relative;">
+            <div style="text-align:center; margin-bottom:18px;">
+                <div style="font-size:36px; margin-bottom:6px;">✅</div>
+                <div style="font-size:16px; font-weight:bold; color:#1e8449;">Confirmar Recebimento</div>
+                <div id="barComanda" style="font-size:12px; color:#666; margin-top:4px;"></div>
+            </div>
+            <div style="background:#f0faf4; border:1px solid #a9dfbf; border-radius:8px; padding:12px; margin-bottom:16px; text-align:center;">
+                <div style="font-size:10px; color:#888; font-weight:bold; text-transform:uppercase; margin-bottom:2px;">Devedor</div>
+                <div id="barDevedor" style="font-size:16px; font-weight:bold; color:#1e8449;"></div>
+                <div id="barValor" style="font-size:22px; font-weight:bold; color:#D4724F; margin-top:2px;"></div>
+            </div>
+            <div style="margin-bottom:18px;">
+                <div style="font-size:11px; font-weight:bold; color:#555; margin-bottom:8px; text-transform:uppercase;">Como foi recebido?</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                    <button class="bar-forma-btn" data-forma="dinheiro" onclick="arSelecionarForma(this)" style="padding:10px 6px; border:2px solid #ddd; border-radius:8px; background:white; font-size:12px; font-weight:bold; cursor:pointer; color:#333;">💵 Dinheiro</button>
+                    <button class="bar-forma-btn" data-forma="pix"      onclick="arSelecionarForma(this)" style="padding:10px 6px; border:2px solid #ddd; border-radius:8px; background:white; font-size:12px; font-weight:bold; cursor:pointer; color:#333;">📱 Pix</button>
+                    <button class="bar-forma-btn" data-forma="cartao"   onclick="arSelecionarForma(this)" style="padding:10px 6px; border:2px solid #ddd; border-radius:8px; background:white; font-size:12px; font-weight:bold; cursor:pointer; color:#333;">💳 Cartão</button>
+                    <button class="bar-forma-btn" data-forma="transferencia" onclick="arSelecionarForma(this)" style="padding:10px 6px; border:2px solid #ddd; border-radius:8px; background:white; font-size:12px; font-weight:bold; cursor:pointer; color:#333;">🏦 Transf.</button>
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <button onclick="fecharModalBaixaAR()" style="padding:13px; background:#e8e8e8; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:13px; color:#333;">Cancelar</button>
+                <button id="btnConfirmarBaixaAR" onclick="confirmarBaixaAReceber()" style="padding:13px; background:linear-gradient(135deg,#1e8449,#27ae60); color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:13px;" disabled>✓ Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Popup editar preco (admin only) -->
+    <div id="popupEditPreco" style="display:none;">
+        <div class="pep-titulo">Editar Preço Unitário</div>
+        <div class="pep-nome"></div>
+        <input id="pepInput" type="number" step="0.01" min="0" placeholder="0,00"
+               onkeydown="if(event.key==='Enter'){salvarEdicaoPreco();} if(event.key==='Escape'){fecharEdicaoPreco();}">
+        <div class="pep-btns">
+            <button class="pep-salvar"   onclick="salvarEdicaoPreco()">Salvar</button>
+            <button class="pep-cancelar" onclick="fecharEdicaoPreco()">Cancelar</button>
+        </div>
+    </div>
 
     </body>
 </html>
