@@ -952,6 +952,65 @@
         }
         .sync-dot:nth-child(2) { animation-delay: 0.2s; }
         .sync-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        /* ========== MODO BALANÇA ========== */
+        body.modo-balanca .header   { display: none !important; }
+        body.modo-balanca .sidebar  { display: none !important; }
+        body.modo-balanca .container-main { padding: 0 !important; height: 100dvh; }
+        body.modo-balanca #mainApp  { height: 100dvh; }
+        body.modo-balanca #screen-lançar { width: 100% !important; overflow-y: auto; }
+
+        /* Entrada da comanda maior */
+        body.modo-balanca #lançarComandaNum {
+            font-size: 30px !important;
+            height: 68px !important;
+            padding: 16px !important;
+            letter-spacing: 4px;
+        }
+        body.modo-balanca #btnLimparComanda {
+            font-size: 15px !important;
+            padding: 16px 20px !important;
+        }
+        body.modo-balanca #statusComanda {
+            font-size: 16px !important;
+            padding: 14px !important;
+        }
+
+        /* Código do item maior */
+        body.modo-balanca #lançarCodigoItem {
+            font-size: 22px !important;
+            padding: 14px !important;
+        }
+
+        /* Botões de item maiores */
+        body.modo-balanca #listaItensDisponiveis {
+            grid-template-columns: repeat(auto-fill, 100px) !important;
+            gap: 8px !important;
+            padding: 8px !important;
+        }
+        body.modo-balanca .item-cat-btn { min-height: 96px !important; padding: 8px !important; }
+        body.modo-balanca .item-cat-btn img { width: 56px !important; height: 56px !important; }
+        body.modo-balanca .cat-icone { font-size: 28px !important; }
+        body.modo-balanca .cat-nome  { font-size: 13px !important; font-weight: bold; }
+        body.modo-balanca .cat-preco { font-size: 12px !important; }
+        body.modo-balanca #abaCategorias button { font-size: 13px !important; padding: 10px 16px !important; }
+
+        /* Botão sair flutuante */
+        #balancaSair {
+            display: none;
+            position: fixed;
+            bottom: 12px;
+            right: 12px;
+            z-index: 999;
+            padding: 10px 18px;
+            background: rgba(0,0,0,0.45);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        body.modo-balanca #balancaSair { display: block; }
     </style>
 </head>
 <body>
@@ -997,6 +1056,9 @@
     </div>
 
     <!-- MAIN APP -->
+    <!-- Botão sair flutuante para modo Balança -->
+    <button id="balancaSair" onclick="logout()">⏻ Sair</button>
+
     <div id="mainApp" class="hidden">
         <!-- HEADER -->
         <div class="header">
@@ -1093,7 +1155,7 @@
                         <!-- TOTAL -->
                         <div style="padding: 10px 6px; background: linear-gradient(135deg, #704D34 0%, #8B6F47 100%); color: white; border-top: 1px solid var(--border); flex-shrink: 0;">
                             <div style="font-size: 9px; opacity: 0.9; margin-bottom: 2px;">TOTAL</div>
-                            <div id="totalComanda" style="font-size: 18px; font-weight: bold; margin-bottom: 8px;">R$ 0,00</div>
+                            <div id="totalComanda" style="font-size: 26px; font-weight: bold; margin-bottom: 8px;">R$ 0,00</div>
                             
                             <!-- ✅ BOTÃO ATALHO CHECKOUT (APENAS ADMIN) -->
                             <button id="btnAtalhoCheckout" onclick="irParaCheckout()" style="display: none; width: 100%; padding: 10px; background: linear-gradient(135deg, #3498DB 0%, #2980B9 100%); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; box-shadow: 0 2px 6px rgba(52, 152, 219, 0.3); transition: all 0.2s; background-image: linear-gradient(135deg, #3498DB 0%, #2980B9 100%); background-color: #3498DB !important;">💳 IR PARA CHECKOUT</button>
@@ -1420,6 +1482,7 @@
                     <option value="">Selecione um perfil...</option>
                     <option value="Admin">👑 Admin</option>
                     <option value="Atendente">👤 Atendente</option>
+                    <option value="Balança">⚖️ Balança</option>
                 </select>
             </div>
 
@@ -1433,39 +1496,74 @@
 
     <div id="toast" class="toast"></div>
 
-    <!-- MODAL BUFFET QUILO - BONITINHA -->
-    <div id="modalBuffetQuilo" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9998; justify-content: center; align-items: center;">
-        <div style="background: white; padding: 28px; border-radius: 12px; width: 95%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); position: relative;">
-            <!-- Close Button -->
-            <button onclick="fecharModalBuffet()" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">✕</button>
-            
-            <!-- Header -->
-            <div style="text-align: center; margin-bottom: 24px;">
-                <div style="font-size: 32px; margin-bottom: 8px;">⚖️</div>
-                <div style="font-size: 18px; font-weight: bold; color: #D4724F;">BUFFET POR QUILO</div>
+    <!-- MODAL BUFFET QUILO - LANDSCAPE TABLET -->
+    <div id="modalBuffetQuilo" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 9998; justify-content: center; align-items: center;">
+        <div style="background: white; border-radius: 16px; width: 96%; max-width: 680px; box-shadow: 0 12px 48px rgba(0,0,0,0.5); display: flex; flex-direction: row; overflow: hidden;">
+
+            <!-- COLUNA ESQUERDA: input de peso -->
+            <div style="flex: 0 0 52%; background: #fffaf8; padding: 22px 20px; display: flex; flex-direction: column; justify-content: center; align-items: center; border-right: 2px solid #f0e8e0;">
+                <!-- Título -->
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
+                    <span style="font-size: 22px;">⚖️</span>
+                    <span style="font-size: 13px; font-weight: bold; color: #D4724F; letter-spacing: 1px;">BUFFET POR QUILO</span>
+                </div>
+                <!-- Campo peso destaque -->
+                <input type="number" id="inputPeso" placeholder="0"
+                    inputmode="numeric"
+                    oninput="calcularTotalModal()"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault(); confirmarPesoModal();}"
+                    style="width: 100%; padding: 16px 12px; border: 3px solid #D4724F;
+                           border-radius: 10px; font-size: 52px; font-weight: bold;
+                           text-align: center; box-sizing: border-box; color: #2c2c2c;
+                           background: white; letter-spacing: 2px;
+                           box-shadow: 0 0 0 5px rgba(212,114,79,0.15), inset 0 2px 6px rgba(0,0,0,0.04);
+                           outline: none;">
+                <div style="font-size: 11px; color: #bbb; margin-top: 8px; font-weight: bold; letter-spacing: 2px;">GRAMAS</div>
             </div>
 
-            <!-- Input Peso -->
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; font-size: 12px; font-weight: bold; color: #666; margin-bottom: 8px; text-transform: uppercase;">Peso (gramas)</label>
-                <input type="number" id="inputPeso" placeholder="Ex: 800" oninput="calcularTotalModal()" onkeydown="if(event.key==='Enter'){event.preventDefault(); confirmarPesoModal();}" style="width: 100%; padding: 12px 14px; border: 2px solid #D4724F; border-radius: 6px; font-size: 16px; box-sizing: border-box; font-weight: bold; autofocus;">
-            </div>
+            <!-- COLUNA DIREITA: totais + botões -->
+            <div style="flex: 1; padding: 22px 20px; display: flex; flex-direction: column; justify-content: space-between;">
 
-            <!-- Cálculo Display -->
-            <div style="background: linear-gradient(135deg, #f9f7f4 0%, #ede6e0 100%); padding: 16px; border-radius: 8px; margin-bottom: 20px; text-align: center; border: 1px solid #e0d5ca;">
-                <div style="font-size: 11px; color: #999; margin-bottom: 4px; font-weight: bold;">PREÇO POR QUILO</div>
-                <div style="font-size: 16px; color: #D4724F; font-weight: bold; margin-bottom: 12px;">R$ <span id="exibirPrecoQuilo">0,00</span></div>
-                
-                <div style="height: 1px; background: #e0d5ca; margin: 12px 0;"></div>
-                
-                <div style="font-size: 11px; color: #999; margin-bottom: 4px; font-weight: bold;">TOTAL A PAGAR</div>
-                <div style="font-size: 28px; color: #F39C12; font-weight: bold;" id="exibirTotalModal">R$ 0,00</div>
-            </div>
+                <!-- Preço/kg + Total -->
+                <div style="background: linear-gradient(135deg, #f9f7f4 0%, #ede6e0 100%); padding: 14px 16px; border-radius: 10px; border: 1px solid #e0d5ca; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 10px; color: #aaa; font-weight: bold; letter-spacing: 1px; margin-bottom: 3px;">PREÇO / KG</div>
+                            <div style="font-size: 16px; color: #D4724F; font-weight: bold;">R$ <span id="exibirPrecoQuilo">0,00</span></div>
+                        </div>
+                        <div style="width: 1px; height: 40px; background: #e0d5ca;"></div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 10px; color: #aaa; font-weight: bold; letter-spacing: 1px; margin-bottom: 3px;">TOTAL</div>
+                            <div style="font-size: 30px; color: #E67E22; font-weight: bold; line-height: 1;" id="exibirTotalModal">R$ 0,00</div>
+                        </div>
+                    </div>
+                </div>
 
-            <!-- Botões -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <button onclick="fecharModalBuffet()" style="padding: 12px; background: #e8e8e8; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; color: #333;">Cancelar</button>
-                <button onclick="confirmarPesoModal()" style="padding: 12px; background: linear-gradient(135deg, #D4724F 0%, #B85840 100%); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px;">Confirmar</button>
+                <!-- Botões -->
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <button onclick="confirmarPesoModal()"
+                        style="width: 100%; padding: 15px; background: linear-gradient(135deg, #D4724F 0%, #B85840 100%);
+                               color: white; border: none; border-radius: 10px; font-weight: bold;
+                               cursor: pointer; font-size: 17px;
+                               box-shadow: 0 4px 12px rgba(212,114,79,0.4);">
+                        ✅ Confirmar
+                    </button>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <button onclick="lançarBuffetLivre()"
+                            style="padding: 12px 8px; background: linear-gradient(135deg, #27AE60 0%, #1E8449 100%);
+                                   color: white; border: none; border-radius: 8px; font-weight: bold;
+                                   cursor: pointer; font-size: 13px;
+                                   box-shadow: 0 3px 8px rgba(39,174,96,0.35);">
+                            🥗 Buffet Livre
+                        </button>
+                        <button onclick="fecharModalBuffet()"
+                            style="padding: 12px 8px; background: #ececec; border: none; border-radius: 8px;
+                                   font-weight: bold; cursor: pointer; font-size: 13px; color: #555;">
+                            ✕ Cancelar
+                        </button>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -1927,7 +2025,7 @@
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260601-v13-foto-lancar';  // Timestamp único
+            const timestampAtual = '20260602-v19-modal-landscape';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -1954,7 +2052,7 @@
 
                 // Atualizar header
                 document.getElementById('headerUser').textContent = state.user;
-                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : '👤 Atendente';
+                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : '👤 Atendente';
 
                 // Mostrar app diretamente
                 document.getElementById('loginScreen').classList.add('hidden');
@@ -2103,7 +2201,7 @@
 
             // ✅ Update header com informações
             document.getElementById('headerUser').textContent = `${state.user}`;
-            document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : '👤 Atendente';
+            document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : '👤 Atendente';
 
             // ✅ Limpar campos de senha
             document.getElementById('loginPassword').value = '';
@@ -2115,6 +2213,17 @@
             
             // ✅ APLICAR CONTROLE DE ACESSO POR PERFIL
             atualizarVisibilidadeAbas();
+
+            // ⚖️ MODO BALANÇA
+            if (state.perfil === 'Balança') {
+                document.body.classList.add('modo-balanca');
+                // Solicita fullscreen (funciona melhor quando instalado como PWA)
+                try {
+                    const el = document.documentElement;
+                    if (el.requestFullscreen) el.requestFullscreen();
+                    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+                } catch(e) { /* silencioso — alguns browsers bloqueiam sem gesto */ }
+            }
 
             // ✅ INICIAR POLLING
             iniciarPolling();
@@ -2189,8 +2298,9 @@
             
             // ✅ MAPA DE PERMISSÕES
             const permissoes = {
-                'Admin':     ['lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'],
-                'Atendente': ['lançar', 'preparo']
+                'Admin':    ['lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'],
+                'Atendente':['lançar', 'preparo'],
+                'Balança':  ['lançar']
             };
             
             const abas = permissoes[perfil] || [];
@@ -2276,7 +2386,16 @@
             showToast('✅ Pronto para pagamento', 'success');
         }
 
+        function logout() { handleLogout(); }
+
         function handleLogout() {
+            // Sair do modo Balança se ativo
+            document.body.classList.remove('modo-balanca');
+            try {
+                if (document.exitFullscreen) document.exitFullscreen();
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+            } catch(e) {}
+
             state.user = null;
             state.userLogado = null;
             state.perfil = null;
@@ -3279,6 +3398,12 @@ function carregarComanda() {
             renderizarItensDisponiveis();
             resetIdleTimer();
             setTimeout(() => { if (inputCodigo) inputCodigo.focus(); }, 100);
+
+            // ⚖️ MODO BALANÇA: abre modal de peso automaticamente (item 002 - Buffet p/ Quilo)
+            if (state.perfil === 'Balança') {
+                const item002 = state.itens['002'];
+                if (item002) setTimeout(() => abrirModalBuffetQuilo('002', item002), 200);
+            }
         }
 
         // ✅ LIMPAR COMANDA (botão Limpar na tela Lançar)
@@ -3479,12 +3604,12 @@ function carregarComanda() {
         function atualizarTotalComanda(chaveComanda) {
             const comanda = state.comandas[chaveComanda];
             if (!comanda) return;
-            
+
             // Calcular total de itens
             comanda.total = comanda.itens.reduce((sum, item) => {
                 return sum + (item.preco * (item.quantidade || 1));
             }, 0);
-            
+
             saveStorage();
         }
 
@@ -5326,6 +5451,36 @@ function carregarComanda() {
             itemQuilo = null;
             document.getElementById('lançarCodigoItem').value = '';
             // ❌ Removido focus - não abre teclado de novo!
+        }
+
+        function lançarBuffetLivre() {
+            // Fecha modal de quilo e lança item 001 (Buffet Livre) direto
+            document.getElementById('modalBuffetQuilo').style.display = 'none';
+            document.getElementById('inputPeso').blur();
+            itemQuilo = null;
+            document.getElementById('lançarCodigoItem').value = '';
+
+            const comanda = state.comandas[state.comandaAtual];
+            if (!comanda) return;
+            const item = state.itens['001'];
+            if (!item) return;
+
+            const _itemFixo = {
+                codigo: '001', nome: item.nome, tipo: item.tipo,
+                preco: item.preco, quantidade: 1, observacao: '',
+                icone: item.icone || '🥗'
+            };
+            comanda.itens.push(_itemFixo);
+            _itemFixo._pendingAdd = sheets_addItem(state.comandaAtual, _itemFixo, {
+                codigo: '001', nome: item.nome, quantidade: 1,
+                preco: item.preco, observacao: '', preparo_ja: false
+            }).then(() => delete _itemFixo._pendingAdd);
+
+            atualizarTotalComanda(state.comandaAtual);
+            saveStorage();
+            renderizarListaLançada();
+            showToast('🥗 Buffet Livre lançado', 'success');
+            resetIdleTimer();
         }
 
         function calcularTotalModal() {
