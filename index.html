@@ -1070,7 +1070,7 @@
                     <div style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); flex-shrink: 0;">
                         <div style="color: white; font-size: 10px; font-weight: bold; margin-bottom: 6px; opacity: 0.9;">📋 SELECIONE A COMANDA</div>
                         <div style="display: grid; grid-template-columns: 1fr auto; gap: 6px;">
-                            <input type="number" id="lançarComandaNum" placeholder="NÚMERO DA COMANDA" style="font-size: 18px; font-weight: bold; padding: 12px; border: 3px solid white; background: white; color: var(--primary); text-align: center; border-radius: 4px;" onkeypress="if(event.key==='Enter'){event.preventDefault();carregarComanda();}">
+                            <input type="number" id="lançarComandaNum" placeholder="NÚMERO DA COMANDA" style="font-size: 18px; font-weight: bold; padding: 12px; border: 3px solid white; background: white; color: var(--primary); text-align: center; border-radius: 4px;">
                             <button id="btnLimparComanda" onclick="limparComanda()" style="padding: 12px 16px; background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.6); border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; min-width: 70px;">✕ Limpar</button>
                         </div>
                         <div id="statusComanda" style="display: none; padding: 8px; background: #27AE60; color: white; font-size: 11px; font-weight: bold; text-align: center; border-radius: 3px; margin-top: 6px;"></div>
@@ -1904,14 +1904,15 @@
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260601-BtnColorFix';  // Timestamp único
+            const timestampAtual = '20260601-v10-idlefix';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
                 console.log('🔄 Atualizando sistema, limpando cache antigo...');
-                localStorage.clear();  // ✅ LIMPA TUDO
+                localStorage.clear();
                 localStorage.setItem('michelin-timestamp', timestampAtual);
-                console.log('✅ Cache limpo! Cardápio atualizado.');
+                location.reload();  // ✅ Força reload com novo código
+                return;
             }
             
             loadStorage();
@@ -2165,8 +2166,8 @@
             
             // ✅ MAPA DE PERMISSÕES
             const permissoes = {
-                'Admin':     ['abrir', 'lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'],
-                'Atendente': ['abrir', 'lançar', 'preparo']
+                'Admin':     ['lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'],
+                'Atendente': ['lançar', 'preparo']
             };
             
             const abas = permissoes[perfil] || [];
@@ -2980,7 +2981,8 @@
                 total: 0,
                 dataCriacao: new Date().toISOString(),
                 operador: state.user,
-                paid: false
+                paid: false,
+                _createdAt: Date.now()
             };
 
             // ✅ SALVAR
@@ -3009,6 +3011,8 @@
                         
                         // Renderizar a tela lançar com a comanda
                         const statusEl = document.getElementById('statusComanda');
+                        statusEl.style.background = '#2980B9';
+                        statusEl.style.color = 'white';
                         statusEl.textContent = `✅ Comanda #${numero} carregada`;
                         statusEl.style.display = 'block';
 
@@ -3057,6 +3061,7 @@
             saveStorage();
             renderizarListaLançada();
             renderizarItensDisponiveis();
+            resetIdleTimer();
             showToast('Item removido', 'success');
         }
 
@@ -3072,10 +3077,9 @@ function carregarComanda() {
             const numeroNorm = String(parseInt(numero, 10));
             const key = `${numeroNorm}-${dataAtual}`;
 
-            // VERIFICAR SE EXISTE
+            // VERIFICAR SE EXISTE — se não existe, cria direto (fluxo unificado)
             if (!state.comandas[key]) {
-                showToast('Comanda não encontrada neste dia', 'error');
-                limparTelaLançar();
+                criarComandaInline(numeroNorm);
                 return;
             }
 
@@ -3095,9 +3099,10 @@ function carregarComanda() {
                 state.modoLeitura = true;  // FLAG para modo leitura
 
                 const statusEl = document.getElementById('statusComanda');
+                statusEl.style.background = '#C0392B';
+                statusEl.style.color = 'white';
                 statusEl.textContent = `📖 Comanda #${numero} (CONSULTA - Paga em ${new Date(comanda.dataPagamento || comanda.dataFechamento).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})`;
                 statusEl.style.display = 'block';
-                statusEl.style.color = 'white';  // Branco para contrastar com verde
 
                 // Habilitar apenas visualização (campo código fica DESATIVADO)
                 document.getElementById('lançarCodigoItem').disabled = true;
@@ -3124,9 +3129,10 @@ function carregarComanda() {
                 state.itemEmEdicao = null;
 
                 const statusEl = document.getElementById('statusComanda');
-                statusEl.textContent = `⚡ Comanda #${numero} - Marmita em Preparo (pode continuar lançando)`;
+                statusEl.style.background = '#2980B9';
+                statusEl.style.color = 'white';
+                statusEl.textContent = `✅ Comanda #${numero} carregada`;
                 statusEl.style.display = 'block';
-                statusEl.style.color = 'inherit';
 
                 // Habilitar edição
                 document.getElementById('lançarCodigoItem').disabled = false;
@@ -3156,9 +3162,10 @@ function carregarComanda() {
             state.itemEmEdicao = null;
 
             const statusEl = document.getElementById('statusComanda');
+            statusEl.style.background = '#2980B9';
+            statusEl.style.color = 'white';
             statusEl.textContent = `✅ Comanda #${numero} carregada`;
             statusEl.style.display = 'block';
-            statusEl.style.color = 'inherit';
             
             // ✅ ATUALIZAR VISIBILIDADE DO BOTÃO ATALHO (vai mostrar se Admin)
             atualizarVisibilidadeBotaoAtalho();
@@ -3210,6 +3217,40 @@ function carregarComanda() {
             
             // ✅ OCULTAR BOTÃO ATALHO (sem comanda carregada)
             atualizarVisibilidadeBotaoAtalho();
+        }
+
+        // ✅ CRIAR COMANDA INLINE (fluxo unificado Atendente — sem fricção)
+        function criarComandaInline(numeroNorm) {
+            const dataAtual = new Date().toISOString().split('T')[0];
+            const chave = `${numeroNorm}-${dataAtual}`;
+
+            if (state.comandas[chave] && state.comandas[chave].encerramento) delete state.comandas[chave];
+
+            state.comandas[chave] = {
+                id: chave, numero: numeroNorm, data: dataAtual,
+                status: 'Aberta', itens: [], total: 0,
+                dataCriacao: new Date().toISOString(),
+                operador: state.user, paid: false,
+                _createdAt: Date.now()
+            };
+            saveStorage();
+            state.comandas[chave]._pendingNovaComanda = sheets_novaComanda(chave, numeroNorm);
+
+            state.comandaAtual = chave;
+            state.modoLeitura = false;
+            const statusEl = document.getElementById('statusComanda');
+            statusEl.style.background = '#27AE60';
+            statusEl.style.color = 'white';
+            statusEl.textContent = `✅ Comanda #${numeroNorm} criada`;
+            statusEl.style.display = 'block';
+            document.getElementById('lançarComandaNum').value = numeroNorm;
+            const inputCodigo = document.getElementById('lançarCodigoItem');
+            if (inputCodigo) { inputCodigo.disabled = false; inputCodigo.style.opacity = '1'; }
+            atualizarVisibilidadeBotaoAtalho();
+            renderizarListaLançada();
+            renderizarItensDisponiveis();
+            resetIdleTimer();
+            setTimeout(() => { if (inputCodigo) inputCodigo.focus(); }, 100);
         }
 
         // ✅ LIMPAR COMANDA (botão Limpar na tela Lançar)
@@ -3635,6 +3676,7 @@ function carregarComanda() {
             comanda.itens = comanda.itens.filter(i => !(i.codigo === item.codigo && i.tipo === item.tipo));
             saveStorage();
             renderizarListaLançada();
+            resetIdleTimer();
         }
 
         function renderizarItensDisponiveis() {
@@ -3814,6 +3856,7 @@ function carregarComanda() {
             comanda.itens.splice(idx, 1);
             saveStorage();
             renderizarListaLançada();
+            resetIdleTimer();
         }
 
         // Setup event listeners para tela lançar
@@ -3964,6 +4007,8 @@ function carregarComanda() {
             if (inputNum && comanda) inputNum.value = comanda.numero;
             const statusEl = document.getElementById('statusComanda');
             if (statusEl && comanda) {
+                statusEl.style.background = '#2980B9';
+                statusEl.style.color = 'white';
                 statusEl.textContent = `✅ Comanda #${comanda.numero} carregada`;
                 statusEl.style.display = 'block';
             }
@@ -4656,6 +4701,9 @@ function carregarComanda() {
                 for (const chave of Object.keys(state.comandas)) {
                     const local = state.comandas[chave];
                     if (local._id && !serverMap[chave] && local.data === dataAtual) {
+                        // Grace period: não apaga comanda criada há menos de 30s (Sheets ainda indexando)
+                        const age = Date.now() - (local._createdAt || 0);
+                        if (age < 30000) continue;
                         // Sumiu do servidor → foi encerrada; remove do estado local
                         delete state.comandas[chave];
                         if (state.comandaAtual === chave) state.comandaAtual = null;
