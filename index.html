@@ -1396,6 +1396,7 @@
                             <button onclick="filtrarUsuariosPorPerfil('Todos')" class="filtro-perfil-btn active" data-filtro="Todos" style="padding: 6px 10px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">👥 Todos</button>
                             <button onclick="filtrarUsuariosPorPerfil('Admin')" class="filtro-perfil-btn" data-filtro="Admin" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">👑 Admin</button>
                             <button onclick="filtrarUsuariosPorPerfil('Atendente')" class="filtro-perfil-btn" data-filtro="Atendente" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">👤 Atendente</button>
+                            <button onclick="filtrarUsuariosPorPerfil('Balança')" class="filtro-perfil-btn" data-filtro="Balança" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">⚖️ Balança</button>
                         </div>
 
                         <!-- LISTAGEM DE USUÁRIOS -->
@@ -1497,7 +1498,7 @@
     <div id="toast" class="toast"></div>
 
     <!-- MODAL BUFFET QUILO - LANDSCAPE TABLET -->
-    <div id="modalBuffetQuilo" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 9998; justify-content: center; align-items: center;">
+    <div id="modalBuffetQuilo" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 9998; justify-content: center; align-items: flex-start; padding-top: 3vh;">
         <div style="background: white; border-radius: 16px; width: 96%; max-width: 680px; box-shadow: 0 12px 48px rgba(0,0,0,0.5); display: flex; flex-direction: row; overflow: hidden;">
 
             <!-- COLUNA ESQUERDA: input de peso -->
@@ -1883,7 +1884,7 @@
                     usuarios.forEach(u => {
                         state.usuarios[u.login] = {
                             nome: u.nome || u.login, senha: String(u.senha),
-                            perfil: u.nivel === 'admin' ? 'Admin' : 'Atendente'
+                            perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : 'Atendente'
                         };
                     });
                     console.log('[Sheets] ✅ Usuários:', usuarios.length);
@@ -2025,7 +2026,7 @@
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260602-v19-modal-landscape';  // Timestamp único
+            const timestampAtual = '20260602-v21-balanca-ui';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -2158,7 +2159,7 @@
                         usuarios.forEach(u => {
                             state.usuarios[u.login] = {
                                 nome: u.nome || u.login, senha: String(u.senha),
-                                perfil: u.nivel === 'admin' ? 'Admin' : 'Atendente'
+                                perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : 'Atendente'
                             };
                         });
                     }
@@ -2920,7 +2921,7 @@
 
             saveStorage();
             // ☁️ SHEETS: criar ou atualizar usuário
-            const _nivel = perfil === 'Admin' ? 'admin' : 'atendente';
+            const _nivel = perfil === 'Admin' ? 'admin' : perfil === 'Balança' ? 'balanca' : 'atendente';
             if (usuarioEmEdicao) {
                 // Login mudou ou não: atualiza na mesma linha via loginAntigo
                 sheetsAPI('atualizarUsuario', { loginAntigo: usuarioEmEdicao, login, nome, senha, nivel: _nivel });
@@ -2953,7 +2954,7 @@
             container.innerHTML = '';
 
             usuarios.forEach(([login, user]) => {
-                const badge = user.perfil === 'Admin' ? '👑' : '👤';
+                const badge = user.perfil === 'Admin' ? '👑' : user.perfil === 'Balança' ? '⚖️' : '👤';
 
                 const div = document.createElement('div');
                 div.className = 'card';
@@ -2970,8 +2971,8 @@
                                 <span style="background: rgba(212,114,79,0.15); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-family: monospace;">
                                     @${login}
                                 </span>
-                                <span style="background: rgba(${user.perfil === 'Admin' ? '195,51,51' : '41,128,185'}, 0.15); color: rgb(${user.perfil === 'Admin' ? '195,51,51' : '41,128,185'}); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-weight: bold;">
-                                    ${user.perfil === 'Admin' ? 'ADMIN' : 'ATENDENTE'}
+                                <span style="background: rgba(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '39,174,96' : '41,128,185'}, 0.15); color: rgb(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '30,132,73' : '41,128,185'}); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-weight: bold;">
+                                    ${user.perfil === 'Admin' ? 'ADMIN' : user.perfil === 'Balança' ? 'BALANÇA' : 'ATENDENTE'}
                                 </span>
                             </div>
                             <!-- SENHA MASCARADA -->
