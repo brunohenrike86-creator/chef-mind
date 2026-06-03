@@ -1097,8 +1097,8 @@
                     <div style="font-size: 10px;">Preparo</div>
                 </button>
                 <button class="menu-btn" data-menu="dashboard">
-                    <div class="menu-icon">📊</div>
-                    <div style="font-size: 10px;">Resumo</div>
+                    <div class="menu-icon">💰</div>
+                    <div style="font-size: 10px;">Caixa</div>
                 </button>
                 <button class="menu-btn" data-menu="areceber" style="position:relative;">
                     <div class="menu-icon">💰</div>
@@ -1263,79 +1263,231 @@
                     <div id="areaPreparando" style="flex: 1; padding: 8px; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; grid-auto-rows: min-content; overflow: hidden; align-content: start;"></div>
                 </div>
 
-                <!-- DASHBOARD -->
-                <div id="screen-dashboard" class="screen">
-                    <!-- HEADER -->
-                    <div style="padding: 8px; background: white; border-bottom: 2px solid var(--border); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <div style="font-size: 13px; font-weight: bold; color: var(--primary);">📊 RESUMO DO DIA</div>
-                            <div style="font-size: 10px; color: var(--gray); margin-top: 2px;" id="resumoDataAtual">Carregando...</div>
+                <!-- CAIXA -->
+                <div id="screen-dashboard" class="screen" style="flex-direction: column; overflow: hidden;">
+
+                    <!-- FASE 1: CAIXA FECHADO -->
+                    <div id="caixa-fase-fechado" style="display:none; flex:1; overflow-y:auto; padding:16px; -webkit-overflow-scrolling:touch;">
+                        <div style="text-align:center; padding: 20px 0 16px;">
+                            <div style="font-size:52px; margin-bottom:8px;">🔒</div>
+                            <div style="font-size:18px; font-weight:bold; color:#2C3E50;">CAIXA FECHADO</div>
+                            <div style="font-size:12px; color:var(--gray); margin-top:4px;" id="caixaDataLabel">—</div>
                         </div>
-                        <div style="display:flex; gap:4px;">
-                            <button onclick="executarReset()" style="padding: 4px 8px; background: #E74C3C; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 9px; font-weight: bold;" title="Emergência: encerra comandas abertas agora">🔄 RESET</button>
-                            <button onclick="executarFecharExpediente()" style="padding: 4px 8px; background: #2C3E50; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 9px; font-weight: bold;" title="Encerra o expediente do dia">🔒 FECHAR</button>
+
+                        <div class="card" style="padding:20px; margin-bottom:16px;">
+                            <div style="font-size:11px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:10px;">💵 Troco Inicial do Caixa</div>
+                            <div style="position:relative;">
+                                <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:15px; color:var(--gray); font-weight:bold;">R$</span>
+                                <input type="number" id="inputTrocoAbertura" placeholder="0,00" min="0" step="0.01"
+                                    onkeydown="if(event.key==='Enter') abrirCaixaDia()"
+                                    style="width:100%; padding:14px 14px 14px 40px; border:2px solid var(--border); border-radius:8px;
+                                           font-size:22px; font-weight:bold; box-sizing:border-box; text-align:right; color:#2C3E50;">
+                            </div>
+                            <div style="font-size:10px; color:var(--gray); margin-top:8px;">Valor em dinheiro físico que está no caixa agora</div>
+                        </div>
+
+                        <div style="background:#FEF9E7; border:1px solid #F9E79F; border-radius:8px; padding:12px; margin-bottom:20px; font-size:11px; color:#856404;">
+                            ⚠️ Ao abrir o caixa, todas as comandas abertas serão resetadas automaticamente para iniciar o dia do zero.
+                        </div>
+
+                        <button onclick="abrirCaixaDia()" style="width:100%; padding:18px; background:linear-gradient(135deg,#27AE60 0%,#1E8449 100%); color:white; border:none; border-radius:10px; font-size:18px; font-weight:bold; cursor:pointer; box-shadow:0 4px 12px rgba(39,174,96,0.4);">
+                            🟢 Abrir Caixa e Iniciar Dia
+                        </button>
+
+                        <!-- Reset emergência discreto -->
+                        <div style="margin-top:24px; text-align:center;">
+                            <button onclick="executarReset()" style="padding:6px 12px; background:none; border:1px solid #ddd; border-radius:4px; font-size:10px; color:var(--gray); cursor:pointer;">🔄 Reset emergência</button>
                         </div>
                     </div>
 
-                    <!-- CONTEÚDO SCROLLÁVEL -->
-                    <div style="flex: 1; overflow-y: auto; padding: 8px; -webkit-overflow-scrolling: touch;">
-                        
-                        <!-- SEÇÃO 1: RESUMO OPERACIONAL -->
-                        <div style="margin-bottom: 12px;">
-                            <div style="font-size: 10px; font-weight: bold; color: var(--gray); text-transform: uppercase; margin-bottom: 6px;">📋 Operacional</div>
-                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
-                                <div class="card" style="padding: 8px; text-align: center;">
-                                    <div style="font-size: 9px; color: var(--gray);">Abertas</div>
-                                    <div style="font-size: 18px; font-weight: bold; color: var(--primary);" id="resumoAbertas">0</div>
+                    <!-- FASE 2: CAIXA ABERTO (operação) -->
+                    <div id="caixa-fase-aberto" style="display:none; flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; flex-direction:column;">
+                        <!-- Status bar verde -->
+                        <div style="background:linear-gradient(135deg,#27AE60 0%,#1E8449 100%); color:white; padding:10px 12px; flex-shrink:0; display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <div style="font-size:11px; font-weight:bold; letter-spacing:1px; opacity:0.9;">✅ CAIXA ABERTO</div>
+                                <div style="font-size:10px; opacity:0.8;" id="caixaInfoAbertura">—</div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:10px; opacity:0.8;">Troco</div>
+                                <div style="font-size:16px; font-weight:bold;" id="caixaTrocoDisplay">R$ 0,00</div>
+                            </div>
+                        </div>
+
+                        <!-- Resumo operacional scrollável -->
+                        <div style="flex:1; overflow-y:auto; padding:8px;">
+
+                            <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:6px; margin-top:4px;">📋 Operacional</div>
+                            <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:4px; margin-bottom:12px;">
+                                <div class="card" style="padding:8px; text-align:center;">
+                                    <div style="font-size:9px; color:var(--gray);">Abertas</div>
+                                    <div style="font-size:18px; font-weight:bold; color:var(--primary);" id="resumoAbertas">0</div>
                                 </div>
-                                <div class="card" style="padding: 8px; text-align: center;">
-                                    <div style="font-size: 9px; color: var(--gray);">Pagas</div>
-                                    <div style="font-size: 18px; font-weight: bold; color: #27AE60;" id="resumoPagas">0</div>
+                                <div class="card" style="padding:8px; text-align:center;">
+                                    <div style="font-size:9px; color:var(--gray);">Pagas</div>
+                                    <div style="font-size:18px; font-weight:bold; color:#27AE60;" id="resumoPagas">0</div>
                                 </div>
-                                <div class="card" style="padding: 8px; text-align: center;">
-                                    <div style="font-size: 9px; color: var(--gray);">Em Preparo</div>
-                                    <div style="font-size: 18px; font-weight: bold; color: #F39C12;" id="resumoEmPreparo">0</div>
+                                <div class="card" style="padding:8px; text-align:center;">
+                                    <div style="font-size:9px; color:var(--gray);">Em Preparo</div>
+                                    <div style="font-size:18px; font-weight:bold; color:#F39C12;" id="resumoEmPreparo">0</div>
                                 </div>
-                                <div class="card" style="padding: 8px; text-align: center;">
-                                    <div style="font-size: 9px; color: var(--gray);">Total do Dia</div>
-                                    <div style="font-size: 18px; font-weight: bold; color: #3498DB;" id="resumoTotalDia">0</div>
+                                <div class="card" style="padding:8px; text-align:center;">
+                                    <div style="font-size:9px; color:var(--gray);">Total do Dia</div>
+                                    <div style="font-size:18px; font-weight:bold; color:#3498DB;" id="resumoTotalDia">0</div>
                                 </div>
                             </div>
-                        </div>
 
-                        <!-- SEÇÃO 2: TOTAL VENDIDO -->
-                        <div style="margin-bottom: 12px;">
-                            <div class="card" style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; padding: 12px; text-align: center;">
-                                <div style="font-size: 10px; opacity: 0.9; margin-bottom: 4px;">Total Vendido Hoje</div>
-                                <div style="font-size: 24px; font-weight: bold;" id="resumoTotalVendido">R$ 0,00</div>
+                            <div class="card" style="background:linear-gradient(135deg,var(--primary) 0%,var(--primary-dark) 100%); color:white; padding:12px; text-align:center; margin-bottom:8px;">
+                                <div style="font-size:10px; opacity:0.9; margin-bottom:4px;">Total Vendido Hoje</div>
+                                <div style="font-size:24px; font-weight:bold;" id="resumoTotalVendido">R$ 0,00</div>
                             </div>
-                        </div>
-
-                        <!-- SEÇÃO 2B: TICKET MÉDIO -->
-                        <div style="margin-bottom: 12px;">
-                            <div class="card" style="background: linear-gradient(135deg, #F39C12 0%, #E67E22 100%); color: white; padding: 12px; text-align: center;">
-                                <div style="font-size: 10px; opacity: 0.9; margin-bottom: 4px;">🎫 Ticket Médio</div>
-                                <div style="font-size: 24px; font-weight: bold;" id="resumoTicketMedio">R$ 0,00</div>
+                            <div class="card" style="background:linear-gradient(135deg,#F39C12 0%,#E67E22 100%); color:white; padding:12px; text-align:center; margin-bottom:12px;">
+                                <div style="font-size:10px; opacity:0.9; margin-bottom:4px;">🎫 Ticket Médio</div>
+                                <div style="font-size:24px; font-weight:bold;" id="resumoTicketMedio">R$ 0,00</div>
                             </div>
-                        </div>
 
-                        <!-- SEÇÃO 3: FORMAS DE PAGAMENTO -->
-                        <div style="margin-bottom: 12px;">
-                            <div style="font-size: 10px; font-weight: bold; color: var(--gray); text-transform: uppercase; margin-bottom: 6px;">💰 Formas de Pagamento</div>
-                            <div id="resumoPagamentos" style="display: flex; flex-direction: column; gap: 4px;">
-                                <!-- Será preenchido dinamicamente -->
-                            </div>
-                        </div>
+                            <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:6px;">💰 Formas de Pagamento</div>
+                            <div id="resumoPagamentos" style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;"></div>
 
-                        <!-- SEÇÃO 4: ITENS MAIS VENDIDOS -->
-                        <div style="margin-bottom: 12px;">
-                            <div style="font-size: 10px; font-weight: bold; color: var(--gray); text-transform: uppercase; margin-bottom: 6px;">🍛 Itens Mais Vendidos</div>
-                            <div id="resumoItensVendidos" style="display: flex; flex-direction: column; gap: 4px;">
-                                <!-- Será preenchido dinamicamente -->
-                            </div>
-                        </div>
+                            <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:6px;">🍛 Itens Mais Vendidos</div>
+                            <div id="resumoItensVendidos" style="display:flex; flex-direction:column; gap:4px; margin-bottom:20px;"></div>
 
+                            <button onclick="iniciarFechamentoCaixa()" style="width:100%; padding:16px; background:linear-gradient(135deg,#2C3E50 0%,#1A252F 100%); color:white; border:none; border-radius:10px; font-size:16px; font-weight:bold; cursor:pointer; box-shadow:0 4px 12px rgba(44,62,80,0.4); margin-bottom:8px;">
+                                🔒 Fechar Caixa
+                            </button>
+
+                            <div style="font-size:10px; color:var(--gray); text-align:center;" id="caixaDataLabel2">—</div>
+                        </div>
                     </div>
+
+                    <!-- FASE 3: FORMULÁRIO DE FECHAMENTO -->
+                    <div id="caixa-fase-fechamento" style="display:none; flex:1; flex-direction:column; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; padding:0;">
+
+                        <!-- Header fechamento -->
+                        <div style="background:linear-gradient(135deg,#2C3E50 0%,#1A252F 100%); color:white; padding:12px 14px; flex-shrink:0;">
+                            <div style="font-size:14px; font-weight:bold;">🔒 FECHAMENTO DO CAIXA</div>
+                            <div style="font-size:10px; opacity:0.75; margin-top:2px;" id="caixaFechDataLabel">—</div>
+                        </div>
+
+                        <div style="padding:12px; box-sizing:border-box; width:100%; overflow-x:hidden; min-width:0;">
+
+                            <!-- Total vendido (automático) -->
+                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:14px;">
+                                <div class="card" style="padding:10px; text-align:center; background:linear-gradient(135deg,var(--primary) 0%,var(--primary-dark) 100%); color:white;">
+                                    <div style="font-size:9px; opacity:0.85; margin-bottom:4px;">TOTAL VENDIDO</div>
+                                    <div style="font-size:16px; font-weight:bold;" id="fechVendaTotal">R$ 0,00</div>
+                                </div>
+                                <div class="card" style="padding:10px; text-align:center;">
+                                    <div style="font-size:9px; color:var(--gray); margin-bottom:4px;">A RECEBER</div>
+                                    <div style="font-size:16px; font-weight:bold; color:#E74C3C;" id="fechAReceber">R$ 0,00</div>
+                                </div>
+                                <div class="card" style="padding:10px; text-align:center;">
+                                    <div style="font-size:9px; color:var(--gray); margin-bottom:4px;">TROCO INICIAL</div>
+                                    <div style="font-size:16px; font-weight:bold; color:#27AE60;" id="fechTroco">R$ 0,00</div>
+                                </div>
+                            </div>
+
+                            <!-- Inputs do caixeiro -->
+                            <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
+
+                                <div>
+                                    <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">💳 Máquinas de Cartão (total cobrado no cartão)</div>
+                                    <div style="position:relative;">
+                                        <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:13px; color:var(--gray); font-weight:bold;">R$</span>
+                                        <input type="number" id="inputMaquinas" placeholder="0,00" min="0" step="0.01" oninput="calcularFechamento()"
+                                            style="width:100%; padding:11px 10px 11px 34px; border:2px solid var(--border); border-radius:6px; font-size:18px; font-weight:bold; box-sizing:border-box; text-align:right;">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">💵 Caixa Físico — Sangria (valor retirado)</div>
+                                    <div style="position:relative;">
+                                        <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:13px; color:var(--gray); font-weight:bold;">R$</span>
+                                        <input type="number" id="inputSangria" placeholder="0,00" min="0" step="0.01" oninput="calcularFechamento()"
+                                            style="width:100%; padding:11px 10px 11px 34px; border:2px solid var(--border); border-radius:6px; font-size:18px; font-weight:bold; box-sizing:border-box; text-align:right;">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">🏦 Caixa Físico — Próximo Dia (troco que fica)</div>
+                                    <div style="position:relative;">
+                                        <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:13px; color:var(--gray); font-weight:bold;">R$</span>
+                                        <input type="number" id="inputResidual" placeholder="0,00" min="0" step="0.01" oninput="calcularFechamento()"
+                                            style="width:100%; padding:11px 10px 11px 34px; border:2px solid var(--border); border-radius:6px; font-size:18px; font-weight:bold; box-sizing:border-box; text-align:right;">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Resultado da fórmula (live) -->
+                            <div id="fechResultado" style="border-radius:10px; padding:14px 16px; margin-bottom:14px; background:#f5f5f5; border:2px solid #ddd; transition: all 0.3s;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                    <span style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; letter-spacing:1px;">Vendas + Troco</span>
+                                    <span style="font-size:14px; font-weight:bold;" id="fechEntradas">R$ 0,00</span>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                                    <span style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; letter-spacing:1px;">Saídas declaradas</span>
+                                    <span style="font-size:14px; font-weight:bold;" id="fechSaidas">R$ 0,00</span>
+                                </div>
+                                <div style="height:1px; background:#ddd; margin-bottom:10px;"></div>
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <span style="font-size:13px; font-weight:bold; color:var(--gray);">DIFERENÇA</span>
+                                    <span style="font-size:24px; font-weight:bold;" id="fechDiferenca">R$ 0,00</span>
+                                </div>
+                                <div style="text-align:right; font-size:11px; margin-top:4px;" id="fechStatusMsg">Preencha os campos acima</div>
+                            </div>
+
+                            <!-- Alerta comandas abertas -->
+                            <div id="fechAlertaComandas" style="display:none; background:#FEF3CD; border:1px solid #FBBF24; border-radius:8px; padding:10px; margin-bottom:12px; font-size:11px; color:#92400E;"></div>
+
+                            <!-- Diagnóstico inteligente -->
+                            <div id="fechDiagnostico" style="display:none; border:2px solid #6C3483; border-radius:10px; overflow:hidden; margin-bottom:14px; box-sizing:border-box; width:100%;">
+                                <div style="background:linear-gradient(135deg,#6C3483 0%,#5B2C6F 100%); padding:10px 14px; display:flex; align-items:center; gap:8px;">
+                                    <span style="font-size:18px;">🤖</span>
+                                    <span style="color:white; font-size:12px; font-weight:bold; text-transform:uppercase; letter-spacing:1px;">Diagnóstico do Caixa</span>
+                                </div>
+                                <div style="padding:12px 14px; background:#FAF5FF; box-sizing:border-box;">
+                                    <!-- Linha Maquininhas -->
+                                    <div style="margin-bottom:10px;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; gap:6px;">
+                                            <span style="font-size:11px; font-weight:bold; color:#555; flex:1; min-width:0;">💳 Maquininhas (PIX+DB+CC+VC)</span>
+                                            <span id="diagMaqStatus" style="font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px; white-space:nowrap; flex-shrink:0;"></span>
+                                        </div>
+                                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:11px; color:#666;">
+                                            <div>Sistema: <strong id="diagMaqSistema">—</strong></div>
+                                            <div>Lançado: <strong id="diagMaqLancado">—</strong></div>
+                                        </div>
+                                        <div id="diagMaqDiff" style="font-size:11px; font-weight:bold; margin-top:2px;"></div>
+                                    </div>
+                                    <!-- Linha Dinheiro -->
+                                    <div style="border-top:1px solid #E8DAEF; padding-top:10px; margin-bottom:10px;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; gap:6px;">
+                                            <span style="font-size:11px; font-weight:bold; color:#555; flex:1; min-width:0;">💵 Dinheiro Físico (Troco + Vendas)</span>
+                                            <span id="diagDinStatus" style="font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px; white-space:nowrap; flex-shrink:0;"></span>
+                                        </div>
+                                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:11px; color:#666;">
+                                            <div>Esperado: <strong id="diagDinEsperado">—</strong></div>
+                                            <div>Declarado: <strong id="diagDinDeclarado">—</strong></div>
+                                        </div>
+                                        <div id="diagDinDiff" style="font-size:11px; font-weight:bold; margin-top:2px;"></div>
+                                    </div>
+                                    <!-- Orientações -->
+                                    <div id="diagOrientacoes" style="background:#EDE7F6; border-radius:7px; padding:9px 11px; font-size:11px; color:#4A235A; line-height:1.6;"></div>
+                                </div>
+                            </div>
+
+                            <!-- Botões -->
+                            <button id="btnConfirmarFechamento" onclick="confirmarFechamentoCaixa()" disabled
+                                style="width:100%; padding:15px; background:#aaa; color:white; border:none; border-radius:10px; font-size:16px; font-weight:bold; cursor:not-allowed; margin-bottom:8px; transition:all 0.3s;">
+                                ✅ Confirmar Fechamento
+                            </button>
+                            <button onclick="cancelarFechamento()" style="width:100%; padding:12px; background:#ececec; border:none; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer; color:#555;">
+                                ← Voltar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Data auxiliar oculta (usada internamente) -->
+                    <div id="resumoDataAtual" style="display:none;"></div>
                 </div>
 
                 <!-- ADMIN -->
@@ -1746,6 +1898,7 @@
             userLogado: null, // ✅ Login atual
             perfil: null,
             _usuariosCarregados: false, // flag: getUsuarios do Sheets já completou?
+            caixa: { status: 'fechado', troco: 0, dataAbertura: null, horaAbertura: null, usuario: null },
             usuarios: {
                 'bruno': { nome: 'Bruno', senha: '1986', perfil: 'Admin' }
             },
@@ -1823,19 +1976,21 @@
                 }
             } catch (err) {
                 console.warn(`[Sheets] Erro em "${action}":`, err.message);
-                return null;
+                // Retorna objeto com erro para que a UI possa mostrar mensagem específica
+                return { sucesso: false, erro: err.message };
             }
         }
 
         async function loadFromSheets() {
             console.log('[Sheets] Carregando dados em paralelo...');
             try {
-                // ── Batch 1: 4 chamadas independentes em paralelo ──────────
-                const [config, cardapio, usuarios, comandas] = await Promise.all([
+                // ── Batch 1: 5 chamadas independentes em paralelo ──────────
+                const [config, cardapio, usuarios, comandas, caixaStatus] = await Promise.all([
                     sheetsAPI('getConfig'),
                     sheetsAPI('getCardapio'),
                     sheetsAPI('getUsuarios'),
-                    sheetsAPI('getComandasDoDia')
+                    sheetsAPI('getComandasDoDia'),
+                    sheetsAPI('getCaixaStatus')
                 ]);
 
                 // Processar config
@@ -1951,6 +2106,25 @@
                     }
                     console.log('[Sheets] ✅ Comandas:', comandas.length);
                 }
+
+                // Processar status do caixa
+                if (caixaStatus) {
+                    const dataHoje = new Date().toISOString().split('T')[0];
+                    if (caixaStatus.status === 'aberto' && caixaStatus.data === dataHoje) {
+                        state.caixa = {
+                            status:       'aberto',
+                            troco:        caixaStatus.troco || 0,
+                            dataAbertura: caixaStatus.data,
+                            horaAbertura: caixaStatus.horaAbertura || null,
+                            usuario:      caixaStatus.usuarioAbertura || null
+                        };
+                    } else {
+                        state.caixa = { status: 'fechado', troco: 0, dataAbertura: null, horaAbertura: null, usuario: null };
+                    }
+                    saveStorage();
+                    console.log('[Sheets] ✅ Caixa:', state.caixa.status);
+                }
+
                 console.log('[Sheets] ✅ Carregamento completo!');
             } catch (err) {
                 console.warn('[Sheets] Aviso:', err.message);
@@ -2026,7 +2200,7 @@
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260602-v21-balanca-ui';  // Timestamp único
+            const timestampAtual = '20260602-v23-caixa-errfix';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -2064,7 +2238,7 @@
 
                 // Renderizar com cache imediatamente
                 renderizarCheckout();
-                renderizarResumoDoDia();
+                renderizarCaixa();
 
                 // Sync em background
                 const syncBanner = document.getElementById('syncBanner');
@@ -2075,7 +2249,7 @@
                 ]).catch(() => {}).finally(() => {
                     syncBanner.classList.remove('visible');
                     renderizarCheckout();
-                    renderizarResumoDoDia();
+                    renderizarCaixa();
                 });
             }
         });
@@ -2231,7 +2405,7 @@
 
             // ── Renderizar imediatamente com dados do cache (localStorage) ──
             renderizarCheckout();
-            renderizarResumoDoDia();
+            renderizarCaixa();
             showToast(`Bem-vindo, ${state.user}!`, 'success');
 
             // ── Sincronizar com Sheets em background (banner discreto) ──────
@@ -2249,7 +2423,7 @@
 
             // Re-renderizar com dados frescos do servidor
             renderizarCheckout();
-            renderizarResumoDoDia();
+            renderizarCaixa();
         }
 
         // ========== CONTROLE DE ACESSO POR PERFIL ==========
@@ -2495,7 +2669,7 @@
                 renderizarPreapro();
                 iniciarTimerPreparo();
             } else if (screenName === 'dashboard') {
-                renderizarResumoDoDia();
+                renderizarCaixa();
             } else if (screenName === 'areceber') {
                 pararTimerPreparo();
                 carregarAReceber();
@@ -2509,7 +2683,7 @@
                 reRenderAposPoll(() => {
                     if (screenName === 'checkout')        renderizarCheckout();
                     else if (screenName === 'preparo')    renderizarPreapro();
-                    else if (screenName === 'dashboard')  renderizarResumoDoDia();
+                    else if (screenName === 'dashboard')  renderizarCaixa();
                     else if (screenName === 'areceber')   renderizarAReceber();
                 });
             }
@@ -3225,6 +3399,13 @@ function carregarComanda() {
             const numeroNorm = String(parseInt(numero, 10));
             const key = `${numeroNorm}-${dataAtual}`;
 
+            // BLOQUEAR SE CAIXA FECHADO
+            if (state.caixa.status !== 'aberto') {
+                showToast('⛔ Abra o caixa antes de criar comandas', 'error');
+                limparTelaLançar();
+                return;
+            }
+
             // VERIFICAR SE EXISTE — se não existe, cria direto (fluxo unificado)
             if (!state.comandas[key]) {
                 criarComandaInline(numeroNorm);
@@ -3233,10 +3414,15 @@ function carregarComanda() {
 
             const comanda = state.comandas[key];
 
-            // COMANDA ENCERRADA (reset/fechamento) = NÃO PERMITE LANÇAR
-            if (comanda.encerramento) {
-                const tipo = comanda.encerramento === 'fechamento' ? 'expediente fechado' : 'reset';
-                showToast(`⚠️ Comanda #${numeroNorm} encerrada (${tipo})`, 'warning');
+            // COMANDA COM RESET = tratar como nova (caixa foi aberto e limpou o dia)
+            if (comanda.encerramento === 'reset') {
+                criarComandaInline(numeroNorm);
+                return;
+            }
+
+            // COMANDA COM FECHAMENTO = bloquear (expediente encerrado)
+            if (comanda.encerramento === 'fechamento') {
+                showToast(`⚠️ Comanda #${numeroNorm} encerrada — expediente fechado`, 'warning');
                 limparTelaLançar();
                 return;
             }
@@ -5061,6 +5247,343 @@ function carregarComanda() {
             }
         }
 
+        // ========== CAIXA — ABERTURA / FECHAMENTO ==========
+
+        function renderizarCaixa() {
+            const dataHoje = new Date().toISOString().split('T')[0];
+            const hoje = new Date();
+            const dias  = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+            const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+            const dataLabel = `${dias[hoje.getDay()]}, ${hoje.getDate()} de ${meses[hoje.getMonth()]}`;
+
+            const fase = state.caixa.status === 'aberto' ? 'aberto' : 'fechado';
+
+            document.getElementById('caixa-fase-fechado').style.display   = fase === 'fechado' ? 'block' : 'none';
+            document.getElementById('caixa-fase-aberto').style.display    = fase === 'aberto'  ? 'flex'  : 'none';
+            document.getElementById('caixa-fase-fechamento').style.display = 'none';
+
+            // Limpar campo de troco sempre que exibir a tela de abertura
+            if (fase === 'fechado') {
+                document.getElementById('inputTrocoAbertura').value = '';
+            }
+
+            if (document.getElementById('caixaDataLabel'))
+                document.getElementById('caixaDataLabel').textContent = dataLabel;
+            if (document.getElementById('caixaDataLabel2'))
+                document.getElementById('caixaDataLabel2').textContent = dataLabel;
+
+            if (fase === 'aberto') {
+                const hora = state.caixa.horaAbertura || '—';
+                const usr  = state.caixa.usuario || '';
+                document.getElementById('caixaInfoAbertura').textContent =
+                    `Aberto às ${hora}${usr ? ' por ' + usr : ''}`;
+                document.getElementById('caixaTrocoDisplay').textContent =
+                    'R$ ' + (state.caixa.troco || 0).toFixed(2);
+                renderizarResumoDoDia();
+            }
+        }
+
+        async function abrirCaixaDia() {
+            const trocoEl = document.getElementById('inputTrocoAbertura');
+            const troco   = parseFloat(trocoEl.value) || 0;
+
+            if (!confirm(`Abrir o caixa com troco de R$ ${troco.toFixed(2)}?\n\nAs comandas abertas serão resetadas automaticamente.`)) return;
+
+            showToast('⏳ Abrindo caixa...', 'info');
+            try {
+                const res = await sheetsAPI('abrirCaixa', {
+                    troco:   troco,
+                    usuario: state.userLogado || state.user
+                });
+                if (res && res.sucesso) {
+                    const hora = res.hora || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    state.caixa = {
+                        status:       'aberto',
+                        troco:        troco,
+                        dataAbertura: new Date().toISOString().split('T')[0],
+                        horaAbertura: hora,
+                        usuario:      state.userLogado || state.user
+                    };
+                    // Reset local também
+                    const dataAtual = new Date().toISOString().split('T')[0];
+                    Object.values(state.comandas).forEach(c => {
+                        if (c.data === dataAtual && !c.encerramento) c.encerramento = 'reset';
+                    });
+                    state.comandaAtual = null;
+                    saveStorage();
+                    renderizarCaixa();
+                    renderizarCheckout();
+                    const msg = res.comandasResetadas > 0
+                        ? `✅ Caixa aberto — ${res.comandasResetadas} comanda(s) resetada(s)`
+                        : '✅ Caixa aberto com sucesso!';
+                    showToast(msg, 'success');
+                    pollFromSheets();
+                } else {
+                    showToast(res?.erro || 'Erro ao abrir caixa', 'error');
+                }
+            } catch(e) {
+                showToast('Erro de conexão ao abrir caixa', 'error');
+            }
+        }
+
+        function iniciarFechamentoCaixa() {
+            const dataAtual = new Date().toISOString().split('T')[0];
+            const abertas   = Object.values(state.comandas).filter(c =>
+                c.data === dataAtual && !c.encerramento &&
+                (c.status === 'Aberta' || (c.status === 'Em Preparo' && !c.paid))
+            );
+
+            // Calcular totais para preencher automaticamente
+            const comandasHoje = Object.values(state.comandas).filter(c =>
+                c.data === dataAtual && !c.encerramento && c.paid
+            );
+            const vendaTotal = comandasHoje.reduce((s, c) => s + (c.total || 0), 0);
+            const aReceber   = comandasHoje
+                .filter(c => (c.formaPagamento || '').toLowerCase() === 'a_receber')
+                .reduce((s, c) => s + (c.total || 0), 0);
+
+            // Mostrar fase 3
+            document.getElementById('caixa-fase-aberto').style.display        = 'none';
+            document.getElementById('caixa-fase-fechamento').style.display    = 'flex';
+            document.getElementById('caixa-fase-fechamento').style.flexDirection = 'column';
+
+            const hoje = new Date();
+            const dias  = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+            const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+            document.getElementById('caixaFechDataLabel').textContent =
+                `${dias[hoje.getDay()]}, ${hoje.getDate()} de ${meses[hoje.getMonth()]}`;
+
+            document.getElementById('fechVendaTotal').textContent = 'R$ ' + vendaTotal.toFixed(2);
+            document.getElementById('fechAReceber').textContent   = 'R$ ' + aReceber.toFixed(2);
+            document.getElementById('fechTroco').textContent      = 'R$ ' + (state.caixa.troco || 0).toFixed(2);
+
+            // Limpar inputs
+            ['inputMaquinas','inputSangria','inputResidual'].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+            calcularFechamento();
+
+            // Alerta de comandas abertas
+            const alertaEl = document.getElementById('fechAlertaComandas');
+            if (abertas.length > 0) {
+                alertaEl.style.display = 'block';
+                alertaEl.style.background = '#FDEDEC';
+                alertaEl.style.borderColor = '#E74C3C';
+                alertaEl.style.color = '#7B241C';
+                alertaEl.innerHTML = `⛔ Há ${abertas.length} comanda(s) ainda aberta(s): ` +
+                    abertas.map(c => `<strong>#${c.numero}</strong>`).join(', ') +
+                    `<br><strong>Feche-as antes de confirmar o fechamento do caixa.</strong>`;
+            } else {
+                alertaEl.style.display = 'none';
+            }
+
+            // Armazenar para uso no confirmar e no calcularFechamento
+            document.getElementById('caixa-fase-fechamento').dataset.vendaTotal   = vendaTotal;
+            document.getElementById('caixa-fase-fechamento').dataset.aReceber     = aReceber;
+            document.getElementById('caixa-fase-fechamento').dataset.abertasCount = abertas.length;
+        }
+
+        function calcularFechamento() {
+            const vendaTotal = parseFloat(document.getElementById('caixa-fase-fechamento').dataset.vendaTotal) || 0;
+            const aReceber   = parseFloat(document.getElementById('caixa-fase-fechamento').dataset.aReceber) || 0;
+            const troco      = state.caixa.troco || 0;
+            const maquinas   = parseFloat(document.getElementById('inputMaquinas').value) || 0;
+            const sangria    = parseFloat(document.getElementById('inputSangria').value)  || 0;
+            const residual   = parseFloat(document.getElementById('inputResidual').value) || 0;
+
+            // Fórmula: Diferença = VendaTotal - ((Máquinas + Sangria + Residual + AReceber) - Troco)
+            const entradas = vendaTotal + troco;
+            const saidas   = maquinas + sangria + residual + aReceber;
+            const diff     = entradas - saidas;
+
+            document.getElementById('fechEntradas').textContent = 'R$ ' + entradas.toFixed(2);
+            document.getElementById('fechSaidas').textContent   = 'R$ ' + saidas.toFixed(2);
+            document.getElementById('fechDiferenca').textContent = (diff >= 0 ? '+' : '') + 'R$ ' + diff.toFixed(2);
+
+            const resultado   = document.getElementById('fechResultado');
+            const statusMsg   = document.getElementById('fechStatusMsg');
+            const btnConfirm  = document.getElementById('btnConfirmarFechamento');
+            const temDados    = maquinas + sangria + residual > 0;
+
+            if (!temDados) {
+                resultado.style.background = '#f5f5f5';
+                resultado.style.borderColor = '#ddd';
+                document.getElementById('fechDiferenca').style.color = '#666';
+                statusMsg.textContent = 'Preencha os campos acima';
+                statusMsg.style.color = '#aaa';
+                btnConfirm.disabled = true;
+                btnConfirm.style.background = '#aaa';
+                btnConfirm.style.cursor = 'not-allowed';
+            } else if (Math.abs(diff) <= 0.05) {
+                resultado.style.background = '#EAFAF1';
+                resultado.style.borderColor = '#27AE60';
+                document.getElementById('fechDiferenca').style.color = '#27AE60';
+                statusMsg.textContent = '✅ Caixa fechado! Valores conferidos.';
+                statusMsg.style.color = '#27AE60';
+                btnConfirm.disabled = false;
+                btnConfirm.style.background = 'linear-gradient(135deg,#27AE60 0%,#1E8449 100%)';
+                btnConfirm.style.cursor = 'pointer';
+            } else if (Math.abs(diff) <= 2) {
+                resultado.style.background = '#FEFDE7';
+                resultado.style.borderColor = '#F9E79F';
+                document.getElementById('fechDiferenca').style.color = '#E67E22';
+                statusMsg.textContent = `⚠️ Diferença pequena (R$ ${diff.toFixed(2)}) — verifique e confirme`;
+                statusMsg.style.color = '#E67E22';
+                btnConfirm.disabled = false;
+                btnConfirm.style.background = 'linear-gradient(135deg,#E67E22 0%,#D35400 100%)';
+                btnConfirm.style.cursor = 'pointer';
+            } else {
+                resultado.style.background = '#FDEDEC';
+                resultado.style.borderColor = '#E74C3C';
+                document.getElementById('fechDiferenca').style.color = '#E74C3C';
+                statusMsg.textContent = `❌ Diferença de R$ ${Math.abs(diff).toFixed(2)} — revise os valores`;
+                statusMsg.style.color = '#E74C3C';
+                btnConfirm.disabled = true;
+                btnConfirm.style.background = '#aaa';
+                btnConfirm.style.cursor = 'not-allowed';
+            }
+
+            // Diagnóstico inteligente (só quando há diferença e campos preenchidos)
+            if (temDados) diagnosticarFechamento(maquinas, sangria, residual);
+            else document.getElementById('fechDiagnostico').style.display = 'none';
+
+            // Bloqueio final — sobrescreve qualquer estado acima se houver comandas abertas
+            const abertasCount = parseInt(document.getElementById('caixa-fase-fechamento').dataset.abertasCount) || 0;
+            if (abertasCount > 0) {
+                btnConfirm.disabled = true;
+                btnConfirm.style.background = '#aaa';
+                btnConfirm.style.cursor = 'not-allowed';
+                statusMsg.textContent = `⛔ Feche as ${abertasCount} comanda(s) abertas antes de confirmar`;
+                statusMsg.style.color = '#E74C3C';
+            }
+        }
+
+        function diagnosticarFechamento(inputMaquinas, inputSangria, inputResidual) {
+            const dataAtual = new Date().toISOString().split('T')[0];
+            const FORMAS_MAQ = ['pix', 'credito', 'debito', 'voucher'];
+
+            // Comandas pagas de hoje (não encerradas)
+            const pagas = Object.values(state.comandas).filter(c =>
+                c.data === dataAtual && c.paid && !c.encerramento
+            );
+
+            // Totais por grupo vindos das comandas
+            const totalMaqSistema = pagas
+                .filter(c => FORMAS_MAQ.includes((c.formaPagamento || '').toLowerCase()))
+                .reduce((s, c) => s + (c.total || 0), 0);
+
+            const totalDinheiroSistema = pagas
+                .filter(c => (c.formaPagamento || '').toLowerCase() === 'dinheiro')
+                .reduce((s, c) => s + (c.total || 0), 0);
+
+            // Dinheiro esperado = troco abertura + vendas em dinheiro
+            const trocoAbertura = state.caixa.troco || 0;
+            const dinEsperado   = trocoAbertura + totalDinheiroSistema;
+            const dinDeclarado  = inputSangria + inputResidual;
+
+            const diffMaq = inputMaquinas - totalMaqSistema;
+            const diffDin = dinDeclarado  - dinEsperado;
+
+            const fmt = v => 'R$ ' + Math.abs(v).toFixed(2);
+            const TOL = 0.05;
+
+            // Atualizar UI — Maquininhas
+            document.getElementById('diagMaqSistema').textContent = 'R$ ' + totalMaqSistema.toFixed(2);
+            document.getElementById('diagMaqLancado').textContent = 'R$ ' + inputMaquinas.toFixed(2);
+            const maqOk = Math.abs(diffMaq) <= TOL;
+            const maqEl = document.getElementById('diagMaqStatus');
+            maqEl.textContent    = maqOk ? '✅ OK' : (diffMaq > 0 ? '⬆ Sobra' : '⬇ Falta') + ' ' + fmt(diffMaq);
+            maqEl.style.background = maqOk ? '#D5F5E3' : '#FDEDEC';
+            maqEl.style.color      = maqOk ? '#1E8449' : '#C0392B';
+            const diffMaqEl = document.getElementById('diagMaqDiff');
+            diffMaqEl.textContent = maqOk ? '' : (diffMaq > 0 ? '+' : '-') + fmt(diffMaq);
+            diffMaqEl.style.color = maqOk ? '' : '#C0392B';
+
+            // Atualizar UI — Dinheiro
+            document.getElementById('diagDinEsperado').textContent  = 'R$ ' + dinEsperado.toFixed(2);
+            document.getElementById('diagDinDeclarado').textContent = 'R$ ' + dinDeclarado.toFixed(2);
+            const dinOk = Math.abs(diffDin) <= TOL;
+            const dinEl = document.getElementById('diagDinStatus');
+            dinEl.textContent    = dinOk ? '✅ OK' : (diffDin > 0 ? '⬆ Sobra' : '⬇ Falta') + ' ' + fmt(diffDin);
+            dinEl.style.background = dinOk ? '#D5F5E3' : '#FDEDEC';
+            dinEl.style.color      = dinOk ? '#1E8449' : '#C0392B';
+            const diffDinEl = document.getElementById('diagDinDiff');
+            diffDinEl.textContent = dinOk ? '' : (diffDin > 0 ? '+' : '-') + fmt(diffDin);
+            diffDinEl.style.color = dinOk ? '' : '#C0392B';
+
+            // Orientações baseadas nos diagnósticos
+            const linhas = [];
+            if (!maqOk) {
+                if (diffMaq > 0)
+                    linhas.push('💳 O valor inserido para maquininhas está <strong>acima</strong> do sistema — pode haver pagamento lançado como dinheiro que foi pago no cartão/PIX, ou erro de digitação.');
+                else
+                    linhas.push('💳 O valor das maquininhas está <strong>abaixo</strong> do sistema — verifique se algum pagamento com cartão/PIX/voucher foi selecionado incorretamente na comanda (ex: lançado como "a receber" ou dinheiro).');
+            }
+            if (!dinOk) {
+                if (diffDin > 0)
+                    linhas.push('💵 O dinheiro declarado (sangria + residual) está <strong>acima</strong> do esperado — verifique se o troco inicial estava correto ou se há valor a mais contado no físico.');
+                else
+                    linhas.push('💵 O dinheiro declarado está <strong>abaixo</strong> do esperado — reconte o dinheiro físico que sobrou: pode ter saído mais do que o registrado, ou uma venda em dinheiro não foi lançada corretamente.');
+            }
+            if (maqOk && dinOk) {
+                linhas.push('✅ Maquininhas e dinheiro físico conferem com o sistema. Se ainda há diferença, o problema pode estar no <strong>valor cobrado em alguma comanda vs o que foi pago na máquina</strong> — verifique o relatório da maquininha manualmente.');
+            }
+            linhas.push('📋 <em>A Receber não entra no cálculo de caixa — será liquidado separadamente.</em>');
+
+            document.getElementById('diagOrientacoes').innerHTML = linhas.join('<br>');
+            document.getElementById('fechDiagnostico').style.display = 'block';
+        }
+
+        async function confirmarFechamentoCaixa() {
+            const vendaTotal = parseFloat(document.getElementById('caixa-fase-fechamento').dataset.vendaTotal) || 0;
+            const aReceber   = parseFloat(document.getElementById('caixa-fase-fechamento').dataset.aReceber)   || 0;
+            const maquinas   = parseFloat(document.getElementById('inputMaquinas').value) || 0;
+            const sangria    = parseFloat(document.getElementById('inputSangria').value)  || 0;
+            const residual   = parseFloat(document.getElementById('inputResidual').value) || 0;
+            const troco      = state.caixa.troco || 0;
+            const diff       = (vendaTotal + troco) - (maquinas + sangria + residual + aReceber);
+
+            if (!confirm(`Confirmar fechamento do caixa?\n\nVendas: R$ ${vendaTotal.toFixed(2)}\nDiferença: R$ ${diff.toFixed(2)}`)) return;
+
+            showToast('⏳ Fechando caixa...', 'info');
+            try {
+                const res = await sheetsAPI('fecharCaixa', {
+                    valor_maquinas:    maquinas,
+                    sangria:           sangria,
+                    residual_prox_dia: residual,
+                    a_receber:         aReceber,
+                    venda_total:       vendaTotal,
+                    diferenca:         diff,
+                    usuario:           state.userLogado || state.user
+                });
+                if (res && res.sucesso) {
+                    // Marcar localmente
+                    const dataAtual = new Date().toISOString().split('T')[0];
+                    Object.values(state.comandas).forEach(c => {
+                        if (c.data === dataAtual && !c.encerramento) c.encerramento = 'fechamento';
+                    });
+                    state.caixa = { status: 'fechado', troco: 0, dataAbertura: null, horaAbertura: null, usuario: null };
+                    state.comandaAtual = null;
+                    saveStorage();
+                    renderizarCaixa();
+                    renderizarCheckout();
+                    renderizarPreapro();
+                    pollFromSheets();
+                    const enc = res.comandasEncerradas ?? '?';
+                    showToast(`✅ Caixa fechado — ${enc} comanda(s) encerrada(s)`, 'success');
+                } else {
+                    showToast(res?.erro || 'Erro ao fechar caixa', 'error');
+                }
+            } catch(e) {
+                showToast('Erro de conexão ao fechar caixa', 'error');
+            }
+        }
+
+        function cancelarFechamento() {
+            document.getElementById('caixa-fase-fechamento').style.display = 'none';
+            document.getElementById('caixa-fase-aberto').style.display = 'flex';
+        }
+
         // ========== FECHAR EXPEDIENTE ==========
         async function executarFecharExpediente() {
             const dataAtual = new Date().toISOString().split('T')[0];
@@ -5577,7 +6100,8 @@ function carregarComanda() {
                 comandas: state.comandas,
                 itens: state.itens,
                 usuarios: state.usuarios,
-                marnitasDia: state.marnitasDia
+                marnitasDia: state.marnitasDia,
+                caixa: state.caixa
             }));
             // Persiste sessão separadamente para sobreviver ao F5
             if (state.user) {
@@ -5600,6 +6124,7 @@ function carregarComanda() {
                     // state.itens = loaded.itens || state.itens;  ← REMOVIDO
                     state.usuarios = loaded.usuarios || state.usuarios;
                     state.marnitasDia = loaded.marnitasDia || state.marnitasDia;
+                    if (loaded.caixa) state.caixa = loaded.caixa;
                     console.log('✅ Dados carregados (itens sempre do padrão)');
                 } catch (e) {
                     console.error('Erro ao carregar dados:', e);
