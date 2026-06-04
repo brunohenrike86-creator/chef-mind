@@ -711,7 +711,7 @@
             .co-obs   { font-size: 12px; }
 
             /* Cardápio — cards maiores no tablet */
-            #listaItensDisponiveis { grid-template-columns: repeat(auto-fill, 115px) !important; gap: 10px !important; }
+            #listaItensDisponiveis { grid-template-columns: repeat(auto-fill, 115px) !important; gap: 10px !important; align-content: start !important; }
             .item-cat-btn { height: 120px; }
             .cat-icone { font-size: 26px; }
             .cat-nome  { font-size: 13px; }
@@ -758,7 +758,7 @@
             /* ── LANÇAR: layout duas colunas ── */
             #screen-lançar { flex-direction: row !important; overflow: hidden !important; }
             #lancar-panel-left {
-                width: 390px !important; min-width: 320px !important;
+                width: 450px !important; min-width: 320px !important;
                 flex-shrink: 0 !important; flex-direction: column !important;
                 display: flex !important; overflow: hidden !important;
                 border-right: 2px solid var(--border) !important;
@@ -785,7 +785,8 @@
             #checkout-panel-left #listaComandas {
                 grid-template-columns: 1fr 1fr !important;
                 max-height: none !important; flex: 1 !important;
-                overflow-y: auto !important;  /* scroll aqui, ao lado das comandas */
+                overflow-y: auto !important;
+                align-content: start !important;  /* cards empilham no topo, sem esticar */
             }
             #checkout-panel-right {
                 flex: 1 !important; display: flex !important;
@@ -830,10 +831,10 @@
             .co-obs   { font-size: 13px; }
 
             /* Painel lançar: mais espaço de lançamento, catálogo mais compacto */
-            #lancar-panel-left { width: 520px !important; }
+            #lancar-panel-left { width: 580px !important; }
             /* Painel checkout: mais espaço para os cards de comanda */
             #checkout-panel-left { width: 310px !important; }
-            #checkout-panel-left #listaComandas { grid-template-columns: 1fr 1fr 1fr !important; }
+            #checkout-panel-left #listaComandas { grid-template-columns: 1fr 1fr 1fr !important; align-content: start !important; }
 
             /* Cardápio — cards maiores no notebook */
             #listaItensDisponiveis { grid-template-columns: repeat(auto-fill, 140px) !important; }
@@ -987,6 +988,7 @@
             grid-template-columns: repeat(auto-fill, 100px) !important;
             gap: 8px !important;
             padding: 8px !important;
+            align-content: start !important;  /* sem gaps entre linhas */
         }
         body.modo-balanca .item-cat-btn { min-height: 96px !important; padding: 8px !important; }
         body.modo-balanca .item-cat-btn img { width: 56px !important; height: 56px !important; }
@@ -1174,7 +1176,7 @@
                             <div id="abaCategorias" style="display: flex; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px;"></div>
                         </div>
                         <!-- CARDÁPIO -->
-                        <div id="listaItensDisponiveis" style="flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, 80px); gap: 6px; justify-content: start;"></div>
+                        <div id="listaItensDisponiveis" style="flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, 80px); gap: 6px; justify-content: start; align-content: start;"></div>
                     </div>
                 </div><!-- /lancar-panel-right -->
                 </div><!-- /screen-lançar -->
@@ -1559,31 +1561,34 @@
                 </div>
 
                 <!-- A RECEBER -->
-                <div id="screen-areceber" class="screen" style="flex-direction: column; overflow: hidden; background: linear-gradient(135deg, rgba(39,174,96,0.04), rgba(46,204,113,0.06));">
+                <div id="screen-areceber" class="screen" style="flex-direction: column; overflow: hidden; background: var(--bg-light);">
 
                     <!-- HEADER SUMÁRIO -->
-                    <div style="background: linear-gradient(135deg, #1e8449 0%, #27ae60 100%); padding: 12px 14px; flex-shrink: 0;">
+                    <div style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); padding: 12px 14px; flex-shrink: 0;">
                         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                            <div>
-                                <div style="color: rgba(255,255,255,0.75); font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Pendências</div>
+                            <div style="flex:1;">
+                                <div id="arHeaderLabel" style="color: rgba(255,255,255,0.75); font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">📋 A Receber — Pendências</div>
                                 <div id="arTotalPendente" style="color: white; font-size: 24px; font-weight: bold; line-height: 1.1;">R$ 0,00</div>
                                 <div id="arQtdPendente" style="color: rgba(255,255,255,0.8); font-size: 11px;">0 comanda(s) pendente(s)</div>
                             </div>
-                            <div style="text-align: right;">
-                                <div style="color: rgba(255,255,255,0.75); font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Recebido (mês)</div>
-                                <div id="arTotalRecebido" style="color: rgba(255,255,255,0.9); font-size: 18px; font-weight: bold;">R$ 0,00</div>
-                                <div id="arQtdRecebido" style="color: rgba(255,255,255,0.7); font-size: 11px;">0 baixa(s)</div>
-                            </div>
+                            <button id="arBtnBaixaTodos" onclick="abrirModalBaixaTodos()"
+                                style="display:none; flex-shrink:0; padding:10px 14px; background:white; color:var(--primary); border:none; border-radius:10px; font-size:11px; font-weight:bold; cursor:pointer; line-height:1.3; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.2);">
+                                ✓ Receber<br><span id="arBtnBaixaTodosLabel">todos</span>
+                            </button>
                         </div>
 
                         <!-- FILTRO TABS + BUSCA -->
                         <div style="display: flex; gap: 6px; align-items: center;">
                             <div style="display: flex; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 2px; flex-shrink: 0;">
-                                <button id="arTabPendente" onclick="arMudarFiltro('pendente')" style="padding: 5px 10px; border: none; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; background: white; color: #1e8449;">Pendentes</button>
+                                <button id="arTabPendente" onclick="arMudarFiltro('pendente')" style="padding: 5px 10px; border: none; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; background: white; color: var(--primary);">Pendentes</button>
                                 <button id="arTabRecebido" onclick="arMudarFiltro('recebido')" style="padding: 5px 10px; border: none; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; background: transparent; color: rgba(255,255,255,0.8);">Recebidos</button>
                             </div>
-                            <input id="arBusca" type="text" placeholder="🔍 Buscar devedor..." oninput="renderizarAReceber()"
-                                style="flex: 1; padding: 6px 10px; border: none; border-radius: 6px; font-size: 11px; background: rgba(255,255,255,0.9); min-width: 0;">
+                            <div style="flex:1;position:relative;min-width:0;">
+                                <input id="arBusca" type="text" placeholder="🔍 Nome ou #comanda..." oninput="renderizarAReceber()"
+                                    style="width:100%;box-sizing:border-box;padding:6px 28px 6px 10px;border:none;border-radius:6px;font-size:11px;background:rgba(255,255,255,0.9);">
+                                <span id="arBuscaLimpar" onclick="document.getElementById('arBusca').value='';renderizarAReceber();"
+                                    style="display:none;position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;color:#888;font-size:14px;line-height:1;">✕</span>
+                            </div>
                             <button onclick="carregarAReceber()" style="padding: 6px 10px; background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.4); border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; flex-shrink: 0;">↻</button>
                         </div>
                     </div>
@@ -1956,28 +1961,31 @@
         // ====================================================
         const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbwAaSxDyP5NC8HlJ9AgMVWOV0CzjFfbr1DLNwSIp3BgEymvHGaYb2VLz5gY58dgOTg98w/exec';
 
-        async function sheetsAPI(action, dados = {}) {
+        async function sheetsAPI(action, dados = {}, timeoutMs = 20000) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
             try {
                 const ehLeitura = action.startsWith('get');
+                let resp;
                 if (ehLeitura) {
                     const params = new URLSearchParams({ action, ...dados });
-                    const resp = await fetch(`${SHEETS_API_URL}?${params}`);
-                    const json = await resp.json();
-                    if (json.erro) throw new Error(json.erro);
-                    return json;
+                    resp = await fetch(`${SHEETS_API_URL}?${params}`, { signal: controller.signal });
                 } else {
-                    const resp = await fetch(SHEETS_API_URL, {
+                    resp = await fetch(SHEETS_API_URL, {
                         method: 'POST',
-                        body: JSON.stringify({ action, ...dados })
+                        body: JSON.stringify({ action, ...dados }),
+                        signal: controller.signal
                     });
-                    const json = await resp.json();
-                    if (json.erro) throw new Error(json.erro);
-                    return json;
                 }
+                clearTimeout(timeoutId);
+                const json = await resp.json();
+                if (json.erro) throw new Error(json.erro);
+                return json;
             } catch (err) {
-                console.warn(`[Sheets] Erro em "${action}":`, err.message);
-                // Retorna objeto com erro para que a UI possa mostrar mensagem específica
-                return { sucesso: false, erro: err.message };
+                clearTimeout(timeoutId);
+                const msg = err.name === 'AbortError' ? `Timeout (${timeoutMs/1000}s) em "${action}"` : err.message;
+                console.warn(`[Sheets] Erro em "${action}":`, msg);
+                return { sucesso: false, erro: msg };
             }
         }
 
@@ -6515,6 +6523,7 @@ function carregarComanda() {
                 
                 btn.style.cssText = `
                     width: 100%;
+                    height: 64px;
                     padding: 4px 4px;
                     background: white;
                     border: 1px solid var(--border);
@@ -6524,8 +6533,10 @@ function carregarComanda() {
                     transition: all 0.2s;
                     display: flex;
                     flex-direction: column;
+                    justify-content: center;
                     gap: 1px;
                     border-radius: 2px;
+                    overflow: hidden;
                 `;
                 btn.innerHTML = `
                     <div class="ck-num">#${comanda.numero}</div>
@@ -6746,9 +6757,20 @@ var itens = comanda.itens || [];
                 '<div style="text-align:center;color:var(--gray);padding:40px 20px;font-size:12px;">Carregando...</div>';
             try {
                 const dados = await sheetsAPI('getAReceber');
+                console.log('[AReceber] resposta bruta:', JSON.stringify(dados).substring(0, 300));
+                if (dados && dados.erro) {
+                    document.getElementById('arLista').innerHTML =
+                        `<div style="text-align:center;color:#E74C3C;padding:40px 20px;font-size:12px;">⚠️ Erro ao carregar: ${dados.erro}<br><br><button onclick="carregarAReceber()" style="padding:8px 16px;background:var(--primary);color:white;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">↻ Tentar novamente</button></div>`;
+                    return;
+                }
                 _arDados = Array.isArray(dados) ? dados : [];
+                console.log('[AReceber] total carregado:', _arDados.length,
+                    '| pendentes:', _arDados.filter(c => !c.baixa_data).length,
+                    '| recebidos:', _arDados.filter(c => !!c.baixa_data).length);
             } catch(e) {
-                _arDados = [];
+                document.getElementById('arLista').innerHTML =
+                    `<div style="text-align:center;color:#E74C3C;padding:40px 20px;font-size:12px;">⚠️ Erro de conexão<br><br><button onclick="carregarAReceber()" style="padding:8px 16px;background:var(--primary);color:white;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">↻ Tentar novamente</button></div>`;
+                return;
             }
             renderizarAReceber();
         }
@@ -6756,14 +6778,18 @@ var itens = comanda.itens || [];
         function arMudarFiltro(filtro) {
             _arFiltro = filtro;
             document.getElementById('arTabPendente').style.background  = filtro === 'pendente' ? 'white' : 'transparent';
-            document.getElementById('arTabPendente').style.color       = filtro === 'pendente' ? '#1e8449' : 'rgba(255,255,255,0.8)';
+            document.getElementById('arTabPendente').style.color       = filtro === 'pendente' ? 'var(--primary)' : 'rgba(255,255,255,0.8)';
             document.getElementById('arTabRecebido').style.background  = filtro === 'recebido' ? 'white' : 'transparent';
-            document.getElementById('arTabRecebido').style.color       = filtro === 'recebido' ? '#1e8449' : 'rgba(255,255,255,0.8)';
+            document.getElementById('arTabRecebido').style.color       = filtro === 'recebido' ? 'var(--primary)' : 'rgba(255,255,255,0.8)';
             renderizarAReceber();
         }
 
         function renderizarAReceber() {
-            const busca   = (document.getElementById('arBusca')?.value || '').toLowerCase();
+            const buscaRaw = document.getElementById('arBusca')?.value || '';
+            const busca    = buscaRaw.toLowerCase().replace(/^#/, '');
+            // Mostrar/ocultar botão limpar
+            const btnLimpar = document.getElementById('arBuscaLimpar');
+            if (btnLimpar) btnLimpar.style.display = buscaRaw ? 'block' : 'none';
             const isAdmin = state.perfil === 'Admin';
 
             const pendentes = _arDados.filter(c => !c.baixa_data);
@@ -6772,28 +6798,46 @@ var itens = comanda.itens || [];
             const totalPend = pendentes.reduce((s, c) => s + (parseFloat(c.total) || 0), 0);
             const totalRec  = recebidos.reduce( (s, c) => s + (parseFloat(c.total) || 0), 0);
 
-            document.getElementById('arTotalPendente').textContent = 'R$ ' + totalPend.toFixed(2).replace('.', ',');
-            document.getElementById('arQtdPendente').textContent   = pendentes.length + ' comanda(s) pendente(s)';
-            document.getElementById('arTotalRecebido').textContent  = 'R$ ' + totalRec.toFixed(2).replace('.', ',');
-            document.getElementById('arQtdRecebido').textContent    = recebidos.length + ' baixa(s)';
-
             // Badge no botão do menu
             const badge = document.getElementById('badgeAReceber');
             if (badge) {
-                if (pendentes.length > 0) {
-                    badge.style.display = 'block';
-                    badge.textContent   = pendentes.length > 9 ? '9+' : String(pendentes.length);
-                } else {
-                    badge.style.display = 'none';
-                }
+                badge.style.display = pendentes.length > 0 ? 'block' : 'none';
+                badge.textContent   = pendentes.length > 9 ? '9+' : String(pendentes.length);
             }
 
             let lista = _arFiltro === 'pendente' ? pendentes : recebidos;
             if (busca) {
                 lista = lista.filter(c =>
-                    (c.obs_pagamento || '').toLowerCase().includes(busca) ||
-                    String(c.numero  || '').includes(busca)
+                    String(c.obs_pagamento || '').toLowerCase().includes(busca) ||
+                    String(c.numero  || '').includes(busca) ||
+                    String(c.total   || '').includes(busca)
                 );
+            }
+
+            // Atualizar header: se há busca ativa em pendentes, mostra totais filtrados
+            const btnTodos   = document.getElementById('arBtnBaixaTodos');
+            const lblTodos   = document.getElementById('arBtnBaixaTodosLabel');
+            const elTotal    = document.getElementById('arTotalPendente');
+            const elQtd      = document.getElementById('arQtdPendente');
+            const elLabel    = document.getElementById('arHeaderLabel');
+            if (busca && _arFiltro === 'pendente') {
+                const totalFiltrado = lista.reduce((s, c) => s + (parseFloat(c.total) || 0), 0);
+                elTotal.textContent = 'R$ ' + totalFiltrado.toFixed(2).replace('.', ',');
+                elQtd.textContent   = lista.length + ' resultado(s) de ' + pendentes.length + ' pendente(s)';
+                elLabel.textContent = '🔍 Filtro ativo';
+                if (btnTodos && lista.length > 0) {
+                    btnTodos.style.display = 'block';
+                    if (lblTodos) lblTodos.textContent = lista.length + ' · R$ ' + totalFiltrado.toFixed(2).replace('.', ',');
+                    // Guardar lista filtrada para baixa em lote
+                    btnTodos.dataset.lote = JSON.stringify(lista.map(c => ({ id: c.id, numero: c.numero, obs: String(c.obs_pagamento || '') })));
+                } else if (btnTodos) {
+                    btnTodos.style.display = 'none';
+                }
+            } else {
+                elTotal.textContent = 'R$ ' + totalPend.toFixed(2).replace('.', ',');
+                elQtd.textContent   = pendentes.length + ' comanda(s) pendente(s)';
+                elLabel.textContent = '📋 A Receber — Pendências';
+                if (btnTodos) btnTodos.style.display = 'none';
             }
 
             // Pendentes: mais antigo primeiro (follow-up urgente); Recebidos: mais recente primeiro
@@ -6813,7 +6857,7 @@ var itens = comanda.itens || [];
 
             const agora = new Date();
             container.innerHTML = lista.map(c => {
-                const devedor = c.obs_pagamento || '(sem identificação)';
+                const devedor = String(c.obs_pagamento || '(sem identificação)');
                 const dvedorJs = devedor.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                 const valor   = parseFloat(c.total) || 0;
                 const dtPag   = c.timestamp_pagamento ? new Date(c.timestamp_pagamento) : null;
@@ -6823,25 +6867,25 @@ var itens = comanda.itens || [];
                 const hrFmt   = dtPag ? dtPag.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) : '';
 
                 if (_arFiltro === 'pendente') {
-                    return `<div style="background:white;border-radius:10px;padding:14px 16px;box-shadow:0 1px 6px rgba(0,0,0,0.08);border-left:4px solid ${alerta ? '#E74C3C' : '#27ae60'};display:flex;align-items:center;gap:12px;">
+                    return `<div style="background:white;border-radius:10px;padding:14px 16px;box-shadow:0 1px 6px rgba(0,0,0,0.08);border-left:4px solid ${alerta ? '#E74C3C' : 'var(--primary)'};display:flex;align-items:center;gap:12px;">
                         <div style="flex:1;min-width:0;">
                             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                                <span style="background:#1e8449;color:white;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:bold;flex-shrink:0;">#${c.numero}</span>
+                                <span style="background:var(--primary);color:white;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:bold;flex-shrink:0;">#${c.numero}</span>
                                 ${alerta ? `<span style="background:#E74C3C;color:white;border-radius:4px;padding:2px 6px;font-size:9px;font-weight:bold;">${diasAtr}d atrasado ⚠️</span>` : ''}
                             </div>
                             <div style="font-size:14px;font-weight:bold;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${devedor}</div>
-                            <div style="font-size:10px;color:#888;margin-top:3px;">Pago em ${dtFmt} às ${hrFmt}</div>
+                            <div style="font-size:10px;color:#888;margin-top:3px;">Registrado em ${dtFmt}${hrFmt ? ' às ' + hrFmt : ''}</div>
                         </div>
                         <div style="text-align:right;flex-shrink:0;">
-                            <div style="font-size:19px;font-weight:bold;color:#D4724F;">R$ ${valor.toFixed(2).replace('.', ',')}</div>
+                            <div style="font-size:19px;font-weight:bold;color:var(--primary);">R$ ${valor.toFixed(2).replace('.', ',')}</div>
                             ${isAdmin ? `<button onclick="abrirModalBaixaAR('${c.id}','${c.numero}','${dvedorJs}',${valor})"
-                                style="margin-top:7px;padding:7px 13px;background:linear-gradient(135deg,#1e8449,#27ae60);color:white;border:none;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;">✓ Dar Baixa</button>` : ''}
+                                style="margin-top:7px;padding:7px 13px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:white;border:none;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;">✓ Dar Baixa</button>` : ''}
                         </div>
                     </div>`;
                 } else {
                     const dtBaixa  = c.baixa_data ? new Date(c.baixa_data) : null;
                     const dtBFmt   = dtBaixa ? dtBaixa.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' }) + ' ' + dtBaixa.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) : '—';
-                    const formaMap = { dinheiro:'💵 Dinheiro', pix:'📱 Pix', cartao:'💳 Cartão', transferencia:'🏦 Transf.' };
+                    const formaMap = { dinheiro:'💵 Dinheiro', pix:'📱 PIX', credito:'💳 CC', debito:'🏧 DB', voucher:'🎫 VC' };
                     const forma    = formaMap[c.baixa_forma] || c.baixa_forma || '—';
                     return `<div style="background:white;border-radius:10px;padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,0.05);border-left:4px solid #bdc3c7;opacity:0.85;display:flex;align-items:center;gap:12px;">
                         <div style="flex:1;min-width:0;">
@@ -6850,7 +6894,7 @@ var itens = comanda.itens || [];
                                 <span style="background:#27ae60;color:white;border-radius:4px;padding:2px 6px;font-size:9px;font-weight:bold;">✓ RECEBIDO</span>
                             </div>
                             <div style="font-size:14px;font-weight:bold;color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${devedor}</div>
-                            <div style="font-size:10px;color:#888;margin-top:3px;">Baixa: ${dtBFmt} · ${forma}</div>
+                            <div style="font-size:10px;color:#888;margin-top:3px;">Comanda: ${dtFmt}${hrFmt ? ' ' + hrFmt : ''} · Baixa: ${dtBFmt} · ${forma}</div>
                         </div>
                         <div style="font-size:16px;font-weight:bold;color:#888;">R$ ${valor.toFixed(2).replace('.', ',')}</div>
                     </div>`;
@@ -6859,55 +6903,112 @@ var itens = comanda.itens || [];
         }
 
         // ── Modal Dar Baixa ──
-        let _baixaCtx = null;
+        let _baixaCtx   = null;   // modo individual: { id, numero, devedor, valor }
+        let _baixaLote  = null;   // modo lote: [ { id, numero, obs }, ... ]
         let _baixaForma = '';
 
-        function abrirModalBaixaAR(id, numero, devedor, valor) {
-            _baixaCtx = { id, numero, devedor, valor };
+        function _abrirModalBaixaBase() {
             _baixaForma = '';
-            document.getElementById('barComanda').textContent = 'Comanda #' + numero;
-            document.getElementById('barDevedor').textContent = devedor;
-            document.getElementById('barValor').textContent   = 'R$ ' + parseFloat(valor).toFixed(2).replace('.', ',');
             document.getElementById('btnConfirmarBaixaAR').disabled = true;
+            document.getElementById('btnConfirmarBaixaAR').textContent = '✓ Confirmar';
             document.querySelectorAll('.bar-forma-btn').forEach(b => {
                 b.style.background = 'white'; b.style.borderColor = '#ddd'; b.style.color = '#333';
             });
             document.getElementById('modalBaixaAR').style.display = 'flex';
         }
 
+        function abrirModalBaixaAR(id, numero, devedor, valor) {
+            _baixaCtx  = { id, numero, devedor, valor };
+            _baixaLote = null;
+            document.getElementById('barComanda').textContent = 'Comanda #' + numero;
+            document.getElementById('barDevedor').textContent = String(devedor);
+            document.getElementById('barValor').textContent   = 'R$ ' + parseFloat(valor).toFixed(2).replace('.', ',');
+            _abrirModalBaixaBase();
+        }
+
+        function abrirModalBaixaTodos() {
+            const btn = document.getElementById('arBtnBaixaTodos');
+            if (!btn) return;
+            let lote = [];
+            try { lote = JSON.parse(btn.dataset.lote || '[]'); } catch(e) {}
+            if (!lote.length) return;
+            _baixaLote = lote;
+            _baixaCtx  = null;
+            const totalLote = lote.reduce((s, c) => {
+                const item = _arDados.find(x => String(x.id) === String(c.id));
+                return s + (item ? parseFloat(item.total) || 0 : 0);
+            }, 0);
+            const nomes = [...new Set(lote.map(c => c.obs).filter(Boolean))].slice(0, 3).join(', ') || '(sem identificação)';
+            document.getElementById('barComanda').textContent = lote.length + ' comanda(s) em lote';
+            document.getElementById('barDevedor').textContent = nomes + (lote.length > 3 ? '...' : '');
+            document.getElementById('barValor').textContent   = 'R$ ' + totalLote.toFixed(2).replace('.', ',');
+            _abrirModalBaixaBase();
+        }
+
         function fecharModalBaixaAR() {
             document.getElementById('modalBaixaAR').style.display = 'none';
-            _baixaCtx = null;
+            _baixaCtx  = null;
+            _baixaLote = null;
         }
 
         function arSelecionarForma(btn) {
             document.querySelectorAll('.bar-forma-btn').forEach(b => {
                 b.style.background = 'white'; b.style.borderColor = '#ddd'; b.style.color = '#333';
             });
-            btn.style.background = '#1e8449'; btn.style.borderColor = '#1e8449'; btn.style.color = 'white';
+            btn.style.background = 'var(--primary)'; btn.style.borderColor = 'var(--primary)'; btn.style.color = 'white';
             _baixaForma = btn.dataset.forma;
             document.getElementById('btnConfirmarBaixaAR').disabled = false;
         }
 
         async function confirmarBaixaAReceber() {
-            if (!_baixaCtx) return;
             const forma = _baixaForma;
             if (!forma) { showToast('Selecione a forma de recebimento', 'error'); return; }
             const btn = document.getElementById('btnConfirmarBaixaAR');
-            btn.disabled = true; btn.textContent = '...';
-            try {
-                await sheetsAPI('darBaixaAReceber', {
-                    comanda_id: _baixaCtx.id,
+            btn.disabled = true;
+            const usuario = state.userLogado || state.user || '';
+
+            // ── Modo lote ──
+            if (_baixaLote && _baixaLote.length > 0) {
+                const total = _baixaLote.reduce((s, c) => {
+                    const item = _arDados.find(x => String(x.id) === String(c.id));
+                    return s + (item ? parseFloat(item.total) || 0 : 0);
+                }, 0);
+                btn.textContent = '⏳ Processando...';
+                btn.style.opacity = '0.8';
+
+                const resultado = await sheetsAPI('darBaixaAReceberLote', {
+                    ids: _baixaLote.map(c => c.id),
                     forma_baixa: forma,
-                    usuario: state.userLogado || state.user || ''
+                    usuario
                 });
-                // Atualizar cache local imediatamente
+
+                // Atualizar cache local
+                const agora_ts = new Date().toISOString();
+                _baixaLote.forEach(c => {
+                    const item = _arDados.find(x => String(x.id) === String(c.id));
+                    if (item) { item.baixa_data = agora_ts; item.baixa_forma = forma; item.baixa_usuario = usuario; }
+                });
+
+                const processados = resultado?.processados ?? _baixaLote.length;
+                fecharModalBaixaAR();
+
+                // Feedback de resultado
+                showToast(`✅ ${processados} comanda(s) recebida(s) · R$ ${total.toFixed(2).replace('.', ',')}`, 'success');
+
+                // Limpar filtro e recarregar
+                const inputBusca = document.getElementById('arBusca');
+                if (inputBusca) inputBusca.value = '';
+                renderizarAReceber();
+                return;
+            }
+
+            // ── Modo individual ──
+            if (!_baixaCtx) return;
+            btn.textContent = '...';
+            try {
+                await sheetsAPI('darBaixaAReceber', { comanda_id: _baixaCtx.id, forma_baixa: forma, usuario });
                 const item = _arDados.find(c => String(c.id) === String(_baixaCtx.id));
-                if (item) {
-                    item.baixa_data    = new Date().toISOString();
-                    item.baixa_forma   = forma;
-                    item.baixa_usuario = state.userLogado || state.user || '';
-                }
+                if (item) { item.baixa_data = new Date().toISOString(); item.baixa_forma = forma; item.baixa_usuario = usuario; }
                 fecharModalBaixaAR();
                 showToast('Baixa registrada com sucesso! ✅', 'success');
                 renderizarAReceber();
@@ -6940,26 +7041,27 @@ var itens = comanda.itens || [];
         <div style="background:white; border-radius:14px; width:94%; max-width:400px; padding:24px; box-shadow:0 12px 40px rgba(0,0,0,0.35); position:relative;">
             <div style="text-align:center; margin-bottom:18px;">
                 <div style="font-size:36px; margin-bottom:6px;">✅</div>
-                <div style="font-size:16px; font-weight:bold; color:#1e8449;">Confirmar Recebimento</div>
+                <div style="font-size:16px; font-weight:bold; color:var(--primary);">Confirmar Recebimento</div>
                 <div id="barComanda" style="font-size:12px; color:#666; margin-top:4px;"></div>
             </div>
-            <div style="background:#f0faf4; border:1px solid #a9dfbf; border-radius:8px; padding:12px; margin-bottom:16px; text-align:center;">
+            <div style="background:#fdf6f3; border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:16px; text-align:center;">
                 <div style="font-size:10px; color:#888; font-weight:bold; text-transform:uppercase; margin-bottom:2px;">Devedor</div>
-                <div id="barDevedor" style="font-size:16px; font-weight:bold; color:#1e8449;"></div>
-                <div id="barValor" style="font-size:22px; font-weight:bold; color:#D4724F; margin-top:2px;"></div>
+                <div id="barDevedor" style="font-size:16px; font-weight:bold; color:var(--primary);"></div>
+                <div id="barValor" style="font-size:22px; font-weight:bold; color:var(--primary); margin-top:2px;"></div>
             </div>
             <div style="margin-bottom:18px;">
                 <div style="font-size:11px; font-weight:bold; color:#555; margin-bottom:8px; text-transform:uppercase;">Como foi recebido?</div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-                    <button class="bar-forma-btn" data-forma="dinheiro" onclick="arSelecionarForma(this)" style="padding:10px 6px; border:2px solid #ddd; border-radius:8px; background:white; font-size:12px; font-weight:bold; cursor:pointer; color:#333;">💵 Dinheiro</button>
-                    <button class="bar-forma-btn" data-forma="pix"      onclick="arSelecionarForma(this)" style="padding:10px 6px; border:2px solid #ddd; border-radius:8px; background:white; font-size:12px; font-weight:bold; cursor:pointer; color:#333;">📱 Pix</button>
-                    <button class="bar-forma-btn" data-forma="cartao"   onclick="arSelecionarForma(this)" style="padding:10px 6px; border:2px solid #ddd; border-radius:8px; background:white; font-size:12px; font-weight:bold; cursor:pointer; color:#333;">💳 Cartão</button>
-                    <button class="bar-forma-btn" data-forma="transferencia" onclick="arSelecionarForma(this)" style="padding:10px 6px; border:2px solid #ddd; border-radius:8px; background:white; font-size:12px; font-weight:bold; cursor:pointer; color:#333;">🏦 Transf.</button>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+                    <button class="bar-forma-btn" data-forma="pix"      onclick="arSelecionarForma(this)" style="padding:10px 4px; border:2px solid #ddd; border-radius:8px; background:white; font-size:11px; font-weight:bold; cursor:pointer; color:#333;">📱<br>PIX</button>
+                    <button class="bar-forma-btn" data-forma="dinheiro" onclick="arSelecionarForma(this)" style="padding:10px 4px; border:2px solid #ddd; border-radius:8px; background:white; font-size:11px; font-weight:bold; cursor:pointer; color:#333;">💵<br>$</button>
+                    <button class="bar-forma-btn" data-forma="credito"  onclick="arSelecionarForma(this)" style="padding:10px 4px; border:2px solid #ddd; border-radius:8px; background:white; font-size:11px; font-weight:bold; cursor:pointer; color:#333;">💳<br>CC</button>
+                    <button class="bar-forma-btn" data-forma="debito"   onclick="arSelecionarForma(this)" style="padding:10px 4px; border:2px solid #ddd; border-radius:8px; background:white; font-size:11px; font-weight:bold; cursor:pointer; color:#333;">🏧<br>DB</button>
+                    <button class="bar-forma-btn" data-forma="voucher"  onclick="arSelecionarForma(this)" style="padding:10px 4px; border:2px solid #ddd; border-radius:8px; background:white; font-size:11px; font-weight:bold; cursor:pointer; color:#333;">🎫<br>VC</button>
                 </div>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                 <button onclick="fecharModalBaixaAR()" style="padding:13px; background:#e8e8e8; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:13px; color:#333;">Cancelar</button>
-                <button id="btnConfirmarBaixaAR" onclick="confirmarBaixaAReceber()" style="padding:13px; background:linear-gradient(135deg,#1e8449,#27ae60); color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:13px;" disabled>✓ Confirmar</button>
+                <button id="btnConfirmarBaixaAR" onclick="confirmarBaixaAReceber()" style="padding:13px; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:13px;" disabled>✓ Confirmar</button>
             </div>
         </div>
     </div>
