@@ -1677,6 +1677,7 @@
                            box-shadow: 0 0 0 5px rgba(212,114,79,0.15), inset 0 2px 6px rgba(0,0,0,0.04);
                            outline: none;">
                 <div style="font-size: 11px; color: #bbb; margin-top: 8px; font-weight: bold; letter-spacing: 2px;">GRAMAS</div>
+                <div id="weightStatusBadge" style="display:none; margin-top:6px; font-size:10px; font-weight:bold; letter-spacing:1px; padding:3px 10px; border-radius:20px; background:#f0faf5; color:#27ae60; border:1px solid #a8e6c8;">⚖️ BALANÇA</div>
             </div>
 
             <!-- COLUNA DIREITA: totais + botões -->
@@ -1962,28 +1963,34 @@
         const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbwAaSxDyP5NC8HlJ9AgMVWOV0CzjFfbr1DLNwSIp3BgEymvHGaYb2VLz5gY58dgOTg98w/exec';
 
         async function sheetsAPI(action, dados = {}, timeoutMs = 20000) {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
             try {
                 const ehLeitura = action.startsWith('get');
                 let resp;
                 if (ehLeitura) {
-                    const params = new URLSearchParams({ action, ...dados });
-                    resp = await fetch(`${SHEETS_API_URL}?${params}`, { signal: controller.signal });
+                    // GET: usa AbortController para evitar hang infinito
+                    const controller = new AbortController();
+                    const timeoutId  = setTimeout(() => controller.abort(), timeoutMs);
+                    try {
+                        const params = new URLSearchParams({ action, ...dados });
+                        resp = await fetch(`${SHEETS_API_URL}?${params}`, { signal: controller.signal });
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
                 } else {
+                    // POST: SEM signal — o redirect do GAS (302→googleusercontent) é incompatível
+                    // com AbortController em alguns browsers Android/Chrome
                     resp = await fetch(SHEETS_API_URL, {
                         method: 'POST',
-                        body: JSON.stringify({ action, ...dados }),
-                        signal: controller.signal
+                        body: JSON.stringify({ action, ...dados })
                     });
                 }
-                clearTimeout(timeoutId);
                 const json = await resp.json();
                 if (json.erro) throw new Error(json.erro);
                 return json;
             } catch (err) {
-                clearTimeout(timeoutId);
-                const msg = err.name === 'AbortError' ? `Timeout (${timeoutMs/1000}s) em "${action}"` : err.message;
+                const msg = err.name === 'AbortError'
+                    ? `Timeout (${timeoutMs/1000}s) em "${action}"`
+                    : err.message;
                 console.warn(`[Sheets] Erro em "${action}":`, msg);
                 return { sucesso: false, erro: msg };
             }
@@ -2141,6 +2148,7 @@
 
         async function sheets_novaComanda(chave, numero) {
             const res = await sheetsAPI('novaComanda', { numero: String(numero), usuario: state.userLogado || state.user || '' });
+            if (res && res.erro) console.error('[Sheets] novaComanda erro:', res.erro);
             if (res && res.jaAberta) {
                 // ⚠️ Outro device abriu essa comanda antes — desfaz criação local e sincroniza
                 console.warn('[Sheets] Comanda', numero, 'já aberta em outro device — revertendo');
@@ -2406,6 +2414,8 @@
                     if (el.requestFullscreen) el.requestFullscreen();
                     else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
                 } catch(e) { /* silencioso — alguns browsers bloqueiam sem gesto */ }
+                // Inicia leitura contínua da balança
+                _initWeightService();
             }
 
             // ✅ INICIAR POLLING
@@ -2574,6 +2584,7 @@
         function handleLogout() {
             // Sair do modo Balança se ativo
             document.body.classList.remove('modo-balanca');
+            _destroyWeightService();
             try {
                 if (document.exitFullscreen) document.exitFullscreen();
                 else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
@@ -5327,11 +5338,34 @@ function carregarComanda() {
                     showToast(msg, 'success');
                     pollFromSheets();
                 } else {
+                    // Mostra erro e fica na tela atual — NÃO navega
                     showToast(res?.erro || 'Erro ao abrir caixa', 'error');
                 }
             } catch(e) {
+                // Erro de rede: sincroniza estado real para não ficar preso em tela errada
                 showToast('Erro de conexão ao abrir caixa', 'error');
+                _sincronizarEstadoCaixa();
             }
+        }
+
+        async function _sincronizarEstadoCaixa() {
+            try {
+                const s = await sheetsAPI('getCaixaStatus');
+                if (!s || s.erro) return;
+                if (s.status === 'aberto') {
+                    state.caixa = {
+                        status:       'aberto',
+                        troco:        s.troco        || 0,
+                        dataAbertura: s.data         || null,
+                        horaAbertura: s.horaAbertura || null,
+                        usuario:      s.usuarioAbertura || null
+                    };
+                } else {
+                    state.caixa = { status: 'fechado', troco: 0, dataAbertura: null, horaAbertura: null, usuario: null };
+                }
+                saveStorage();
+                renderizarCaixa();
+            } catch(e) {}
         }
 
         function iniciarFechamentoCaixa() {
@@ -5966,15 +6000,24 @@ function carregarComanda() {
 
         function abrirModalBuffetQuilo(codigo, item) {
             itemQuilo = { codigo, item };
-            
+
             document.getElementById('exibirPrecoQuilo').textContent = item.preco.toFixed(2);
             document.getElementById('exibirTotalModal').textContent = 'R$ 0,00';
             document.getElementById('inputPeso').value = '';
             document.getElementById('modalBuffetQuilo').style.display = 'flex';
-            
-            // ✅ FOCUS automático (input já tem autofocus no HTML)
-            const inputPeso = document.getElementById('inputPeso');
-            setTimeout(() => inputPeso.focus(), 100);
+
+            // ⚖️ Preenche com o último peso estável da balança (se disponível)
+            if (weightService) {
+                _updateWeightStatusBadge();
+                weightService.fillModal();  // preenche imediatamente se já há peso
+                // _syncModal() do WeightService continua atualizando a cada 300ms
+                _weightLog('modal aberta', 'peso_atual=' + (weightService.getLastStableWeight() ?? 'aguardando'));
+            } else {
+                // Usuário sem balança: foco para digitação manual
+                const inputPeso = document.getElementById('inputPeso');
+                setTimeout(() => inputPeso.focus(), 100);
+                _weightLogAction && _weightLog('modal_manual', 'sem_balanca');
+            }
         }
 
         function fecharModalBuffet() {
@@ -6031,12 +6074,19 @@ function carregarComanda() {
         function confirmarPesoModal() {
             const inputPeso = document.getElementById('inputPeso');
             const peso = parseFloat(inputPeso.value);
-            
+
             if (!peso || peso <= 0) {
                 showToast('Informe o peso', 'error');
                 return;
             }
-            
+
+            // ⚖️ Log: origem do peso (automático vs manual)
+            if (weightService) {
+                const estavel = weightService.getLastStableWeight();
+                const origem  = (estavel !== null && Math.abs(peso - estavel) <= 1) ? 'balança' : 'manual';
+                _weightLog('peso_confirmado', `${peso}g via=${origem}`);
+            }
+
             // ✅ RECOLHER TECLADO (com garantia)
             inputPeso.blur();
             setTimeout(() => inputPeso.blur(), 50);
@@ -7015,6 +7065,312 @@ var itens = comanda.itens || [];
             } catch(e) {
                 showToast('Erro ao registrar baixa', 'error');
                 btn.disabled = false; btn.textContent = '✓ Confirmar';
+            }
+        }
+
+        // ====================================================
+        // ⚖️ WEIGHT INTEGRATION — Chef Mind Balança
+        // ====================================================
+
+        // ── WeightProvider Interface (duck typing) ──────────
+        // Toda implementação deve expor:
+        //   connect()         → Promise
+        //   disconnect()      → void
+        //   getStatus()       → 'connected' | 'disconnected' | 'error'
+        //   onWeightUpdate(cb) → registra callback(gramas: number)
+
+        // ── 1. MockWeightProvider ────────────────────────────
+        class MockWeightProvider {
+            constructor() {
+                this._listeners  = [];
+                this._intervalId = null;
+                this._status     = 'disconnected';
+                this._baseWeight = 0;
+                this._tick       = 0;
+            }
+
+            connect() {
+                this._status     = 'connected';
+                this._baseWeight = 250 + Math.round(Math.random() * 600); // 250–850 g
+                this._tick       = 0;
+                this._intervalId = setInterval(() => this._emitNext(), 150);
+                console.log('[WeightMock] Conectado. Base simulada:', this._baseWeight, 'g');
+                return Promise.resolve();
+            }
+
+            disconnect() {
+                if (this._intervalId) { clearInterval(this._intervalId); this._intervalId = null; }
+                this._status = 'disconnected';
+                console.log('[WeightMock] Desconectado.');
+            }
+
+            getStatus() { return this._status; }
+
+            onWeightUpdate(cb) { this._listeners.push(cb); }
+
+            _emitNext() {
+                // Simula oscilações realistas: ±3g com picos ocasionais de ±8g
+                this._tick++;
+                const jitter  = Math.round((Math.random() - 0.5) * 6);
+                const spike   = (this._tick % 17 === 0) ? Math.round((Math.random() - 0.5) * 16) : 0;
+                const weight  = Math.max(0, this._baseWeight + jitter + spike);
+                console.log('[WeightMock] Leitura:', weight, 'g');
+                this._listeners.forEach(cb => { try { cb(weight); } catch(e) {} });
+            }
+        }
+
+        // ── 2. SerialWeightProviderAndroid ──────────────────
+        // Skeleton pronto para conexão com balança Urano via FTDI RS232→USB-C
+        // Requer Web Serial API (Chrome 89+ desktop) ou bridge Android nativo
+        class SerialWeightProviderAndroid {
+            constructor(config = {}) {
+                this._cfg = {
+                    baudRate: config.baudRate || 9600,
+                    dataBits: config.dataBits || 8,
+                    stopBits: config.stopBits || 1,
+                    parity:   config.parity   || 'none',
+                };
+                this._port      = null;
+                this._reader    = null;
+                this._buffer    = '';
+                this._status    = 'disconnected';
+                this._listeners = [];
+                this._alive     = false;
+            }
+
+            async connect() {
+                if (!navigator.serial) {
+                    throw new Error('Web Serial API não disponível. Use Chrome Desktop ou bridge Android.');
+                }
+                try {
+                    this._port   = await navigator.serial.requestPort();
+                    await this._port.open(this._cfg);
+                    this._status = 'connected';
+                    this._alive  = true;
+                    console.log('[WeightSerial] Porta aberta:', this._cfg);
+                    this._readLoop();
+                } catch(e) {
+                    this._status = 'error';
+                    console.error('[WeightSerial] Falha ao conectar:', e.message);
+                    throw e;
+                }
+            }
+
+            async disconnect() {
+                this._alive  = false;
+                this._status = 'disconnected';
+                try { if (this._reader) await this._reader.cancel(); } catch(e) {}
+                try { if (this._port)   await this._port.close();    } catch(e) {}
+                this._reader = null;
+                this._port   = null;
+                console.log('[WeightSerial] Desconectado.');
+            }
+
+            async _readLoop() {
+                while (this._alive && this._port?.readable) {
+                    this._reader = this._port.readable.getReader();
+                    try {
+                        while (true) {
+                            const { value, done } = await this._reader.read();
+                            if (done) break;
+                            this._processChunk(new TextDecoder().decode(value));
+                        }
+                    } catch(e) {
+                        if (this._alive) {
+                            this._status = 'error';
+                            console.error('[WeightSerial] Erro de leitura:', e.message);
+                            this._scheduleReconnect();
+                        }
+                    } finally {
+                        try { this._reader.releaseLock(); } catch(e) {}
+                        this._reader = null;
+                    }
+                }
+            }
+
+            _processChunk(text) {
+                this._buffer += text;
+                const lines  = this._buffer.split(/[\r\n]+/);
+                this._buffer = lines.pop(); // guarda linha incompleta
+                lines.forEach(l => this._parseLine(l.trim()));
+            }
+
+            // Urano: "ST,GS,+  0.300 kg"  ou  "ST,GS,+0.300kg"
+            // Alguns modelos enviam apenas o número em gramas
+            _parseLine(line) {
+                if (!line) return;
+                console.log('[WeightSerial] Linha recebida:', line);
+                const kgMatch = line.match(/([0-9]+\.?[0-9]*)\s*kg/i);
+                const gMatch  = line.match(/([0-9]+\.?[0-9]*)\s*g\b/i);
+                const rawNum  = line.match(/^\s*\+?\s*([0-9]+\.?[0-9]*)\s*$/);
+                let gramas = null;
+                if (kgMatch)   gramas = Math.round(parseFloat(kgMatch[1]) * 1000);
+                else if (gMatch)  gramas = Math.round(parseFloat(gMatch[1]));
+                else if (rawNum) gramas = parseFloat(rawNum[1]) > 10
+                    ? Math.round(parseFloat(rawNum[1]))           // já em gramas
+                    : Math.round(parseFloat(rawNum[1]) * 1000);   // provavelmente kg
+                if (gramas !== null && gramas >= 0) {
+                    console.log('[WeightSerial] Peso parseado:', gramas, 'g');
+                    this._listeners.forEach(cb => { try { cb(gramas); } catch(e) {} });
+                }
+            }
+
+            _scheduleReconnect() {
+                console.log('[WeightSerial] Tentando reconectar em 3s...');
+                setTimeout(async () => {
+                    if (this._alive) {
+                        try { await this.connect(); }
+                        catch(e) { this._scheduleReconnect(); }
+                    }
+                }, 3000);
+            }
+
+            getStatus() { return this._status; }
+            onWeightUpdate(cb) { this._listeners.push(cb); }
+        }
+
+        // ── 3. WeightService ────────────────────────────────
+        class WeightService {
+            constructor() {
+                this._provider         = null;
+                this._lastWeight       = null;
+                this._lastStableWeight = null;
+                this._lastStableTs     = null;
+                this._window           = [];      // { value, ts }
+                this._WINDOW_MS        = 500;
+                this._MAX_DELTA        = 5;       // gramas
+                this._modalInterval    = null;
+            }
+
+            init(provider) {
+                this._provider = provider;
+                provider.onWeightUpdate(g => this._onReading(g));
+                provider.connect().catch(e =>
+                    console.error('[WeightService] Erro ao conectar provider:', e)
+                );
+                // Atualiza modal enquanto estiver aberta
+                this._modalInterval = setInterval(() => this._syncModal(), 300);
+                console.log('[WeightService] Iniciado. Provider:', provider.constructor.name);
+            }
+
+            _onReading(grams) {
+                const now = Date.now();
+                this._lastWeight = grams;
+
+                // Janela deslizante de 500ms
+                this._window.push({ value: grams, ts: now });
+                this._window = this._window.filter(r => now - r.ts <= this._WINDOW_MS);
+
+                if (this._window.length < 3) return;
+
+                const vals = this._window.map(r => r.value);
+                const min  = Math.min(...vals);
+                const max  = Math.max(...vals);
+
+                if ((max - min) <= this._MAX_DELTA) {
+                    // Estável — usa a ÚLTIMA leitura (não média)
+                    const stable = grams;
+                    if (stable !== this._lastStableWeight) {
+                        this._lastStableWeight = stable;
+                        this._lastStableTs     = now;
+                        console.log('[WeightService] ✅ Peso estabilizado:', stable, 'g');
+                    }
+                }
+            }
+
+            // Injeta peso na modal se estiver aberta e o campo não estiver focado
+            _syncModal() {
+                const modal = document.getElementById('modalBuffetQuilo');
+                if (!modal || modal.style.display === 'none') return;
+                if (this._lastStableWeight === null) return;
+                const input = document.getElementById('inputPeso');
+                if (!input) return;
+                // Não sobrescreve se o usuário está digitando manualmente
+                if (document.activeElement === input) return;
+                const valorAtual = parseFloat(input.value) || 0;
+                if (valorAtual !== this._lastStableWeight) {
+                    input.value = this._lastStableWeight;
+                    if (typeof calcularTotalModal === 'function') calcularTotalModal();
+                    console.log('[WeightService] Modal preenchida:', this._lastStableWeight, 'g');
+                }
+            }
+
+            // Chamado ao abrir a modal — preenche imediatamente se há peso disponível
+            fillModal() {
+                if (this._lastStableWeight !== null) {
+                    const input = document.getElementById('inputPeso');
+                    if (input) {
+                        input.value = this._lastStableWeight;
+                        if (typeof calcularTotalModal === 'function') calcularTotalModal();
+                        console.log('[WeightService] Peso injetado na abertura da modal:', this._lastStableWeight, 'g');
+                        _weightLogAction('peso_preenchido_auto', this._lastStableWeight);
+                    }
+                }
+            }
+
+            getLastWeight()       { return this._lastWeight; }
+            getLastStableWeight() { return this._lastStableWeight; }
+            getStatus()           { return this._provider ? this._provider.getStatus() : 'disconnected'; }
+
+            destroy() {
+                if (this._modalInterval) clearInterval(this._modalInterval);
+                if (this._provider) this._provider.disconnect();
+                this._provider = null;
+                console.log('[WeightService] Destruído.');
+            }
+        }
+
+        // ── 4. Logs ──────────────────────────────────────────
+        function _weightLog(event, detail = '') {
+            const ts = new Date().toLocaleTimeString('pt-BR');
+            console.log(`[Weight] [${ts}] ${event}${detail ? ' — ' + detail : ''}`);
+        }
+        function _weightLogAction(action, value) {
+            _weightLog(action, value !== undefined ? String(value) + 'g' : '');
+        }
+
+        // ── 5. Lifecycle ─────────────────────────────────────
+        let weightService = null;
+
+        const WEIGHT_PROFILES = ['Balança']; // perfis que usam balança
+
+        function _initWeightService() {
+            if (!WEIGHT_PROFILES.includes(state.perfil)) return;
+            if (weightService) return; // já iniciado
+            // ── Trocar MockWeightProvider por SerialWeightProviderAndroid quando o hardware chegar ──
+            const provider = new MockWeightProvider();
+            weightService  = new WeightService();
+            weightService.init(provider);
+            _updateWeightStatusBadge();
+            _weightLog('serviço iniciado', 'provider=Mock');
+        }
+
+        function _destroyWeightService() {
+            if (weightService) {
+                weightService.destroy();
+                weightService = null;
+                _weightLog('serviço encerrado');
+            }
+            _updateWeightStatusBadge();
+        }
+
+        function _updateWeightStatusBadge() {
+            const badge = document.getElementById('weightStatusBadge');
+            if (!badge) return;
+            if (weightService && weightService.getStatus() === 'connected') {
+                badge.style.display = 'block';
+                badge.style.background = '#f0faf5';
+                badge.style.color      = '#27ae60';
+                badge.style.borderColor = '#a8e6c8';
+                badge.textContent = '⚖️ BALANÇA';
+            } else if (weightService) {
+                badge.style.display  = 'block';
+                badge.style.background = '#fff8e1';
+                badge.style.color      = '#E67E22';
+                badge.style.borderColor = '#ffe0a0';
+                badge.textContent = '⚖️ AGUARDANDO...';
+            } else {
+                badge.style.display = 'none';
             }
         }
 
