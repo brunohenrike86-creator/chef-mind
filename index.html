@@ -1495,9 +1495,10 @@
                 <!-- ADMIN -->
                 <div id="screen-admin" class="screen">
                     <!-- SUBABAS ADMIN -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-bottom: 8px;">
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin-bottom: 8px;">
                         <button data-admin-tab="itens" class="admin-tab-btn active" style="padding: 8px; font-size: 11px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🍛 Itens</button>
                         <button data-admin-tab="marnitasDia" class="admin-tab-btn" style="padding: 8px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-weight: bold;">🥩 Carnes</button>
+                        <button data-admin-tab="estoque" class="admin-tab-btn" style="padding: 8px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-weight: bold;">📦 Estoque</button>
                         <button data-admin-tab="usuarios" class="admin-tab-btn" style="padding: 8px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-weight: bold;">👥 Usuários</button>
                     </div>
 
@@ -1540,6 +1541,28 @@
                         <button onclick="salvarMarnitasDia()" style="width: 100%; padding: 10px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px;">💾 SALVAR CARNES</button>
                     </div>
 
+                    <!-- TAB: ESTOQUE -->
+                    <div id="admin-estoque" class="admin-tab" style="display: none; flex-direction: column; gap: 8px;">
+                        <!-- AÇÃO PRINCIPAL: lançar compra (cobre de 1 a N itens — substitui o antigo "Lançar Entrada" avulso) -->
+                        <button onclick="abrirModalLancarCompra()" style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; box-shadow: 0 2px 8px rgba(212,114,79,0.3);">🛒 Lançar Compra</button>
+
+                        <!-- CABEÇALHO DA LISTA: título + filtro compacto (chip), no lugar de um botão de largura total -->
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 2px 0;">
+                            <div style="font-size: 11px; font-weight: bold; color: var(--text-dark);">📦 Itens em estoque</div>
+                            <button id="btnFiltroAlertaEstoque" onclick="alternarFiltroAlertaEstoque()" style="display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: var(--bg-light); color: var(--text-dark); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; font-weight: bold; font-size: 10px;">
+                                <span>⚠️ Para repor</span>
+                                <span id="badgeAlertaEstoqueCount" style="background: rgba(192,57,43,0.15); color: #C0392B; padding: 1px 6px; border-radius: 10px; font-size: 9px;">0</span>
+                            </button>
+                        </div>
+
+                        <!-- LISTAGEM ESTOQUE -->
+                        <div style="flex: 1; overflow-y: auto;">
+                            <div id="estoqueLista"></div>
+                            <!-- Ação de configuração (rara — só no cadastro inicial de cada produto): vira link discreto no rodapé, não compete com "Lançar Compra" -->
+                            <button onclick="abrirModalNovoEstoqueItem()" style="width: 100%; margin-top: 10px; padding: 8px; background: transparent; color: var(--primary); border: 1px dashed var(--border); border-radius: 6px; cursor: pointer; font-size: 10px;">🔗 Vincular novo produto ao estoque</button>
+                        </div>
+                    </div>
+
                     <!-- TAB: USUÁRIOS -->
                     <div id="admin-usuarios" class="admin-tab" style="display: none; flex-direction: column; gap: 8px;">
                         <!-- BOTÃO NOVO USUÁRIO -->
@@ -1549,6 +1572,7 @@
                         <div style="display: flex; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 6px 0;">
                             <button onclick="filtrarUsuariosPorPerfil('Todos')" class="filtro-perfil-btn active" data-filtro="Todos" style="padding: 6px 10px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">👥 Todos</button>
                             <button onclick="filtrarUsuariosPorPerfil('Admin')" class="filtro-perfil-btn" data-filtro="Admin" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">👑 Admin</button>
+                            <button onclick="filtrarUsuariosPorPerfil('Gerente')" class="filtro-perfil-btn" data-filtro="Gerente" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">🧑‍💼 Gerente</button>
                             <button onclick="filtrarUsuariosPorPerfil('Atendente')" class="filtro-perfil-btn" data-filtro="Atendente" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">👤 Atendente</button>
                             <button onclick="filtrarUsuariosPorPerfil('Balança')" class="filtro-perfil-btn" data-filtro="Balança" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">⚖️ Balança</button>
                         </div>
@@ -1639,6 +1663,7 @@
                 <select id="modalUserPerfil" style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 14px; -webkit-appearance: none; background: white;">
                     <option value="">Selecione um perfil...</option>
                     <option value="Admin">👑 Admin</option>
+                    <option value="Gerente">🧑‍💼 Gerente</option>
                     <option value="Atendente">👤 Atendente</option>
                     <option value="Balança">⚖️ Balança</option>
                 </select>
@@ -1648,6 +1673,111 @@
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <button onclick="fecharModalUsuario()" style="padding: 12px; background: #e8e8e8; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; color: #333;">Cancelar</button>
                 <button onclick="salvarUsuarioModal()" style="padding: 12px; background: linear-gradient(135deg, #D4724F 0%, #B85840 100%); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px;">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: VINCULAR ITEM AO ESTOQUE -->
+    <div id="modalEstoqueItem" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" id="modalEstoqueItemTitulo">📦 Vincular Item ao Estoque</div>
+
+            <div class="modal-field">
+                <div class="modal-label">Item do cardápio</div>
+                <select id="estoqueItemCodigo" class="modal-input">
+                    <option value="">Selecione um item do cardápio...</option>
+                </select>
+            </div>
+
+            <div class="modal-field">
+                <div class="modal-label">Classificação</div>
+                <select id="estoqueItemClassificacao" class="modal-input">
+                    <option value="Revenda">🛍️ Revenda</option>
+                    <option value="Materia-prima">🥕 Matéria-prima</option>
+                    <option value="Uso e Consumo">🧹 Uso e Consumo</option>
+                </select>
+            </div>
+
+            <div class="modal-field">
+                <div class="modal-label">Unidade</div>
+                <input type="text" id="estoqueItemUnidade" class="modal-input" placeholder="Ex: un, cx, L" value="un">
+            </div>
+
+            <div class="modal-field">
+                <div class="modal-label">Ponto de pedido (alerta de saldo baixo)</div>
+                <input type="number" id="estoqueItemPontoPedido" class="modal-input" placeholder="Ex: 10" min="0" step="1">
+            </div>
+
+            <div class="info-box" style="font-size: 11px; color: var(--text-dark);">
+                💡 Ao vincular, toda venda desse item na comanda gera baixa automática 1:1 no saldo quando a comanda é paga.
+            </div>
+
+            <div class="modal-buttons">
+                <button class="modal-btn-secondary" onclick="fecharModalEstoqueItem()">Cancelar</button>
+                <button class="modal-btn-primary" onclick="salvarEstoqueItem()">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: LANÇAR ENTRADA DE ESTOQUE -->
+    <div id="modalEstoqueEntrada" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">📥 Lançar Entrada de Estoque</div>
+
+            <div class="modal-field">
+                <div class="modal-label">Item</div>
+                <select id="estoqueEntradaItem" class="modal-input">
+                    <option value="">Selecione o item...</option>
+                </select>
+            </div>
+
+            <div class="modal-field">
+                <div class="modal-label">Quantidade</div>
+                <input type="number" id="estoqueEntradaQtd" class="modal-input" placeholder="Ex: 24" min="0" step="0.01">
+            </div>
+
+            <div class="modal-field">
+                <div class="modal-label">Custo unitário (opcional)</div>
+                <input type="number" id="estoqueEntradaCusto" class="modal-input" placeholder="Ex: 3.50" min="0" step="0.01">
+            </div>
+
+            <div class="modal-field">
+                <div class="modal-label">Fornecedor (opcional)</div>
+                <input type="text" id="estoqueEntradaFornecedor" class="modal-input" placeholder="Ex: Distribuidora ABC">
+            </div>
+
+            <div class="modal-field">
+                <div class="modal-label">Observação (opcional)</div>
+                <input type="text" id="estoqueEntradaObs" class="modal-input" placeholder="Ex: Compra mensal">
+            </div>
+
+            <div class="modal-buttons">
+                <button class="modal-btn-secondary" onclick="fecharModalEstoqueEntrada()">Cancelar</button>
+                <button class="modal-btn-primary" onclick="salvarEntradaEstoque()">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: LANÇAR COMPRA (entrada em lote de vários itens) -->
+    <div id="modalLancarCompra" class="modal">
+        <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">🛒 Lançar Compra</div>
+            <div style="font-size: 10px; color: var(--gray); padding: 0 0 8px;">Registre de uma vez todos os itens de uma compra (ex: nota fiscal com vários produtos). Cada linha vira uma entrada de estoque com o mesmo lançamento.</div>
+
+            <div class="modal-field">
+                <div class="modal-label">Fornecedor (opcional — aplica a todas as linhas sem fornecedor próprio)</div>
+                <input type="text" id="compraFornecedor" class="modal-input" placeholder="Ex: Distribuidora ABC">
+            </div>
+
+            <div id="compraLinhas"></div>
+
+            <button onclick="adicionarLinhaCompra()" style="width: 100%; padding: 8px; margin-top: 4px; background: var(--bg-light); color: var(--primary); border: 2px dashed var(--primary); border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 11px;">➕ Adicionar item</button>
+
+            <div id="compraResumo" style="text-align: center; font-size: 11px; color: var(--gray); padding: 8px 0;">0 itens prontos para lançar</div>
+
+            <div class="modal-buttons">
+                <button class="modal-btn-secondary" onclick="fecharModalLancarCompra()">Cancelar</button>
+                <button class="modal-btn-primary" onclick="salvarLancamentoCompra()">Lançar Compra</button>
             </div>
         </div>
     </div>
@@ -1945,6 +2075,12 @@
                 '026': { nome: 'Sobremesa', preco: 2.00, icone: '🍰', categoria: 'Sobremesas', tipo: 'Fixo' },
                 '027': { nome: 'Sorvete', preco: 5.00, icone: '🍦', categoria: 'Sobremesas', tipo: 'Fixo' }
             },
+            estoque: {
+                itens: [],          // [{ id, nome, cardapio_codigo, unidade, ponto_pedido, ativo, saldo, alerta }]
+                filtroAlerta: false, // true = mostra só itens com saldo <= ponto_pedido (checklist de reposição)
+                compraEmEdicao: [], // [{ item_id, quantidade, custo_unitario }] — linhas da tela "Lançar Compra"
+                _carregado: false
+            },
             marnitasDia: {
                 0: [], // Segunda
                 1: [], // Terça
@@ -2054,7 +2190,7 @@
                     usuarios.forEach(u => {
                         state.usuarios[u.login] = {
                             nome: u.nome || u.login, senha: String(u.senha),
-                            perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : 'Atendente'
+                            perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'gerente' ? 'Gerente' : 'Atendente'
                         };
                     });
                     console.log('[Sheets] ✅ Usuários:', usuarios.length);
@@ -2243,7 +2379,7 @@
 
                 // Atualizar header
                 document.getElementById('headerUser').textContent = state.user;
-                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : '👤 Atendente';
+                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : '👤 Atendente';
 
                 // Mostrar app diretamente
                 document.getElementById('loginScreen').classList.add('hidden');
@@ -2349,7 +2485,7 @@
                         usuarios.forEach(u => {
                             state.usuarios[u.login] = {
                                 nome: u.nome || u.login, senha: String(u.senha),
-                                perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : 'Atendente'
+                                perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'gerente' ? 'Gerente' : 'Atendente'
                             };
                         });
                     }
@@ -2392,7 +2528,7 @@
 
             // ✅ Update header com informações
             document.getElementById('headerUser').textContent = `${state.user}`;
-            document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : '👤 Atendente';
+            document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : '👤 Atendente';
 
             // ✅ Limpar campos de senha
             document.getElementById('loginPassword').value = '';
@@ -2492,6 +2628,7 @@
             // ✅ MAPA DE PERMISSÕES
             const permissoes = {
                 'Admin':    ['lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'],
+                'Gerente':  ['lançar', 'preparo', 'admin'], // SEM Caixa (data-menu="dashboard" — abrir/fechar caixa, sangria); Admin restrito a Carnes/Estoque (ver atualizarVisibilidadeAbasAdmin)
                 'Atendente':['lançar', 'preparo'],
                 'Balança':  ['lançar']
             };
@@ -2525,6 +2662,42 @@
             }
             
             console.log(`✅ Perfil ${perfil} ativado. Abas disponíveis:`, abas);
+
+            // ✅ Dentro do Admin, alguns perfis (ex: Gerente) só veem certas sub-abas
+            atualizarVisibilidadeAbasAdmin();
+        }
+
+        // Restringe as sub-abas do Admin por perfil. Hoje só o Gerente tem regra
+        // especial — acesso a Carnes (marnitasDia) e Estoque, sem Itens/Usuários.
+        // Perfis fora do mapa (ex: Admin) continuam vendo todas as sub-abas.
+        function atualizarVisibilidadeAbasAdmin() {
+            const perfil = state.perfil;
+
+            const subAbasPermitidas = {
+                'Gerente': ['marnitasDia', 'estoque']
+            };
+            const permitidas = subAbasPermitidas[perfil];
+
+            const btns = document.querySelectorAll('.admin-tab-btn');
+            if (!permitidas) {
+                // Garante que nada ficou oculto de uma sessão anterior com outro perfil
+                btns.forEach(btn => btn.style.display = '');
+                return;
+            }
+
+            btns.forEach(btn => {
+                btn.style.display = permitidas.includes(btn.dataset.adminTab) ? '' : 'none';
+            });
+
+            // Se a sub-aba visível no momento não é permitida (ex: Gerente abrindo
+            // Admin pela 1ª vez e caindo na aba "Itens", que é restrita), troca
+            // para a primeira sub-aba liberada.
+            const tabAtivo = Array.from(document.querySelectorAll('.admin-tab')).find(t => t.style.display !== 'none');
+            const tabAtivaNome = tabAtivo?.id?.replace('admin-', '');
+            if (!tabAtivaNome || !permitidas.includes(tabAtivaNome)) {
+                const primeiroBtn = Array.from(btns).find(b => permitidas.includes(b.dataset.adminTab));
+                if (primeiroBtn) primeiroBtn.click();
+            }
         }
 
         // ✅ ATALHO CHECKOUT - LEVA DIRETO PARA CHECKOUT COM COMANDA ATIVA
@@ -2692,6 +2865,9 @@
             } else if (screenName === 'areceber') {
                 pararTimerPreparo();
                 carregarAReceber();
+            } else if (screenName === 'admin') {
+                pararTimerPreparo();
+                atualizarVisibilidadeAbasAdmin();
             } else {
                 pararTimerPreparo();
             }
@@ -2757,6 +2933,11 @@
                         } catch (e) {
                             console.error('Erro ao inicializar marmitas:', e);
                         }
+                    }
+
+                    // Se for aba de estoque, carregar saldo (sempre revalida ao abrir)
+                    if (tabName === 'estoque') {
+                        carregarEstoque();
                     }
                 });
             });
@@ -2967,6 +3148,367 @@
             });
         }
 
+        // ========== ESTOQUE (Trilha A — produtos vendidos diretamente) ==========
+        async function carregarEstoque() {
+            const itens = await sheetsAPI('getEstoqueItens');
+            if (Array.isArray(itens)) {
+                state.estoque.itens = itens;
+                state.estoque._carregado = true;
+            }
+            renderizarEstoqueLista();
+        }
+
+        function alternarFiltroAlertaEstoque() {
+            state.estoque.filtroAlerta = !state.estoque.filtroAlerta;
+            renderizarEstoqueLista();
+        }
+
+        function renderizarEstoqueLista() {
+            const container = document.getElementById('estoqueLista');
+            if (!container) return;
+
+            const todos = state.estoque.itens || [];
+
+            // Badge: quantos itens estão com saldo <= ponto de pedido (checklist de reposição)
+            const emAlerta = todos.filter(i => !!i.alerta);
+            const badge = document.getElementById('badgeAlertaEstoqueCount');
+            if (badge) badge.textContent = String(emAlerta.length);
+
+            // Botão de filtro: estado visual ativo/inativo
+            const btnFiltro = document.getElementById('btnFiltroAlertaEstoque');
+            if (btnFiltro) {
+                if (state.estoque.filtroAlerta) {
+                    btnFiltro.style.background = 'rgba(192,57,43,0.12)';
+                    btnFiltro.style.color = '#C0392B';
+                    btnFiltro.style.border = '2px solid #C0392B';
+                } else {
+                    btnFiltro.style.background = 'var(--bg-light)';
+                    btnFiltro.style.color = 'var(--text-dark)';
+                    btnFiltro.style.border = '2px solid var(--border)';
+                }
+            }
+
+            if (todos.length === 0) {
+                container.innerHTML = `<div style="text-align: center; color: var(--gray); padding: 24px; font-size: 12px;">
+                    📦 Nenhum item de estoque vinculado ainda.<br><br>
+                    Toque em <b>"Vincular novo produto ao estoque"</b>, no rodapé desta lista, e escolha um produto do cardápio que tenha estoque controlado (ex: bebidas, bomboniere).
+                </div>`;
+                return;
+            }
+
+            const itens = state.estoque.filtroAlerta ? emAlerta : todos;
+
+            if (itens.length === 0) {
+                container.innerHTML = `<div style="text-align: center; color: var(--gray); padding: 24px; font-size: 12px;">
+                    👍 Nenhum item precisando de reposição agora.<br>Tudo dentro do ponto de pedido.
+                </div>`;
+                return;
+            }
+
+            container.innerHTML = '';
+            itens.slice().sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).forEach(item => {
+                const saldo = parseFloat(item.saldo) || 0;
+                const alerta = !!item.alerta;
+                const cor = alerta ? '#C0392B' : '#27AE60';
+                const bg = alerta ? 'rgba(192,57,43,0.12)' : 'rgba(39,174,96,0.12)';
+                const unidade = item.unidade || 'un';
+                const classificacao = item.classificacao || 'Revenda';
+                const classInfo = {
+                    'Revenda':         { icone: '🛍️', cor: '#2980B9', bg: 'rgba(41,128,185,0.12)' },
+                    'Materia-prima':   { icone: '🥕', cor: '#27AE60', bg: 'rgba(39,174,96,0.12)' },
+                    'Uso e Consumo':   { icone: '🧹', cor: '#7F8C8D', bg: 'rgba(127,140,141,0.12)' }
+                }[classificacao] || { icone: '📦', cor: '#7F8C8D', bg: 'rgba(127,140,141,0.12)' };
+
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.style.marginBottom = '6px';
+                div.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: start; gap: 8px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <div style="font-size: 12px; font-weight: bold; color: var(--text-dark);">${item.nome}</div>
+                                <span style="background: ${classInfo.bg}; color: ${classInfo.cor}; padding: 1px 6px; border-radius: 8px; font-size: 9px; font-weight: bold; white-space: nowrap;">${classInfo.icone} ${classificacao}</span>
+                            </div>
+                            <div style="font-size: 10px; color: var(--gray); margin-top: 2px;">Cód. cardápio #${item.cardapio_codigo} · unidade: ${unidade} · ponto de pedido: ${item.ponto_pedido || 0}</div>
+                        </div>
+                        <div style="text-align: right; flex-shrink: 0;">
+                            <div style="font-size: 18px; font-weight: bold; color: ${cor};">${saldo}</div>
+                            <span style="background: ${bg}; color: ${cor}; padding: 2px 6px; border-radius: 3px; font-size: 9px; font-weight: bold;">${alerta ? '⚠️ REPOR' : 'OK'}</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 4px; margin-top: 8px;">
+                        <button onclick="abrirModalEntradaEstoque('${item.id}')" style="flex: 1; padding: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--primary); font-weight: bold;">📥 Lançar Entrada</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function preencherSelectCardapioEstoque() {
+            const select = document.getElementById('estoqueItemCodigo');
+            select.innerHTML = '<option value="">Selecione um item do cardápio...</option>';
+
+            // ⚠️ Compara como inteiro (mesmo padrão de _vincularCardapioAoEstoque no GAS) —
+            // evita mismatch entre código zero-padded ('012') e número (12) vindo do Sheets
+            const jaVinculados = new Set((state.estoque.itens || []).map(i => parseInt(i.cardapio_codigo, 10)));
+
+            Object.entries(state.itens)
+                .sort((a, b) => parseInt(a[0], 10) - parseInt(b[0], 10))
+                .forEach(([codigo, item]) => {
+                    const vinculado = jaVinculados.has(parseInt(codigo, 10));
+                    const opt = document.createElement('option');
+                    opt.value = codigo; // mantém formato zero-padded (ex: '012'); GAS faz parseInt na comparação
+                    opt.textContent = `#${codigo} - ${item.nome}` + (vinculado ? ' ✅ (já vinculado)' : '');
+                    if (vinculado) opt.disabled = true;
+                    select.appendChild(opt);
+                });
+        }
+
+        function abrirModalNovoEstoqueItem() {
+            document.getElementById('modalEstoqueItemTitulo').textContent = '📦 Vincular Item ao Estoque';
+            document.getElementById('estoqueItemUnidade').value = 'un';
+            document.getElementById('estoqueItemPontoPedido').value = '';
+            // Por enquanto só usamos "Revenda" no dia a dia — fica como padrão,
+            // mas Matéria-prima/Uso e Consumo já existem para quando o estoque
+            // de insumos entrar em uso.
+            document.getElementById('estoqueItemClassificacao').value = 'Revenda';
+            preencherSelectCardapioEstoque();
+            document.getElementById('estoqueItemCodigo').value = '';
+            document.getElementById('modalEstoqueItem').classList.add('active');
+        }
+
+        function fecharModalEstoqueItem() {
+            document.getElementById('modalEstoqueItem').classList.remove('active');
+        }
+
+        async function salvarEstoqueItem() {
+            const codigo = document.getElementById('estoqueItemCodigo').value;
+            const classificacao = document.getElementById('estoqueItemClassificacao').value || 'Revenda';
+            const unidade = document.getElementById('estoqueItemUnidade').value.trim() || 'un';
+            const pontoPedido = document.getElementById('estoqueItemPontoPedido').value;
+
+            if (!codigo) {
+                showToast('Selecione um item do cardápio', 'error');
+                return;
+            }
+
+            const itemCardapio = state.itens[codigo];
+            const nome = itemCardapio ? itemCardapio.nome : '';
+            if (!nome) {
+                showToast('Item do cardápio não encontrado', 'error');
+                return;
+            }
+
+            const resp = await sheetsAPI('cadastrarEstoqueItem', {
+                nome: nome,
+                cardapio_codigo: parseInt(codigo, 10),
+                classificacao: classificacao,
+                unidade: unidade,
+                ponto_pedido: pontoPedido || 0,
+                ativo: true
+            });
+
+            if (resp && resp.sucesso) {
+                showToast('✅ Item vinculado ao estoque', 'success');
+                fecharModalEstoqueItem();
+                await carregarEstoque();
+            } else {
+                showToast((resp && resp.erro) || 'Erro ao vincular item ao estoque', 'error');
+            }
+        }
+
+        function abrirModalEntradaEstoque(itemId) {
+            const select = document.getElementById('estoqueEntradaItem');
+            select.innerHTML = '<option value="">Selecione o item...</option>';
+
+            if (!state.estoque.itens || state.estoque.itens.length === 0) {
+                showToast('Nenhum item de estoque cadastrado ainda. Vincule um item primeiro.', 'error');
+                return;
+            }
+
+            state.estoque.itens.slice().sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = `${item.nome} (saldo atual: ${parseFloat(item.saldo) || 0} ${item.unidade || 'un'})`;
+                select.appendChild(opt);
+            });
+
+            if (itemId) select.value = itemId;
+
+            document.getElementById('estoqueEntradaQtd').value = '';
+            document.getElementById('estoqueEntradaCusto').value = '';
+            document.getElementById('estoqueEntradaFornecedor').value = '';
+            document.getElementById('estoqueEntradaObs').value = '';
+            document.getElementById('modalEstoqueEntrada').classList.add('active');
+        }
+
+        function fecharModalEstoqueEntrada() {
+            document.getElementById('modalEstoqueEntrada').classList.remove('active');
+        }
+
+        async function salvarEntradaEstoque() {
+            const itemId = document.getElementById('estoqueEntradaItem').value;
+            const qtd = document.getElementById('estoqueEntradaQtd').value;
+            const custo = document.getElementById('estoqueEntradaCusto').value;
+            const fornecedor = document.getElementById('estoqueEntradaFornecedor').value.trim();
+            const obs = document.getElementById('estoqueEntradaObs').value.trim();
+
+            if (!itemId) {
+                showToast('Selecione o item', 'error');
+                return;
+            }
+            if (!qtd || parseFloat(qtd) <= 0) {
+                showToast('Informe uma quantidade válida', 'error');
+                return;
+            }
+
+            const resp = await sheetsAPI('registrarEntradaEstoque', {
+                item_id: itemId,
+                quantidade: qtd,
+                custo_unitario: custo || 0,
+                fornecedor: fornecedor,
+                usuario: state.userLogado || state.user || '',
+                observacao: obs
+            });
+
+            if (resp && resp.sucesso) {
+                showToast('✅ Entrada registrada', 'success');
+                fecharModalEstoqueEntrada();
+                await carregarEstoque();
+            } else {
+                showToast((resp && resp.erro) || 'Erro ao registrar entrada de estoque', 'error');
+            }
+        }
+
+        // ========== LANÇAR COMPRA (entrada em lote — vários itens de uma vez) ==========
+        // Uma compra real envolve N produtos; lançar um por um no modal de "Lançar
+        // Entrada" multiplica o trabalho por N. Aqui o usuário monta as linhas da
+        // compra (item + quantidade + custo) e lança tudo numa única chamada para
+        // registrarEntradasEstoqueLote — mesmo padrão de darBaixaAReceberLote.
+        function abrirModalLancarCompra() {
+            if (!state.estoque.itens || state.estoque.itens.length === 0) {
+                showToast('Nenhum item de estoque cadastrado ainda. Vincule um item primeiro.', 'error');
+                return;
+            }
+
+            document.getElementById('compraFornecedor').value = '';
+            // Começa com 3 linhas em branco — cobre a maioria das compras pequenas
+            // sem precisar tocar em "Adicionar item"; o usuário remove o que sobrar.
+            state.estoque.compraEmEdicao = [
+                { item_id: '', quantidade: '', custo_unitario: '' },
+                { item_id: '', quantidade: '', custo_unitario: '' },
+                { item_id: '', quantidade: '', custo_unitario: '' }
+            ];
+            renderizarLinhasCompra();
+            document.getElementById('modalLancarCompra').classList.add('active');
+        }
+
+        function fecharModalLancarCompra() {
+            document.getElementById('modalLancarCompra').classList.remove('active');
+        }
+
+        function adicionarLinhaCompra() {
+            state.estoque.compraEmEdicao.push({ item_id: '', quantidade: '', custo_unitario: '' });
+            renderizarLinhasCompra();
+        }
+
+        function removerLinhaCompra(i) {
+            state.estoque.compraEmEdicao.splice(i, 1);
+            renderizarLinhasCompra();
+        }
+
+        // Lê os <select>/<input> da tela de volta para o state antes de re-renderizar
+        // (ex: ao adicionar/remover linha) — assim o usuário não perde o que já digitou.
+        function _sincronizarLinhasCompraDoDOM() {
+            state.estoque.compraEmEdicao.forEach((linha, i) => {
+                const selItem = document.getElementById('compraItem_' + i);
+                const inpQtd = document.getElementById('compraQtd_' + i);
+                const inpCusto = document.getElementById('compraCusto_' + i);
+                if (selItem) linha.item_id = selItem.value;
+                if (inpQtd) linha.quantidade = inpQtd.value;
+                if (inpCusto) linha.custo_unitario = inpCusto.value;
+            });
+        }
+
+        function renderizarLinhasCompra() {
+            const container = document.getElementById('compraLinhas');
+            if (!container) return;
+
+            const itensOrdenados = state.estoque.itens.slice().sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+            const linhas = state.estoque.compraEmEdicao;
+
+            container.innerHTML = '';
+            linhas.forEach((linha, i) => {
+                const linhaEl = document.createElement('div');
+                linhaEl.style.cssText = 'display: flex; flex-direction: column; gap: 4px; padding: 8px; margin-top: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 6px;';
+
+                const optsHtml = ['<option value="">Selecione o item...</option>']
+                    .concat(itensOrdenados.map(item =>
+                        `<option value="${item.id}" ${item.id === linha.item_id ? 'selected' : ''}>${item.nome} (saldo: ${parseFloat(item.saldo) || 0} ${item.unidade || 'un'})</option>`
+                    )).join('');
+
+                linhaEl.innerHTML = `
+                    <div style="display: flex; gap: 4px; align-items: center;">
+                        <select id="compraItem_${i}" class="modal-input" style="flex: 1; font-size: 11px;" onchange="_sincronizarLinhasCompraDoDOM(); _atualizarResumoCompra();">${optsHtml}</select>
+                        <button onclick="removerLinhaCompra(${i})" title="Remover" style="padding: 8px 10px; background: transparent; color: #C0392B; border: 1px solid #C0392B; border-radius: 4px; cursor: pointer; font-size: 11px;">✕</button>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                        <input type="number" id="compraQtd_${i}" class="modal-input" style="font-size: 11px;" placeholder="Quantidade" min="0" step="0.01" value="${linha.quantidade || ''}" oninput="_sincronizarLinhasCompraDoDOM(); _atualizarResumoCompra();">
+                        <input type="number" id="compraCusto_${i}" class="modal-input" style="font-size: 11px;" placeholder="Custo unit. (opc.)" min="0" step="0.01" value="${linha.custo_unitario || ''}" oninput="_sincronizarLinhasCompraDoDOM();">
+                    </div>
+                `;
+                container.appendChild(linhaEl);
+            });
+
+            _atualizarResumoCompra();
+        }
+
+        function _atualizarResumoCompra() {
+            const resumo = document.getElementById('compraResumo');
+            if (!resumo) return;
+
+            const prontos = state.estoque.compraEmEdicao.filter(l => l.item_id && parseFloat(l.quantidade) > 0).length;
+            const total = state.estoque.compraEmEdicao.length;
+
+            if (prontos === 0) {
+                resumo.textContent = `Nenhum item pronto para lançar (preencha item + quantidade)`;
+            } else {
+                resumo.textContent = `✅ ${prontos} de ${total} ${total === 1 ? 'item preenchido' : 'itens preenchidos'} — prontos para lançar`;
+            }
+        }
+
+        async function salvarLancamentoCompra() {
+            _sincronizarLinhasCompraDoDOM();
+
+            const fornecedor = document.getElementById('compraFornecedor').value.trim();
+            const validas = state.estoque.compraEmEdicao.filter(l => l.item_id && parseFloat(l.quantidade) > 0);
+
+            if (validas.length === 0) {
+                showToast('Preencha ao menos um item com quantidade válida', 'error');
+                return;
+            }
+
+            const entradas = validas.map(l => ({
+                item_id: l.item_id,
+                quantidade: l.quantidade,
+                custo_unitario: l.custo_unitario || 0
+            }));
+
+            const resp = await sheetsAPI('registrarEntradasEstoqueLote', {
+                entradas: entradas,
+                fornecedor: fornecedor,
+                usuario: state.userLogado || state.user || ''
+            });
+
+            if (resp && resp.sucesso) {
+                showToast(`✅ Compra lançada — ${resp.qtd_lancada} ${resp.qtd_lancada === 1 ? 'item registrado' : 'itens registrados'}`, 'success');
+                fecharModalLancarCompra();
+                await carregarEstoque();
+            } else {
+                showToast((resp && resp.erro) || 'Erro ao lançar compra', 'error');
+            }
+        }
+
         function editarItem(codigo) {
             const item = state.itens[codigo];
             document.getElementById('adminItemNome').value = item.nome;
@@ -3114,7 +3656,7 @@
 
             saveStorage();
             // ☁️ SHEETS: criar ou atualizar usuário
-            const _nivel = perfil === 'Admin' ? 'admin' : perfil === 'Balança' ? 'balanca' : 'atendente';
+            const _nivel = perfil === 'Admin' ? 'admin' : perfil === 'Balança' ? 'balanca' : perfil === 'Gerente' ? 'gerente' : 'atendente';
             if (usuarioEmEdicao) {
                 // Login mudou ou não: atualiza na mesma linha via loginAntigo
                 sheetsAPI('atualizarUsuario', { loginAntigo: usuarioEmEdicao, login, nome, senha, nivel: _nivel });
@@ -3147,7 +3689,7 @@
             container.innerHTML = '';
 
             usuarios.forEach(([login, user]) => {
-                const badge = user.perfil === 'Admin' ? '👑' : user.perfil === 'Balança' ? '⚖️' : '👤';
+                const badge = user.perfil === 'Admin' ? '👑' : user.perfil === 'Balança' ? '⚖️' : user.perfil === 'Gerente' ? '🧑‍💼' : '👤';
 
                 const div = document.createElement('div');
                 div.className = 'card';
@@ -3164,8 +3706,8 @@
                                 <span style="background: rgba(212,114,79,0.15); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-family: monospace;">
                                     @${login}
                                 </span>
-                                <span style="background: rgba(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '39,174,96' : '41,128,185'}, 0.15); color: rgb(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '30,132,73' : '41,128,185'}); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-weight: bold;">
-                                    ${user.perfil === 'Admin' ? 'ADMIN' : user.perfil === 'Balança' ? 'BALANÇA' : 'ATENDENTE'}
+                                <span style="background: rgba(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '39,174,96' : user.perfil === 'Gerente' ? '155,89,182' : '41,128,185'}, 0.15); color: rgb(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '30,132,73' : user.perfil === 'Gerente' ? '142,68,173' : '41,128,185'}); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-weight: bold;">
+                                    ${user.perfil === 'Admin' ? 'ADMIN' : user.perfil === 'Balança' ? 'BALANÇA' : user.perfil === 'Gerente' ? 'GERENTE' : 'ATENDENTE'}
                                 </span>
                             </div>
                             <!-- SENHA MASCARADA -->
