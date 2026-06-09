@@ -7933,7 +7933,15 @@ var itens = comanda.itens || [];
                     throw new Error('Web Serial API não disponível. Use Chrome Desktop ou bridge Android.');
                 }
                 try {
-                    this._port   = await navigator.serial.requestPort();
+                    // CH34x (WCH) VID: 0x1A86 — necessário no Android Chrome; sem filtro = lista vazia
+                    // CH340: PID 0x7523 | CH341: PID 0x5523
+                    this._port = await navigator.serial.requestPort({
+                        filters: [
+                            { usbVendorId: 0x1A86, usbProductId: 0x7523 }, // CH340
+                            { usbVendorId: 0x1A86, usbProductId: 0x5523 }, // CH341
+                            { usbVendorId: 0x1A86 },                        // qualquer WCH
+                        ]
+                    });
                     await this._port.open(this._cfg);
                     this._status = 'connected';
                     this._alive  = true;
