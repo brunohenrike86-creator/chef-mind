@@ -7950,21 +7950,31 @@ var itens = comanda.itens || [];
             // Inicializa CH340/CH341 para 9600 baud, 8 data bits, 2 stop bits, sem paridade
             async _initUART() {
                 const d = this._device;
-                const vout = (req, val, idx) => d.controlTransferOut(
-                    { requestType: 'vendor', recipient: 'device', request: req, value: val, index: idx },
-                    new Uint8Array(0));
+                // Cada passo com try-catch individual — CH34x pode ignorar alguns comandos silenciosamente
+                const vout = async (label, req, val, idx) => {
+                    console.log('[WeightUSB] initUART →', label, `req=0x${req.toString(16)} val=0x${val.toString(16)} idx=0x${idx.toString(16)}`);
+                    try {
+                        const r = await d.controlTransferOut(
+                            { requestType: 'vendor', recipient: 'device', request: req, value: val, index: idx },
+                            new Uint8Array(0));
+                        console.log('[WeightUSB] initUART ✓', label, 'status:', r.status);
+                    } catch(e) {
+                        console.warn('[WeightUSB] initUART ⚠️', label, 'erro:', e.message, '— continuando');
+                    }
+                };
+
+                console.log('[WeightUSB] Iniciando _initUART...');
 
                 // Baud rate 9600: wValue=0x1312 (registradores), wIndex=0x02B2 (divisor)
-                await vout(0x9A, 0x1312, 0x02B2);
+                await vout('baud_9600', 0x9A, 0x1312, 0x02B2);
 
                 // Linha 8N2: CS8=0x03 | STOP2=0x04 = 0x07
-                // wValue=0x2518 (registrador LCR), wIndex=0x07
-                await vout(0x9A, 0x2518, 0x07);
+                await vout('lcr_8N2', 0x9A, 0x2518, 0x07);
 
                 // Ativa DTR e RTS
-                await vout(0xA4, ~(0x20 | 0x40) & 0xFF, 0);
+                await vout('dtr_rts', 0xA4, ~(0x20 | 0x40) & 0xFF, 0);
 
-                console.log('[WeightUSB] UART: 9600 8N2 DTR+RTS');
+                console.log('[WeightUSB] _initUART concluído → 9600 8N2 DTR+RTS');
             }
 
             _startPolling() {
@@ -8200,10 +8210,22 @@ var itens = comanda.itens || [];
             if (!weightService) return;
             const btn = document.getElementById('btnConectarBalanca');
             if (btn) { btn.disabled = true; btn.textContent = '⏳ Conectando...'; }
+
+            // Timeout de segurança — evita botão travado se connect() nunca resolver
+            const timer = setTimeout(() => {
+                if (btn && btn.textContent.includes('Conectando')) {
+                    btn.disabled = false;
+                    btn.textContent = '🔌 Conectar Balança';
+                    mostrarToast('❌ Timeout — verifique o console para diagnóstico');
+                }
+            }, 10000);
+
             try {
                 await weightService.connectProvider();
+                clearTimeout(timer);
                 mostrarToast('✅ Balança conectada!');
             } catch(e) {
+                clearTimeout(timer);
                 mostrarToast('❌ ' + (e.message || 'Erro ao conectar balança'));
                 if (btn) { btn.disabled = false; btn.textContent = '🔌 Conectar Balança'; }
             }
