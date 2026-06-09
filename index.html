@@ -1494,12 +1494,17 @@
 
                 <!-- ADMIN -->
                 <div id="screen-admin" class="screen">
-                    <!-- SUBABAS ADMIN -->
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin-bottom: 8px;">
-                        <button data-admin-tab="itens" class="admin-tab-btn active" style="padding: 8px; font-size: 11px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🍛 Itens</button>
-                        <button data-admin-tab="marnitasDia" class="admin-tab-btn" style="padding: 8px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-weight: bold;">🥩 Carnes</button>
-                        <button data-admin-tab="estoque" class="admin-tab-btn" style="padding: 8px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-weight: bold;">📦 Estoque</button>
-                        <button data-admin-tab="usuarios" class="admin-tab-btn" style="padding: 8px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-weight: bold;">👥 Usuários</button>
+                    <!-- SUBABAS ADMIN — sticky wrapper (sem overflow) + inner div com overflow-x:auto -->
+                    <!-- margin-top NUNCA negativo aqui: cria mismatch entre flow footprint e rendered height quando sticky ativa -->
+                    <div style="position: sticky; top: 0; z-index: 10; background: var(--bg-light); margin: 0 -6px 8px; padding: 0 6px 8px; border-bottom: 1px solid var(--border);">
+                        <div style="display: flex; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-top: 4px; scrollbar-width: none;">
+                            <button data-admin-tab="itens" class="admin-tab-btn active" style="flex-shrink: 0; padding: 7px 12px; font-size: 11px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; white-space: nowrap;">🍛 Itens</button>
+                            <button data-admin-tab="marnitasDia" class="admin-tab-btn" style="flex-shrink: 0; padding: 7px 12px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 20px; cursor: pointer; font-weight: bold; white-space: nowrap;">🥩 Carnes</button>
+                            <button data-admin-tab="estoque" class="admin-tab-btn" style="flex-shrink: 0; padding: 7px 12px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 20px; cursor: pointer; font-weight: bold; white-space: nowrap;">📦 Estoque</button>
+                            <button data-admin-tab="operacional" class="admin-tab-btn" style="flex-shrink: 0; padding: 7px 12px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 20px; cursor: pointer; font-weight: bold; white-space: nowrap;">📋 Operacional</button>
+                            <button data-admin-tab="financeiro" class="admin-tab-btn" style="flex-shrink: 0; padding: 7px 12px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 20px; cursor: pointer; font-weight: bold; white-space: nowrap;">💰 Financeiro</button>
+                            <button data-admin-tab="usuarios" class="admin-tab-btn" style="flex-shrink: 0; padding: 7px 12px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 20px; cursor: pointer; font-weight: bold; white-space: nowrap;">👥 Usuários</button>
+                        </div>
                     </div>
 
                     <!-- TAB: ITENS -->
@@ -1561,6 +1566,21 @@
                             <!-- Ação de configuração (rara — só no cadastro inicial de cada produto): vira link discreto no rodapé, não compete com "Lançar Compra" -->
                             <button onclick="abrirModalNovoEstoqueItem()" style="width: 100%; margin-top: 10px; padding: 8px; background: transparent; color: var(--primary); border: 1px dashed var(--border); border-radius: 6px; cursor: pointer; font-size: 10px;">🔗 Vincular novo produto ao estoque</button>
                         </div>
+                    </div>
+
+                    <!-- TAB: OPERACIONAL -->
+                    <div id="admin-operacional" class="admin-tab" style="display: none; flex-direction: column; gap: 10px;">
+                        <p style="font-size: 12px; color: var(--text-muted); margin: 0;">Lançamentos do dia — data preenchida automaticamente.</p>
+                        <button onclick="abrirModalLancamento('descarte')" style="width: 100%; padding: 14px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: left;">🗑️ Lançar Descarte</button>
+                        <button onclick="abrirModalLancamento('peso_restos')" style="width: 100%; padding: 14px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: left;">⚖️ Lançar Peso de Restos</button>
+                        <button onclick="abrirModalLancamento('avaria')" style="width: 100%; padding: 14px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: left;">⚠️ Lançar Avaria / Extravio</button>
+                    </div>
+
+                    <!-- TAB: FINANCEIRO -->
+                    <div id="admin-financeiro" class="admin-tab" style="display: none; flex-direction: column; gap: 10px;">
+                        <p style="font-size: 12px; color: var(--text-muted); margin: 0;">Lançamentos financeiros — acesso restrito ao Admin.</p>
+                        <button onclick="abrirModalLancamento('nota_gasto')" style="width: 100%; padding: 14px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: left;">🧾 Lançar Nota de Gasto</button>
+                        <button onclick="abrirModalLancamento('retirada')" style="width: 100%; padding: 14px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: left;">💸 Lançar Retirada</button>
                     </div>
 
                     <!-- TAB: USUÁRIOS -->
@@ -1754,6 +1774,21 @@
             <div class="modal-buttons">
                 <button class="modal-btn-secondary" onclick="fecharModalEstoqueEntrada()">Cancelar</button>
                 <button class="modal-btn-primary" onclick="salvarEntradaEstoque()">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: LANÇAMENTO OPERACIONAL/FINANCEIRO -->
+    <div id="modalLancamento" class="modal">
+        <div class="modal-content">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid var(--primary);">
+                <div id="modalLancamentoTitulo" style="font-size: 16px; font-weight: bold; color: var(--text-dark);">Lançamento</div>
+                <button onclick="fecharModalLancamento()" style="width: 44px; height: 44px; background: none; border: none; font-size: 20px; color: var(--text-muted); cursor: pointer; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" aria-label="Fechar">✕</button>
+            </div>
+            <div id="modalLancamentoCampos" style="display: flex; flex-direction: column; gap: 12px;"></div>
+            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <button onclick="fecharModalLancamento()" style="flex: 1; padding: 12px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 6px; cursor: pointer; font-weight: bold;">Cancelar</button>
+                <button id="btnConfirmarLancamento" onclick="salvarLancamento()" style="flex: 2; padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">✅ Confirmar</button>
             </div>
         </div>
     </div>
@@ -2674,7 +2709,7 @@
             const perfil = state.perfil;
 
             const subAbasPermitidas = {
-                'Gerente': ['marnitasDia', 'estoque']
+                'Gerente': ['marnitasDia', 'estoque', 'operacional']
             };
             const permitidas = subAbasPermitidas[perfil];
 
@@ -3384,6 +3419,214 @@
         // Uma compra real envolve N produtos; lançar um por um no modal de "Lançar
         // Entrada" multiplica o trabalho por N. Aqui o usuário monta as linhas da
         // compra (item + quantidade + custo) e lança tudo numa única chamada para
+        // ═══════════════════════════════════════════════════════════════
+        // MÓDULO LANÇAMENTOS (Operacional + Financeiro)
+        // ═══════════════════════════════════════════════════════════════
+
+        // ── Máscaras de input ───────────────────────────────────────────
+        // Gramas: inteiros, máx 5 dígitos, ponto como separador de milhar (BR)
+        // Ex: digita 300 → "300"  |  digita 1200 → "1.200"  |  máx 99.999g
+        function _maskGramas(el) {
+            el.setAttribute('inputmode', 'numeric');
+            el.setAttribute('placeholder', 'Ex: 300 = 300g  |  1.200 = 1,2kg');
+            el.setAttribute('type', 'text');
+            el.addEventListener('input', () => {
+                const digits = el.value.replace(/\D/g, '').slice(0, 5);
+                el.value = digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            });
+        }
+
+        // Reais: formata como 1.234,56 conforme digita (centavos → reais)
+        function _maskReais(el) {
+            el.setAttribute('inputmode', 'numeric');
+            el.setAttribute('placeholder', '0,00');
+            el.dataset.centavos = '0';
+            el.addEventListener('input', () => {
+                const digits = el.value.replace(/\D/g, '');
+                const cents = parseInt(digits || '0', 10);
+                el.dataset.centavos = cents;
+                const reais = (cents / 100).toFixed(2);
+                const [intPart, decPart] = reais.split('.');
+                const intFmt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+                el.value = intFmt + ',' + decPart;
+            });
+        }
+
+        function _leituraValorLancamento(c, el) {
+            if (c.mascara === 'reais')  return ((parseInt(el.dataset.centavos || '0', 10)) / 100).toFixed(2).replace('.', ',');
+            if (c.mascara === 'gramas') return el.value.replace(/\./g, ''); // remove ponto milhar → inteiro em gramas
+            if (c.id === 'lc_data')    return el.value;
+            return el.value;
+        }
+        // ────────────────────────────────────────────────────────────────
+
+        const _LANCAMENTO_CONFIG = {
+            descarte: {
+                titulo: '🗑️ Lançar Descarte',
+                campos: [
+                    { id: 'lc_campo1', label: 'Alimento', tipo: 'text', placeholder: 'Ex: Banha da costela' },
+                    { id: 'lc_campo2', label: 'Peso', tipo: 'text', mascara: 'gramas' }
+                ]
+            },
+            peso_restos: {
+                titulo: '⚖️ Lançar Peso de Restos',
+                campos: [
+                    { id: 'lc_campo1', label: 'Tipo de Resto', tipo: 'select', opcoes: [
+                        'Cozinha - Resto de panela', 'Cozinha - Casca',
+                        'Salada - Resto de prato', 'Salada - Casca'
+                    ]},
+                    { id: 'lc_campo2', label: 'Peso', tipo: 'text', mascara: 'gramas' }
+                ]
+            },
+            avaria: {
+                titulo: '⚠️ Lançar Avaria / Extravio',
+                campos: [
+                    { id: 'lc_campo1', label: 'O que foi avariado/extraviado', tipo: 'text', placeholder: 'Ex: Garrafa de azeite' },
+                    { id: 'lc_campo2', label: 'Quantidade', tipo: 'number', placeholder: '1', step: '1' },
+                    { id: 'lc_campo3', label: 'Valor estimado (R$)', tipo: 'text', mascara: 'reais' }
+                ]
+            },
+            nota_gasto: {
+                titulo: '🧾 Lançar Nota de Gasto',
+                campos: [
+                    { id: 'lc_campo1', label: 'Tipo de Gasto', tipo: 'select', opcoes: [
+                        'Aluguel', 'Água', 'Custo - Matéria Prima', 'Custo - Gás',
+                        'Despesas Gerais', 'Folha de Pagamento', 'Imposto sobre vendas',
+                        'Investimento', 'Luz', 'Telefone', 'Despesas Legais'
+                    ]},
+                    { id: 'lc_campo2', label: 'Fornecedor', tipo: 'text', placeholder: 'Nome do fornecedor' },
+                    { id: 'lc_campo3', label: 'Valor (R$)', tipo: 'text', mascara: 'reais' },
+                    { id: 'lc_data',   label: 'Data da nota', tipo: 'date' }
+                ]
+            },
+            retirada: {
+                titulo: '💸 Lançar Retirada',
+                campos: [
+                    { id: 'lc_campo1', label: 'Para quem', tipo: 'select', opcoes: ['Milto', 'Cibele'] },
+                    { id: 'lc_campo2', label: 'Valor (R$)', tipo: 'text', mascara: 'reais' }
+                ]
+            }
+        };
+
+        let _lancamentoTipoAtual = null;
+        let _lancamentoKeyHandler = null;
+
+        function _resetBtnConfirmar() {
+            const btn = document.getElementById('btnConfirmarLancamento');
+            if (!btn) return;
+            btn.disabled = false;
+            btn.textContent = '✅ Confirmar';
+            btn.style.background = '';
+        }
+
+        function abrirModalLancamento(tipo) {
+            const cfg = _LANCAMENTO_CONFIG[tipo];
+            if (!cfg) return;
+            _lancamentoTipoAtual = tipo;
+            document.getElementById('modalLancamentoTitulo').textContent = cfg.titulo;
+
+            // Garante que o botão confirmar está no estado limpo — evita estado "Salvo" de sessão anterior
+            _resetBtnConfirmar();
+
+            const inputStyle = 'width: 100%; padding: 10px; border: 2px solid var(--border); border-radius: 6px; font-size: 14px; box-sizing: border-box; color: var(--text-dark); background: var(--bg-card);';
+            const container = document.getElementById('modalLancamentoCampos');
+            container.innerHTML = cfg.campos.map(c => {
+                if (c.tipo === 'select') {
+                    return `<div><label style="font-size: 12px; font-weight: bold; color: var(--text-muted);">${c.label}</label>
+                        <select id="${c.id}" style="${inputStyle}">
+                            ${c.opcoes.map(o => `<option value="${o}">${o}</option>`).join('')}
+                        </select></div>`;
+                }
+                return `<div><label style="font-size: 12px; font-weight: bold; color: var(--text-muted);">${c.label}</label>
+                    <input id="${c.id}" type="${c.tipo}" placeholder="${c.placeholder || ''}" ${c.step ? `step="${c.step}"` : ''}
+                        style="${inputStyle}"></div>`;
+            }).join('');
+
+            // Aplica máscaras após renderizar
+            cfg.campos.forEach(c => {
+                const el = document.getElementById(c.id);
+                if (!el) return;
+                if (c.mascara === 'gramas') _maskGramas(el);
+                if (c.mascara === 'reais')  _maskReais(el);
+            });
+
+            // Atalhos de teclado: Enter confirma, Escape fecha
+            if (_lancamentoKeyHandler) document.removeEventListener('keydown', _lancamentoKeyHandler);
+            _lancamentoKeyHandler = (e) => {
+                if (e.key === 'Escape') { e.preventDefault(); fecharModalLancamento(); }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    // Não confirma se o foco está em textarea ou select (Enter serve para interação)
+                    if (document.activeElement?.tagName === 'TEXTAREA') return;
+                    e.preventDefault();
+                    salvarLancamento();
+                }
+            };
+            document.addEventListener('keydown', _lancamentoKeyHandler);
+
+            document.getElementById('modalLancamento').classList.add('active');
+
+            // Foco no primeiro campo editável
+            setTimeout(() => {
+                const primeiro = container.querySelector('input, select');
+                if (primeiro) primeiro.focus();
+            }, 100);
+        }
+
+        function fecharModalLancamento() {
+            document.getElementById('modalLancamento').classList.remove('active');
+            _lancamentoTipoAtual = null;
+            _resetBtnConfirmar();
+            if (_lancamentoKeyHandler) {
+                document.removeEventListener('keydown', _lancamentoKeyHandler);
+                _lancamentoKeyHandler = null;
+            }
+        }
+
+        async function salvarLancamento() {
+            const cfg = _LANCAMENTO_CONFIG[_lancamentoTipoAtual];
+            if (!cfg) return;
+
+            const payload = { tipo: _lancamentoTipoAtual, usuario: state.usuario };
+
+            cfg.campos.forEach(c => {
+                const el = document.getElementById(c.id);
+                if (!el) return;
+                const val = _leituraValorLancamento(c, el);
+                if (c.id === 'lc_data')        payload.data_referencia = val;
+                else if (c.id === 'lc_campo1') payload.campo1 = val;
+                else if (c.id === 'lc_campo2') payload.campo2 = val;
+                else if (c.id === 'lc_campo3') payload.campo3 = val;
+            });
+
+            // Validação mínima: campo1 obrigatório em todos os tipos
+            if (!payload.campo1) {
+                mostrarToast('⚠️ Preencha todos os campos obrigatórios');
+                return;
+            }
+
+            // Loading state no botão — feedback imediato ao toque
+            const btn = document.getElementById('btnConfirmarLancamento');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Salvando...'; }
+
+            // POST sem signal — Regra 1 (GAS redireciona via 302)
+            try {
+                const res = await sheetsAPI('registrarLancamento', payload);
+                if (res.ok) {
+                    if (btn) { btn.textContent = '✅ Salvo!'; btn.style.background = '#27AE60'; }
+                    setTimeout(() => fecharModalLancamento(), 800);
+                } else {
+                    mostrarToast('❌ Erro: ' + (res.erro || 'desconhecido'));
+                    if (btn) { btn.disabled = false; btn.textContent = '✅ Confirmar'; btn.style.background = ''; }
+                }
+            } catch(e) {
+                mostrarToast('❌ Sem conexão — tente novamente');
+                console.error('[Lancamento]', e);
+                if (btn) { btn.disabled = false; btn.textContent = '✅ Confirmar'; btn.style.background = ''; }
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+
         // registrarEntradasEstoqueLote — mesmo padrão de darBaixaAReceberLote.
         function abrirModalLancarCompra() {
             if (!state.estoque.itens || state.estoque.itens.length === 0) {
@@ -7669,9 +7912,11 @@ var itens = comanda.itens || [];
                 this._cfg = {
                     baudRate: config.baudRate || 9600,
                     dataBits: config.dataBits || 8,
-                    stopBits: config.stopBits || 1,
+                    stopBits: config.stopBits || 2,   // Urano POP-S requer stop bits = 2
                     parity:   config.parity   || 'none',
                 };
+                this._pollCmd = new Uint8Array([0x04, 0x05]); // comando de leitura Urano POP-S
+                this._pollInterval = null;
                 this._port      = null;
                 this._reader    = null;
                 this._buffer    = '';
@@ -7691,6 +7936,7 @@ var itens = comanda.itens || [];
                     this._alive  = true;
                     console.log('[WeightSerial] Porta aberta:', this._cfg);
                     this._readLoop();
+                    this._startPolling();
                 } catch(e) {
                     this._status = 'error';
                     console.error('[WeightSerial] Falha ao conectar:', e.message);
@@ -7701,11 +7947,27 @@ var itens = comanda.itens || [];
             async disconnect() {
                 this._alive  = false;
                 this._status = 'disconnected';
+                clearInterval(this._pollInterval);
+                this._pollInterval = null;
                 try { if (this._reader) await this._reader.cancel(); } catch(e) {}
                 try { if (this._port)   await this._port.close();    } catch(e) {}
                 this._reader = null;
                 this._port   = null;
                 console.log('[WeightSerial] Desconectado.');
+            }
+
+            _startPolling() {
+                // Urano POP-S modo sob demanda: envia 0x04 0x05 a cada 800ms para solicitar leitura
+                this._pollInterval = setInterval(async () => {
+                    if (!this._alive || !this._port?.writable) return;
+                    try {
+                        const writer = this._port.writable.getWriter();
+                        await writer.write(this._pollCmd);
+                        writer.releaseLock();
+                    } catch(e) {
+                        console.warn('[WeightSerial] Falha ao enviar poll:', e.message);
+                    }
+                }, 800);
             }
 
             async _readLoop() {
@@ -7737,20 +7999,24 @@ var itens = comanda.itens || [];
                 lines.forEach(l => this._parseLine(l.trim()));
             }
 
-            // Urano: "ST,GS,+  0.300 kg"  ou  "ST,GS,+0.300kg"
-            // Alguns modelos enviam apenas o número em gramas
+            // Urano POP-S retorna: \x1b[T2\x1b[B\x1b[N0 0,210 kg 0,00 \x1b[N1 0,00 \x1b[E\x1b[P1
+            // Aceita vírgula ou ponto como separador decimal
             _parseLine(line) {
                 if (!line) return;
-                console.log('[WeightSerial] Linha recebida:', line);
-                const kgMatch = line.match(/([0-9]+\.?[0-9]*)\s*kg/i);
-                const gMatch  = line.match(/([0-9]+\.?[0-9]*)\s*g\b/i);
-                const rawNum  = line.match(/^\s*\+?\s*([0-9]+\.?[0-9]*)\s*$/);
+                // Remove ESC sequences antes de parsear
+                const clean = line.replace(/\x1b\[[^A-Za-z]*[A-Za-z]/g, ' ');
+                console.log('[WeightSerial] Linha:', JSON.stringify(line), '→ limpa:', clean.trim());
+                // Extrai valor em kg (aceita vírgula ou ponto)
+                const kgMatch = clean.match(/([0-9]+[,\.][0-9]+)\s*kg/i);
+                const gMatch  = clean.match(/([0-9]+[,\.][0-9]+)\s*g\b/i);
+                const rawNum  = clean.match(/^\s*\+?\s*([0-9]+[,\.][0-9]+)\s*$/);
                 let gramas = null;
-                if (kgMatch)   gramas = Math.round(parseFloat(kgMatch[1]) * 1000);
-                else if (gMatch)  gramas = Math.round(parseFloat(gMatch[1]));
-                else if (rawNum) gramas = parseFloat(rawNum[1]) > 10
-                    ? Math.round(parseFloat(rawNum[1]))           // já em gramas
-                    : Math.round(parseFloat(rawNum[1]) * 1000);   // provavelmente kg
+                const toFloat = s => parseFloat(s.replace(',', '.'));
+                if (kgMatch)      gramas = Math.round(toFloat(kgMatch[1]) * 1000);
+                else if (gMatch)  gramas = Math.round(toFloat(gMatch[1]));
+                else if (rawNum)  gramas = toFloat(rawNum[1]) > 10
+                    ? Math.round(toFloat(rawNum[1]))
+                    : Math.round(toFloat(rawNum[1]) * 1000);
                 if (gramas !== null && gramas >= 0) {
                     console.log('[WeightSerial] Peso parseado:', gramas, 'g');
                     this._listeners.forEach(cb => { try { cb(gramas); } catch(e) {} });
@@ -7879,8 +8145,8 @@ var itens = comanda.itens || [];
         function _initWeightService() {
             if (!WEIGHT_PROFILES.includes(state.perfil)) return;
             if (weightService) return; // já iniciado
-            // ── Trocar MockWeightProvider por SerialWeightProviderAndroid quando o hardware chegar ──
-            const provider = new MockWeightProvider();
+            // ── Urano POP-S via FTDI RS232→USB-C — stopBits=2, cmd=0405 ──
+            const provider = new SerialWeightProviderAndroid({ stopBits: 2 });
             weightService  = new WeightService();
             weightService.init(provider);
             _updateWeightStatusBadge();
