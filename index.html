@@ -1843,6 +1843,8 @@
                            outline: none;">
                 <div style="font-size: 11px; color: #bbb; margin-top: 8px; font-weight: bold; letter-spacing: 2px;">GRAMAS</div>
                 <div id="weightStatusBadge" style="display:none; margin-top:6px; font-size:10px; font-weight:bold; letter-spacing:1px; padding:3px 10px; border-radius:20px; background:#f0faf5; color:#27ae60; border:1px solid #a8e6c8;">⚖️ BALANÇA</div>
+                <!-- Botão visível apenas quando balança não está conectada -->
+                <button id="btnConectarBalanca" onclick="conectarBalancaManual()" style="display:none; margin-top:12px; padding:10px 20px; background:linear-gradient(135deg,#D4724F,#c05a3a); color:white; border:none; border-radius:8px; font-size:13px; font-weight:bold; cursor:pointer; width:100%;">🔌 Conectar Balança</button>
             </div>
 
             <!-- COLUNA DIREITA: totais + botões -->
@@ -6794,9 +6796,10 @@ function carregarComanda() {
             // ⚖️ Preenche com o último peso estável da balança (se disponível)
             if (weightService) {
                 _updateWeightStatusBadge();
+                _atualizarBotaoConectarBalanca(); // mostra "Conectar Balança" se ainda não conectou
                 weightService.fillModal();  // preenche imediatamente se já há peso
                 // _syncModal() do WeightService continua atualizando a cada 300ms
-                _weightLog('modal aberta', 'peso_atual=' + (weightService.getLastStableWeight() ?? 'aguardando'));
+                _weightLog('modal aberta', 'status=' + weightService.getStatus() + ' peso=' + (weightService.getLastStableWeight() ?? 'nenhum'));
             } else {
                 // Usuário sem balança: foco para digitação manual
                 const inputPeso = document.getElementById('inputPeso');
@@ -8053,12 +8056,23 @@ var itens = comanda.itens || [];
             init(provider) {
                 this._provider = provider;
                 provider.onWeightUpdate(g => this._onReading(g));
-                provider.connect().catch(e =>
-                    console.error('[WeightService] Erro ao conectar provider:', e)
-                );
-                // Atualiza modal enquanto estiver aberta
+                // NÃO conectar automaticamente — navigator.serial.requestPort() exige
+                // user gesture direto (tap). A conexão é feita via btnConectarBalanca na modal.
                 this._modalInterval = setInterval(() => this._syncModal(), 300);
-                console.log('[WeightService] Iniciado. Provider:', provider.constructor.name);
+                console.log('[WeightService] Iniciado. Provider:', provider.constructor.name, '— aguardando gesto do usuário para conectar.');
+            }
+
+            // Conecta o provider — deve ser chamado a partir de um evento de user gesture
+            async connectProvider() {
+                try {
+                    await this._provider.connect();
+                    _updateWeightStatusBadge();
+                    _atualizarBotaoConectarBalanca();
+                    console.log('[WeightService] Conectado via user gesture.');
+                } catch(e) {
+                    console.error('[WeightService] Falha na conexão:', e.message);
+                    throw e;
+                }
             }
 
             _onReading(grams) {
@@ -8171,14 +8185,28 @@ var itens = comanda.itens || [];
                 badge.style.color      = '#27ae60';
                 badge.style.borderColor = '#a8e6c8';
                 badge.textContent = '⚖️ BALANÇA';
-            } else if (weightService) {
-                badge.style.display  = 'block';
-                badge.style.background = '#fff8e1';
-                badge.style.color      = '#E67E22';
-                badge.style.borderColor = '#ffe0a0';
-                badge.textContent = '⚖️ AGUARDANDO...';
             } else {
                 badge.style.display = 'none';
+            }
+        }
+
+        function _atualizarBotaoConectarBalanca() {
+            const btn = document.getElementById('btnConectarBalanca');
+            if (!btn || !weightService) return;
+            const conectado = weightService.getStatus() === 'connected';
+            btn.style.display = conectado ? 'none' : 'block';
+        }
+
+        async function conectarBalancaManual() {
+            if (!weightService) return;
+            const btn = document.getElementById('btnConectarBalanca');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Conectando...'; }
+            try {
+                await weightService.connectProvider();
+                mostrarToast('✅ Balança conectada!');
+            } catch(e) {
+                mostrarToast('❌ ' + (e.message || 'Erro ao conectar balança'));
+                if (btn) { btn.disabled = false; btn.textContent = '🔌 Conectar Balança'; }
             }
         }
 
