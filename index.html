@@ -7907,141 +7907,132 @@ var itens = comanda.itens || [];
             }
         }
 
-        // ── 2. SerialWeightProviderAndroid ──────────────────
-        // Skeleton pronto para conexão com balança Urano via FTDI RS232→USB-C
-        // Requer Web Serial API (Chrome 89+ desktop) ou bridge Android nativo
-        class SerialWeightProviderAndroid {
-            constructor(config = {}) {
-                this._cfg = {
-                    baudRate: config.baudRate || 9600,
-                    dataBits: config.dataBits || 8,
-                    stopBits: config.stopBits || 2,   // Urano POP-S requer stop bits = 2
-                    parity:   config.parity   || 'none',
-                };
-                this._pollCmd = new Uint8Array([0x04, 0x05]); // comando de leitura Urano POP-S
-                this._pollInterval = null;
-                this._port      = null;
-                this._reader    = null;
-                this._buffer    = '';
+        // ── 2. WebUSBWeightProviderCH34x ────────────────────
+        // Web Serial API NÃO funciona em Android Chrome para USB físico (só Bluetooth).
+        // WebUSB acessa o CH34x diretamente, igual ao que o Serial USB Terminal faz.
+        // CH340: VID=0x1A86 PID=0x7523 | CH341: VID=0x1A86 PID=0x5523
+        // Protocolo: bulk IN 0x82 (2 bytes header + dados), bulk OUT 0x02, poll cmd 0x04 0x05
+        class WebUSBWeightProviderCH34x {
+            constructor() {
+                this._device    = null;
                 this._status    = 'disconnected';
                 this._listeners = [];
                 this._alive     = false;
+                this._buffer    = '';
+                this._pollTimer = null;
+                this._POLL_CMD  = new Uint8Array([0x04, 0x05]); // Urano POP-S: solicita leitura
+                this._EP_IN     = 0x82; // Bulk IN endpoint
+                this._EP_OUT    = 0x02; // Bulk OUT endpoint
             }
 
             async connect() {
-                if (!navigator.serial) {
-                    throw new Error('Web Serial API não disponível. Use Chrome Desktop ou bridge Android.');
-                }
+                if (!navigator.usb) throw new Error('WebUSB não disponível. Requer Chrome com HTTPS.');
                 try {
-                    // CH34x (WCH) VID: 0x1A86 — necessário no Android Chrome; sem filtro = lista vazia
-                    // CH340: PID 0x7523 | CH341: PID 0x5523
-                    this._port = await navigator.serial.requestPort({
-                        filters: [
-                            { usbVendorId: 0x1A86, usbProductId: 0x7523 }, // CH340
-                            { usbVendorId: 0x1A86, usbProductId: 0x5523 }, // CH341
-                            { usbVendorId: 0x1A86 },                        // qualquer WCH
-                        ]
+                    this._device = await navigator.usb.requestDevice({
+                        filters: [{ vendorId: 0x1A86 }] // WCH: CH340 / CH341
                     });
-                    await this._port.open(this._cfg);
+                    await this._device.open();
+                    await this._device.selectConfiguration(1);
+                    await this._device.claimInterface(0);
+                    await this._initUART();
                     this._status = 'connected';
                     this._alive  = true;
-                    console.log('[WeightSerial] Porta aberta:', this._cfg);
+                    console.log('[WeightUSB] CH34x conectado. Iniciando leitura e polling.');
                     this._readLoop();
                     this._startPolling();
                 } catch(e) {
                     this._status = 'error';
-                    console.error('[WeightSerial] Falha ao conectar:', e.message);
+                    console.error('[WeightUSB] Falha ao conectar:', e.message);
                     throw e;
                 }
             }
 
-            async disconnect() {
-                this._alive  = false;
-                this._status = 'disconnected';
-                clearInterval(this._pollInterval);
-                this._pollInterval = null;
-                try { if (this._reader) await this._reader.cancel(); } catch(e) {}
-                try { if (this._port)   await this._port.close();    } catch(e) {}
-                this._reader = null;
-                this._port   = null;
-                console.log('[WeightSerial] Desconectado.');
+            // Inicializa CH340/CH341 para 9600 baud, 8 data bits, 2 stop bits, sem paridade
+            async _initUART() {
+                const d = this._device;
+                const vout = (req, val, idx) => d.controlTransferOut(
+                    { requestType: 'vendor', recipient: 'device', request: req, value: val, index: idx },
+                    new Uint8Array(0));
+
+                // Baud rate 9600: wValue=0x1312 (registradores), wIndex=0x02B2 (divisor)
+                await vout(0x9A, 0x1312, 0x02B2);
+
+                // Linha 8N2: CS8=0x03 | STOP2=0x04 = 0x07
+                // wValue=0x2518 (registrador LCR), wIndex=0x07
+                await vout(0x9A, 0x2518, 0x07);
+
+                // Ativa DTR e RTS
+                await vout(0xA4, ~(0x20 | 0x40) & 0xFF, 0);
+
+                console.log('[WeightUSB] UART: 9600 8N2 DTR+RTS');
             }
 
             _startPolling() {
-                // Urano POP-S modo sob demanda: envia 0x04 0x05 a cada 800ms para solicitar leitura
-                this._pollInterval = setInterval(async () => {
-                    if (!this._alive || !this._port?.writable) return;
+                this._pollTimer = setInterval(async () => {
+                    if (!this._alive || !this._device) return;
                     try {
-                        const writer = this._port.writable.getWriter();
-                        await writer.write(this._pollCmd);
-                        writer.releaseLock();
+                        await this._device.transferOut(this._EP_OUT, this._POLL_CMD);
                     } catch(e) {
-                        console.warn('[WeightSerial] Falha ao enviar poll:', e.message);
+                        console.warn('[WeightUSB] Poll falhou:', e.message);
                     }
                 }, 800);
             }
 
             async _readLoop() {
-                while (this._alive && this._port?.readable) {
-                    this._reader = this._port.readable.getReader();
+                while (this._alive && this._device) {
                     try {
-                        while (true) {
-                            const { value, done } = await this._reader.read();
-                            if (done) break;
-                            this._processChunk(new TextDecoder().decode(value));
+                        const result = await this._device.transferIn(this._EP_IN, 64);
+                        if (result.data && result.data.byteLength > 2) {
+                            // CH34x: primeiros 2 bytes = status (modem + line) — pula
+                            const payload = new Uint8Array(result.data.buffer, 2);
+                            this._processChunk(new TextDecoder().decode(payload));
                         }
                     } catch(e) {
                         if (this._alive) {
+                            console.error('[WeightUSB] Erro de leitura:', e.message);
                             this._status = 'error';
-                            console.error('[WeightSerial] Erro de leitura:', e.message);
-                            this._scheduleReconnect();
                         }
-                    } finally {
-                        try { this._reader.releaseLock(); } catch(e) {}
-                        this._reader = null;
+                        break;
                     }
                 }
             }
 
             _processChunk(text) {
                 this._buffer += text;
-                const lines  = this._buffer.split(/[\r\n]+/);
-                this._buffer = lines.pop(); // guarda linha incompleta
-                lines.forEach(l => this._parseLine(l.trim()));
+                const parts  = this._buffer.split(/[\r\n\x1b]/);
+                this._buffer = parts.pop();
+                parts.forEach(l => this._parseLine(l.trim()));
             }
 
-            // Urano POP-S retorna: \x1b[T2\x1b[B\x1b[N0 0,210 kg 0,00 \x1b[N1 0,00 \x1b[E\x1b[P1
-            // Aceita vírgula ou ponto como separador decimal
+            // Urano POP-S: \x1b[T2\x1b[B\x1b[N0 0,210 kg 0,00 \x1b[N1 0,00 \x1b[E\x1b[P1
             _parseLine(line) {
                 if (!line) return;
-                // Remove ESC sequences antes de parsear
-                const clean = line.replace(/\x1b\[[^A-Za-z]*[A-Za-z]/g, ' ');
-                console.log('[WeightSerial] Linha:', JSON.stringify(line), '→ limpa:', clean.trim());
-                // Extrai valor em kg (aceita vírgula ou ponto)
+                const clean   = line.replace(/\x1b\[[^A-Za-z]*[A-Za-z]/g, ' ');
+                console.log('[WeightUSB] Linha:', JSON.stringify(line), '→', clean.trim());
+                const toFloat = s => parseFloat(s.replace(',', '.'));
                 const kgMatch = clean.match(/([0-9]+[,\.][0-9]+)\s*kg/i);
                 const gMatch  = clean.match(/([0-9]+[,\.][0-9]+)\s*g\b/i);
                 const rawNum  = clean.match(/^\s*\+?\s*([0-9]+[,\.][0-9]+)\s*$/);
                 let gramas = null;
-                const toFloat = s => parseFloat(s.replace(',', '.'));
-                if (kgMatch)      gramas = Math.round(toFloat(kgMatch[1]) * 1000);
-                else if (gMatch)  gramas = Math.round(toFloat(gMatch[1]));
-                else if (rawNum)  gramas = toFloat(rawNum[1]) > 10
+                if (kgMatch)     gramas = Math.round(toFloat(kgMatch[1]) * 1000);
+                else if (gMatch) gramas = Math.round(toFloat(gMatch[1]));
+                else if (rawNum) gramas = toFloat(rawNum[1]) > 10
                     ? Math.round(toFloat(rawNum[1]))
                     : Math.round(toFloat(rawNum[1]) * 1000);
                 if (gramas !== null && gramas >= 0) {
-                    console.log('[WeightSerial] Peso parseado:', gramas, 'g');
+                    console.log('[WeightUSB] ✅ Peso:', gramas, 'g');
                     this._listeners.forEach(cb => { try { cb(gramas); } catch(e) {} });
                 }
             }
 
-            _scheduleReconnect() {
-                console.log('[WeightSerial] Tentando reconectar em 3s...');
-                setTimeout(async () => {
-                    if (this._alive) {
-                        try { await this.connect(); }
-                        catch(e) { this._scheduleReconnect(); }
-                    }
-                }, 3000);
+            async disconnect() {
+                this._alive = false;
+                this._status = 'disconnected';
+                clearInterval(this._pollTimer);
+                this._pollTimer = null;
+                try { if (this._device) await this._device.close(); } catch(e) {}
+                this._device = null;
+                console.log('[WeightUSB] Desconectado.');
             }
 
             getStatus() { return this._status; }
@@ -8167,8 +8158,8 @@ var itens = comanda.itens || [];
         function _initWeightService() {
             if (!WEIGHT_PROFILES.includes(state.perfil)) return;
             if (weightService) return; // já iniciado
-            // ── Urano POP-S via FTDI RS232→USB-C — stopBits=2, cmd=0405 ──
-            const provider = new SerialWeightProviderAndroid({ stopBits: 2 });
+            // WebUSB direto no CH34x — Web Serial API não funciona em Android Chrome para USB
+            const provider = new WebUSBWeightProviderCH34x();
             weightService  = new WeightService();
             weightService.init(provider);
             _updateWeightStatusBadge();
