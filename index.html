@@ -7925,24 +7925,33 @@ var itens = comanda.itens || [];
                 this._EP_OUT    = 0x02; // Bulk OUT endpoint
             }
 
-            async connect() {
+            async connect(onStep) {
+                const step = (msg) => {
+                    console.log('[WeightUSB]', msg);
+                    if (onStep) onStep(msg);
+                };
                 if (!navigator.usb) throw new Error('WebUSB não disponível. Requer Chrome com HTTPS.');
                 try {
+                    step('Selecionando dispositivo...');
                     this._device = await navigator.usb.requestDevice({
-                        filters: [{ vendorId: 0x1A86 }] // WCH: CH340 / CH341
+                        filters: [{ vendorId: 0x1A86 }]
                     });
+                    step('Abrindo dispositivo...');
                     await this._device.open();
-                    await this._device.selectConfiguration(1);
+                    step('Selecionando configuração...');
+                    try { await this._device.selectConfiguration(1); } catch(e) { step('selectConfig ignorado: ' + e.message); }
+                    step('Reivindicando interface 0...');
                     await this._device.claimInterface(0);
+                    step('Iniciando UART...');
                     await this._initUART();
                     this._status = 'connected';
                     this._alive  = true;
-                    console.log('[WeightUSB] CH34x conectado. Iniciando leitura e polling.');
+                    step('Conectado!');
                     this._readLoop();
                     this._startPolling();
                 } catch(e) {
                     this._status = 'error';
-                    console.error('[WeightUSB] Falha ao conectar:', e.message);
+                    console.error('[WeightUSB] Falha:', e.message);
                     throw e;
                 }
             }
@@ -8072,9 +8081,9 @@ var itens = comanda.itens || [];
             }
 
             // Conecta o provider — deve ser chamado a partir de um evento de user gesture
-            async connectProvider() {
+            async connectProvider(onStep) {
                 try {
-                    await this._provider.connect();
+                    await this._provider.connect(onStep);
                     _updateWeightStatusBadge();
                     _atualizarBotaoConectarBalanca();
                     console.log('[WeightService] Conectado via user gesture.');
@@ -8221,7 +8230,9 @@ var itens = comanda.itens || [];
             }, 10000);
 
             try {
-                await weightService.connectProvider();
+                await weightService.connectProvider((msg) => {
+                    if (btn) btn.textContent = '⏳ ' + msg; // mostra passo atual na tela
+                });
                 clearTimeout(timer);
                 mostrarToast('✅ Balança conectada!');
             } catch(e) {
