@@ -2692,7 +2692,7 @@
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260610-v32-balanca-timeout-enq';  // Timestamp único
+            const timestampAtual = '20260610-v33-balanca-sem-timeout';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -8582,34 +8582,28 @@ var itens = comanda.itens || [];
             }
 
             async _readLoop() {
-                let _tick = 0;
+                // SEM Promise.race/timeout — transferIn só pode ter uma chamada ativa por vez.
+                // O ENQ polling (1.5s) vai provocar resposta da balança.
                 while (this._alive && this._device) {
                     try {
-                        // transferIn sem timeout nativo → race com promise de timeout
-                        const result = await Promise.race([
-                            this._device.transferIn(this._EP_IN, 64),
-                            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 3s')), 3000))
-                        ]);
+                        const result = await this._device.transferIn(this._EP_IN, 64);
                         if (result.data && result.data.byteLength > 0) {
                             const raw = new Uint8Array(result.data.buffer);
                             const hex = Array.from(raw).map(b => b.toString(16).padStart(2,'0')).join(' ');
                             this._debugLog('RAW(' + raw.length + '): ' + hex);
-                            // CH34x prepend 2 bytes de status modem quando byteLength >= 2
+                            // CH34x prepend 2 bytes de status modem
                             const offset = (raw.length >= 2 && raw[0] <= 0x0F && raw[1] <= 0x1F) ? 2 : 0;
                             if (raw.length > offset) {
                                 const payload = new Uint8Array(result.data.buffer, offset);
                                 this._processChunk(new TextDecoder('latin1').decode(payload));
                             }
                         } else {
-                            _tick++;
-                            if (_tick % 5 === 0) this._debugLog('byteLength=0 (' + _tick + 'x)');
+                            this._debugLog('byteLength=0');
                         }
                     } catch(e) {
-                        this._debugLog('⚠ ' + e.message);
-                        // timeout: continua o loop (não é erro fatal)
-                        if (e.message.includes('timeout')) continue;
-                        if (this._alive) this._status = 'error';
-                        break;
+                        if (!this._alive) break; // desconexão intencional
+                        this._debugLog('ERRO: ' + e.message);
+                        await new Promise(r => setTimeout(r, 500)); // pausa antes de retry
                     }
                 }
             }
