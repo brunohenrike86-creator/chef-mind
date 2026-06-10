@@ -1220,9 +1220,8 @@
         body.modo-mobile .sidebar { display: none !important; }
         body.modo-mobile .content { margin-left: 0 !important; padding-top: 0 !important; }
 
-        /* Botão ☰ na barra de total: oculto por padrão, aparece só no mobile */
-        #mobileMenuTrigger { display: none; }
-        body.modo-mobile #mobileMenuTrigger { display: flex !important; }
+        /* Tira de nav no topo: aparece só no mobile */
+        body.modo-mobile #mobileTopBar { display: flex !important; }
 
         /* ===== MOBILE DRAWER ===== */
         #mobileMenu .mobile-menu-btn {
@@ -1415,6 +1414,14 @@
 
                 <!-- PAINEL ESQUERDO: comanda + código + lista (em telas grandes vira coluna) -->
                 <div id="lancar-panel-left" style="display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;">
+                    <!-- MOBILE NAV STRIP — só visível em modo-mobile -->
+                    <div id="mobileTopBar" style="display:none; align-items:center; gap:10px; padding:0 10px; height:40px; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.15);">
+                        <button onclick="toggleMobileMenu()" style="width:36px; height:36px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); border-radius:6px; color:white; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">☰</button>
+                        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; overflow:hidden;">
+                            <div style="font-size:12px; font-weight:bold; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">🍽️ Michelin</div>
+                            <div id="mobileTopBarUser" style="font-size:10px; color:rgba(255,255,255,0.75); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+                        </div>
+                    </div>
                     <!-- SECTION 1: CAMPO DA COMANDA -->
                     <div id="lancar-secao-comanda" style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); flex-shrink: 0;">
                         <div id="lancar-label-comanda" style="color: white; font-size: 10px; font-weight: bold; margin-bottom: 6px; opacity: 0.9;">📋 SELECIONE A COMANDA</div>
@@ -1443,8 +1450,6 @@
                         <div id="lancar-total-bar" onclick="toggleListaMobile(event)" style="padding: 10px 6px; background: linear-gradient(135deg, #704D34 0%, #8B6F47 100%); color: white; border-top: 1px solid var(--border); flex-shrink: 0;">
                             <div style="font-size: 9px; opacity: 0.9; margin-bottom: 2px;">TOTAL</div>
                             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                                <button id="mobileMenuTrigger" onclick="toggleMobileMenu(); event.stopPropagation();"
-                                    style="width:36px; height:36px; background:rgba(255,255,255,0.18); border:none; border-radius:6px; color:white; font-size:18px; cursor:pointer; flex-shrink:0; align-items:center; justify-content:center;">☰</button>
                                 <div id="totalComanda" style="font-size: 26px; font-weight: bold; flex:1;">R$ 0,00</div>
                                 <span id="mobileTotalToggle" style="font-size:14px; opacity:0.8;">▲</span>
                             </div>
@@ -2137,8 +2142,6 @@
                 <div id="weightStatusBadge" style="display:none; margin-top:6px; font-size:10px; font-weight:bold; letter-spacing:1px; padding:3px 10px; border-radius:20px; background:#f0faf5; color:#27ae60; border:1px solid #a8e6c8;">⚖️ BALANÇA</div>
                 <!-- Botão visível apenas quando balança não está conectada -->
                 <button id="btnConectarBalanca" onclick="conectarBalancaManual()" style="display:none; margin-top:12px; padding:10px 20px; background:linear-gradient(135deg,#D4724F,#c05a3a); color:white; border:none; border-radius:8px; font-size:13px; font-weight:bold; cursor:pointer; width:100%;">🔌 Conectar Balança</button>
-                <!-- Área de debug — mostra bytes brutos na tela do tablet -->
-                <div id="balancaDebugBox" style="display:none; margin-top:10px; width:100%; background:#111; border-radius:6px; padding:6px 8px; font-family:monospace; font-size:10px; color:#0f0; max-height:70px; overflow-y:auto; text-align:left; word-break:break-all;"></div>
             </div>
 
             <!-- COLUNA DIREITA: totais + botões -->
@@ -2188,6 +2191,12 @@
         </div>
     </div>
     
+    <!-- DEBUG BALANÇA — overlay fixo visível sobre qualquer modal -->
+    <div id="balancaDebugBox" style="display:none; position:fixed; bottom:0; left:0; right:0; z-index:19999; background:#111; padding:6px 10px; font-family:monospace; font-size:11px; color:#0f0; max-height:90px; overflow-y:auto; word-break:break-all; border-top:2px solid #0f0;">
+        <div style="color:#aaa; font-size:10px; margin-bottom:2px;">▼ DEBUG BALANÇA (toque para fechar)</div>
+        <div id="balancaDebugLog"></div>
+    </div>
+
     <!-- FULLSCREEN PREPARO - PARA CLIENTE/TV -->
     <div id="fullscreenPreparo" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #111; z-index: 9999; overflow: hidden; color: white; padding: 0; margin: 0; flex-direction: column;">
 
@@ -2683,7 +2692,7 @@
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260610-v30-balanca-debug-tela';  // Timestamp único
+            const timestampAtual = '20260610-v32-balanca-timeout-enq';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -3311,6 +3320,10 @@
             if (['Caixa', 'Balança'].includes(state.perfil)) return;
             const eMobile = window.innerWidth < 500;
             document.body.classList.toggle('modo-mobile', eMobile);
+            if (eMobile) {
+                const el = document.getElementById('mobileTopBarUser');
+                if (el) el.textContent = (state.user || '') + (state.perfil ? ' · ' + state.perfil : '');
+            }
         }
 
         function toggleMobileMenu() {
@@ -3332,23 +3345,34 @@
             const userEl = document.getElementById('mobileMenuUser');
             if (userEl) userEl.textContent = (state.user || '') + ' · ' + (state.perfil || '');
 
+            // Atualiza também a tira de topo
+            const topBarUser = document.getElementById('mobileTopBarUser');
+            if (topBarUser) topBarUser.textContent = (state.user || '') + ' · ' + (state.perfil || '');
+
             // Itens de menu baseados em permissões
             const labels = {
-                lançar: '📋 Lançar', checkout: '💳 Checkout',
-                preparo: '🍳 Preparo', dashboard: '💰 Caixa',
-                areceber: '📌 A Receber', admin: '⚙️ Admin'
+                'lançar': '📋 Lançar', 'checkout': '💳 Checkout',
+                'preparo': '🍳 Preparo', 'dashboard': '💰 Caixa',
+                'areceber': '📌 A Receber', 'admin': '⚙️ Admin'
             };
-            const perms  = permissoes[state.perfil] || [];
+            const perms = permissoes[state.perfil] || [];
             const currentScreen = document.querySelector('.screen.active')?.id?.replace('screen-','');
             const container = document.getElementById('mobileMenuItens');
             if (!container) return;
-            container.innerHTML = perms.map(p => {
-                const isActive = currentScreen === p;
-                return `<button class="mobile-menu-btn${isActive ? ' active-screen' : ''}"
-                    onclick="closeMobileMenu(); const btn=document.querySelector('[data-menu=\\'${p}\\']'); switchScreen('${p}',btn);">
-                    ${labels[p] || p}
-                </button>`;
-            }).join('');
+            container.innerHTML = '';
+            perms.forEach(p => {
+                const btn = document.createElement('button');
+                btn.className = 'mobile-menu-btn' + (currentScreen === p ? ' active-screen' : '');
+                btn.textContent = labels[p] || p;
+                btn.addEventListener('click', () => mobileNavTo(p));
+                container.appendChild(btn);
+            });
+        }
+
+        function mobileNavTo(screenName) {
+            closeMobileMenu();
+            const btn = document.querySelector('[data-menu="' + screenName + '"]');
+            switchScreen(screenName, btn);
         }
 
         // Tap na barra de total expande/colapsa a lista de itens lançados
@@ -8534,34 +8558,56 @@ var itens = comanda.itens || [];
 
             _debugLog(msg) {
                 const box = document.getElementById('balancaDebugBox');
-                if (!box) return;
+                const log = document.getElementById('balancaDebugLog');
+                if (!box || !log) return;
                 box.style.display = 'block';
-                box.textContent = msg + '\n' + box.textContent;
-                if (box.textContent.length > 600) box.textContent = box.textContent.slice(0, 600);
+                box.onclick = () => { box.style.display = 'none'; };
+                const line = document.createElement('div');
+                line.textContent = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' ' + msg;
+                log.prepend(line);
+                if (log.children.length > 20) log.lastChild.remove();
+            }
+
+            // Envia ENQ (0x05) periodicamente — muitas balanças só transmitem quando consultadas
+            _startPolling() {
+                this._pollTimer = setInterval(async () => {
+                    if (!this._alive || !this._device) return;
+                    try {
+                        await this._device.transferOut(this._EP_OUT, new Uint8Array([0x05])); // ENQ
+                        this._debugLog('→ ENQ enviado');
+                    } catch(e) {
+                        this._debugLog('poll ERRO: ' + e.message);
+                    }
+                }, 1500);
             }
 
             async _readLoop() {
-                let _silentTicks = 0;
+                let _tick = 0;
                 while (this._alive && this._device) {
                     try {
-                        const result = await this._device.transferIn(this._EP_IN, 64);
+                        // transferIn sem timeout nativo → race com promise de timeout
+                        const result = await Promise.race([
+                            this._device.transferIn(this._EP_IN, 64),
+                            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 3s')), 3000))
+                        ]);
                         if (result.data && result.data.byteLength > 0) {
                             const raw = new Uint8Array(result.data.buffer);
                             const hex = Array.from(raw).map(b => b.toString(16).padStart(2,'0')).join(' ');
-                            this._debugLog('RAW: ' + hex);
-                            _silentTicks = 0;
-                            // CH34x prepend 2 bytes de status quando byteLength >= 2
+                            this._debugLog('RAW(' + raw.length + '): ' + hex);
+                            // CH34x prepend 2 bytes de status modem quando byteLength >= 2
                             const offset = (raw.length >= 2 && raw[0] <= 0x0F && raw[1] <= 0x1F) ? 2 : 0;
                             if (raw.length > offset) {
                                 const payload = new Uint8Array(result.data.buffer, offset);
                                 this._processChunk(new TextDecoder('latin1').decode(payload));
                             }
                         } else {
-                            _silentTicks++;
-                            if (_silentTicks % 10 === 0) this._debugLog('sem dados (' + _silentTicks + 'x)');
+                            _tick++;
+                            if (_tick % 5 === 0) this._debugLog('byteLength=0 (' + _tick + 'x)');
                         }
                     } catch(e) {
-                        this._debugLog('ERRO: ' + e.message);
+                        this._debugLog('⚠ ' + e.message);
+                        // timeout: continua o loop (não é erro fatal)
+                        if (e.message.includes('timeout')) continue;
                         if (this._alive) this._status = 'error';
                         break;
                     }
