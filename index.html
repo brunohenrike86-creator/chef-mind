@@ -1013,6 +1013,228 @@
             cursor: pointer;
         }
         body.modo-balanca #balancaSair { display: block; }
+
+        /* ========== MODO CAIXA ========== */
+        body.modo-caixa .header   { display: none !important; }
+        body.modo-caixa .sidebar  { display: none !important; }
+        body.modo-caixa .container-main { padding: 0 !important; padding-top: 64px !important; height: 100dvh; box-sizing: border-box; }
+        body.modo-caixa #mainApp  { height: 100dvh; }
+        body.modo-caixa #screen-lançar,
+        body.modo-caixa #screen-checkout { width: 100% !important; overflow-y: auto; }
+
+        /* Caixa bar - hidden by default, shown via JS display:flex */
+        #caixaBar {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            height: 64px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            align-items: stretch;
+        }
+        body.modo-caixa #caixaBar { display: flex !important; }
+
+        /* Drawer */
+        #caixaDrawer {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+            z-index: 200;
+            width: 230px;
+            background: white;
+            box-shadow: 4px 0 20px rgba(0,0,0,0.25);
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        #caixaDrawerOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 150;
+        }
+        .caixa-drawer-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-dark);
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.15s;
+        }
+        .caixa-drawer-item:active { background: #f5f0eb; }
+
+        /* Lançar overrides no modo Caixa */
+        body.modo-caixa #lançarComandaNum  { font-size: 26px !important; height: 62px !important; padding: 16px !important; letter-spacing: 3px; }
+        body.modo-caixa #btnLimparComanda  { font-size: 15px !important; padding: 16px 18px !important; }
+        body.modo-caixa #statusComanda     { font-size: 15px !important; padding: 12px !important; }
+        body.modo-caixa #lançarCodigoItem  { font-size: 20px !important; padding: 14px !important; }
+        body.modo-caixa #listaItensDisponiveis {
+            grid-template-columns: repeat(auto-fill, 100px) !important;
+            gap: 8px !important;
+            padding: 8px !important;
+            align-content: start !important;
+        }
+        body.modo-caixa .item-cat-btn  { min-height: 96px !important; padding: 8px !important; }
+        body.modo-caixa .item-cat-btn img { width: 56px !important; height: 56px !important; }
+        body.modo-caixa .cat-icone     { font-size: 28px !important; }
+        body.modo-caixa .cat-nome      { font-size: 13px !important; font-weight: bold; }
+        body.modo-caixa .cat-preco     { font-size: 12px !important; }
+        body.modo-caixa #abaCategorias button { font-size: 13px !important; padding: 10px 16px !important; }
+
+        /* Checkout overrides no modo Caixa */
+        body.modo-caixa #listaComandas {
+            grid-template-columns: repeat(4, 1fr) !important;
+            max-height: 200px !important;
+            gap: 4px !important;
+        }
+        body.modo-caixa #totalCheckout > div:last-child { font-size: 32px !important; }
+        body.modo-caixa #areaPagamento > div { grid-template-columns: repeat(3, 1fr) !important; gap: 6px !important; }
+        body.modo-caixa .btnPagamento  { padding: 16px 8px !important; font-size: 13px !important; border-radius: 6px !important; }
+        body.modo-caixa #btnConfirmarPagamento { padding: 20px !important; font-size: 16px !important; border-radius: 6px !important; margin-top: 8px !important; }
+        body.modo-caixa #btnIrLancar   { padding: 16px !important; font-size: 14px !important; border-radius: 6px !important; }
+
+        /* ========== MODO MOBILE — Lançar otimizado para celular ========== */
+        /* Ativado por JS quando innerWidth < 500px e perfil não é Caixa/Balança */
+
+        /* Não setar display aqui — .screen.active já faz isso.
+           Setar apenas o layout interno quando a tela está ativa */
+        body.modo-mobile #screen-lançar.active {
+            flex-direction: column !important;
+            overflow: hidden !important;   /* impede que a tela toda role — scroll fica em #listaItensDisponiveis */
+            padding: 0 !important;
+        }
+
+        /* Panel-left vira barra compacta no topo */
+        body.modo-mobile #lancar-panel-left {
+            flex-direction: column !important;
+            flex-shrink: 0 !important;
+        }
+
+        /* Section comanda: compacta, horizontal */
+        body.modo-mobile #lancar-secao-comanda {
+            padding: 8px !important;
+        }
+        body.modo-mobile #lancar-label-comanda { display: none !important; }
+        body.modo-mobile #lançarComandaNum  { font-size: 22px !important; height: 52px !important; padding: 10px !important; }
+        body.modo-mobile #btnLimparComanda  { height: 52px !important; padding: 10px !important; font-size: 13px !important; }
+        body.modo-mobile #statusComanda     { font-size: 13px !important; padding: 8px !important; margin-top: 4px !important; }
+
+        /* Section código: oculta no mobile (atendente usa tap no item) */
+        body.modo-mobile #lancar-secao-codigo { display: none !important; }
+
+        /* Section lista: sem header, lista oculta por padrão, só barra de total visível */
+        body.modo-mobile #lancar-lista-header { display: none !important; }
+        body.modo-mobile #listaItensLançados  {
+            max-height: 0 !important;
+            overflow: hidden !important;
+            transition: max-height 0.3s ease !important;
+        }
+        body.modo-mobile.mobile-lista-aberta #listaItensLançados {
+            max-height: 220px !important;
+            overflow-y: auto !important;
+        }
+
+        /* Barra de total: compacta, horizontal, tappable para expandir lista */
+        body.modo-mobile #lancar-total-bar {
+            padding: 10px 12px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            cursor: pointer !important;
+        }
+        body.modo-mobile #lancar-total-bar > div:first-child { display: none !important; } /* esconde label "TOTAL" */
+        body.modo-mobile #totalComanda {
+            font-size: 18px !important;
+            font-weight: bold !important;
+            margin: 0 !important;
+        }
+        /* Botão checkout no mobile: inline na barra */
+        body.modo-mobile #btnAtalhoCheckout {
+            width: auto !important;
+            padding: 8px 14px !important;
+            font-size: 13px !important;
+            margin: 0 !important;
+            flex-shrink: 0 !important;
+        }
+
+        /* Panel left: altura mínima, não cresce */
+        body.modo-mobile #lancar-panel-left {
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            overflow: visible !important;
+        }
+
+        /* Panel right: ocupa TODO o espaço vertical restante */
+        body.modo-mobile #lancar-panel-right {
+            flex: 1 1 0 !important;
+            min-height: 0 !important;
+            max-height: 100% !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+
+        /* Grid de itens com scroll próprio — ÚNICA área que rola */
+        body.modo-mobile #listaItensDisponiveis {
+            flex: 1 1 0 !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            overscroll-behavior: contain !important;
+        }
+
+        /* Categorias: pills maiores e mais fáceis de tocar */
+        body.modo-mobile #abaCategorias {
+            padding: 6px 8px !important;
+            gap: 6px !important;
+        }
+        body.modo-mobile #abaCategorias button {
+            font-size: 13px !important;
+            padding: 10px 18px !important;
+            border-radius: 20px !important;
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+            min-height: 44px !important;
+        }
+
+        /* Grid de itens: 2 colunas, cards mais altos e legíveis */
+        body.modo-mobile #listaItensDisponiveis {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 10px !important;
+            padding: 10px !important;
+            align-content: start !important;
+        }
+        body.modo-mobile .item-cat-btn  { min-height: 110px !important; padding: 10px !important; }
+        body.modo-mobile .cat-icone     { font-size: 30px !important; }
+        body.modo-mobile .cat-nome      { font-size: 14px !important; font-weight: bold !important; }
+        body.modo-mobile .item-cat-btn img { width: 52px !important; height: 52px !important; }
+        body.modo-mobile .cat-preco     { font-size: 13px !important; }
+
+        /* ===== MOBILE FULL SCREEN — esconde header e sidebar, mostra FAB ===== */
+        body.modo-mobile .header  { display: none !important; }
+        body.modo-mobile .sidebar { display: none !important; }
+        body.modo-mobile #mobileFab { display: flex !important; }
+        body.modo-mobile .content {
+            margin-left: 0 !important;
+            padding-top: 0 !important;
+        }
+
+        /* ===== MOBILE DRAWER ===== */
+        #mobileMenu .mobile-menu-btn {
+            display: flex; align-items: center; gap: 12px;
+            width: 100%; padding: 14px 18px;
+            background: none; border: none; border-bottom: 1px solid var(--border);
+            font-size: 15px; color: var(--text); cursor: pointer; text-align: left;
+        }
+        #mobileMenu .mobile-menu-btn:hover { background: var(--primary-light); }
+        #mobileMenu .mobile-menu-btn.active-screen {
+            background: var(--primary-light); color: var(--primary); font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -1061,6 +1283,70 @@
     <!-- Botão sair flutuante para modo Balança -->
     <button id="balancaSair" onclick="logout()">⏻ Sair</button>
 
+    <!-- ===== MODO MOBILE: botão flutuante de menu ===== -->
+    <button id="mobileFab" onclick="toggleMobileMenu()" style="display:none; position:fixed; top:10px; right:10px; z-index:100; width:40px; height:40px; background:rgba(var(--primary-rgb,74,108,247),0.82); border:none; border-radius:50%; color:white; font-size:20px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.28); align-items:center; justify-content:center; backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);">☰</button>
+    <div id="mobileMenuOverlay" onclick="toggleMobileMenu()" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:150;"></div>
+    <div id="mobileMenu" style="display:none; position:fixed; top:0; left:0; bottom:0; z-index:200; width:220px; background:white; flex-direction:column; box-shadow:4px 0 20px rgba(0,0,0,0.25); overflow-y:auto;">
+        <div style="padding:16px; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); color:white; display:flex; align-items:center; justify-content:space-between; min-height:50px; box-sizing:border-box; flex-shrink:0;">
+            <div>
+                <div style="font-size:15px; font-weight:bold;">Michelin</div>
+                <div id="mobileMenuUser" style="font-size:11px; opacity:0.8; margin-top:2px;"></div>
+            </div>
+            <button onclick="toggleMobileMenu()" style="background:none; border:none; color:white; font-size:22px; cursor:pointer; padding:4px 8px; line-height:1;">✕</button>
+        </div>
+        <div id="mobileMenuItens" style="flex:1; overflow-y:auto;"></div>
+        <div style="padding:12px; border-top:1px solid var(--border); flex-shrink:0;">
+            <button onclick="logout()" style="width:100%; padding:12px; background:none; border:2px solid var(--danger); border-radius:6px; color:var(--danger); font-size:14px; font-weight:bold; cursor:pointer;">⏻ Sair</button>
+        </div>
+    </div>
+
+    <!-- ===== MODO CAIXA: barra superior fixa ===== -->
+    <div id="caixaBar">
+        <!-- Hambúrguer -->
+        <button onclick="toggleCaixaDrawer()" style="width:64px; height:64px; background:none; border:none; color:white; font-size:26px; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center;">☰</button>
+        <!-- Abas LANÇAR / CHECKOUT -->
+        <div style="flex:1; display:flex; height:100%; border-left:1px solid rgba(255,255,255,0.2);">
+            <button id="caixaTabLancar" onclick="caixaSwitchTo('lançar')"
+                style="flex:1; background:rgba(255,255,255,0.18); color:white; border:none; border-bottom:4px solid white; font-size:16px; font-weight:bold; cursor:pointer; letter-spacing:1px; transition:all 0.15s;">
+                📝 LANÇAR
+            </button>
+            <button id="caixaTabCheckout" onclick="caixaSwitchTo('checkout')"
+                style="flex:1; background:none; color:rgba(255,255,255,0.65); border:none; border-bottom:4px solid transparent; font-size:16px; font-weight:bold; cursor:pointer; letter-spacing:1px; transition:all 0.15s;">
+                💳 CHECKOUT
+            </button>
+        </div>
+    </div>
+
+    <!-- ===== MODO CAIXA: overlay + drawer lateral ===== -->
+    <div id="caixaDrawerOverlay" onclick="toggleCaixaDrawer()"></div>
+    <div id="caixaDrawer">
+        <!-- Header do drawer — mesma identidade do header principal -->
+        <div style="padding:16px 20px; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); color:white; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; min-height:64px; box-sizing:border-box;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="font-size:22px; line-height:1;">🍽️</div>
+                <div>
+                    <div style="font-size:15px; font-weight:bold; line-height:1.2;">Michelin</div>
+                    <div style="display:flex; align-items:center; gap:6px; margin-top:4px;">
+                        <span id="caixaDrawerUser" style="font-size:11px; opacity:0.85;"></span>
+                        <span id="caixaDrawerPerfil" style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 7px; border-radius:10px; font-weight:bold;"></span>
+                    </div>
+                </div>
+            </div>
+            <button onclick="toggleCaixaDrawer()" style="background:none; border:none; color:white; font-size:22px; cursor:pointer; padding:4px 8px; line-height:1; flex-shrink:0;">✕</button>
+        </div>
+        <!-- Itens do drawer — ícones idênticos ao sidebar -->
+        <div style="flex:1; overflow-y:auto;">
+            <div class="caixa-drawer-item" onclick="caixaSwitchTo('preparo'); toggleCaixaDrawer()">🍳 Preparo</div>
+            <div class="caixa-drawer-item" onclick="caixaSwitchTo('dashboard'); toggleCaixaDrawer()">💰 Caixa</div>
+            <div class="caixa-drawer-item" onclick="caixaSwitchTo('areceber'); toggleCaixaDrawer()">📌 A Receber</div>
+            <div class="caixa-drawer-item" onclick="caixaSwitchTo('admin'); toggleCaixaDrawer()">⚙️ Admin</div>
+        </div>
+        <!-- Footer do drawer -->
+        <div style="padding:12px; border-top:1px solid var(--border); flex-shrink:0;">
+            <button onclick="logout()" style="width:100%; padding:12px; background:none; border:2px solid var(--danger); border-radius:6px; color:var(--danger); font-size:14px; font-weight:bold; cursor:pointer;">⏻ Sair</button>
+        </div>
+    </div>
+
     <div id="mainApp" class="hidden">
         <!-- HEADER -->
         <div class="header">
@@ -1083,11 +1369,11 @@
             <!-- SIDEBAR -->
             <div class="sidebar">
                 <button class="menu-btn active" data-menu="abrir">
-                    <div class="menu-icon">🔢</div>
+                    <div class="menu-icon">🎟️</div>
                     <div style="font-size: 10px;">Abrir</div>
                 </button>
                 <button class="menu-btn" data-menu="lançar">
-                    <div class="menu-icon">📝</div>
+                    <div class="menu-icon">📋</div>
                     <div style="font-size: 10px;">Lançar</div>
                 </button>
                 <button class="menu-btn" data-menu="checkout">
@@ -1095,7 +1381,7 @@
                     <div style="font-size: 10px;">Checkout</div>
                 </button>
                 <button class="menu-btn" data-menu="preparo">
-                    <div class="menu-icon">👨‍🍳</div>
+                    <div class="menu-icon">🍳</div>
                     <div style="font-size: 10px;">Preparo</div>
                 </button>
                 <button class="menu-btn" data-menu="dashboard">
@@ -1103,7 +1389,7 @@
                     <div style="font-size: 10px;">Caixa</div>
                 </button>
                 <button class="menu-btn" data-menu="areceber" style="position:relative;">
-                    <div class="menu-icon">💰</div>
+                    <div class="menu-icon">📌</div>
                     <div style="font-size: 10px;">A Receber</div>
                     <div id="badgeAReceber" style="display:none; position:absolute; top:6px; right:6px; background:#E74C3C; color:white; border-radius:50%; width:16px; height:16px; font-size:9px; font-weight:bold; line-height:16px; text-align:center;"></div>
                 </button>
@@ -1131,8 +1417,8 @@
                 <!-- PAINEL ESQUERDO: comanda + código + lista (em telas grandes vira coluna) -->
                 <div id="lancar-panel-left" style="display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;">
                     <!-- SECTION 1: CAMPO DA COMANDA -->
-                    <div style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); flex-shrink: 0;">
-                        <div style="color: white; font-size: 10px; font-weight: bold; margin-bottom: 6px; opacity: 0.9;">📋 SELECIONE A COMANDA</div>
+                    <div id="lancar-secao-comanda" style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); flex-shrink: 0;">
+                        <div id="lancar-label-comanda" style="color: white; font-size: 10px; font-weight: bold; margin-bottom: 6px; opacity: 0.9;">📋 SELECIONE A COMANDA</div>
                         <div style="display: grid; grid-template-columns: 1fr auto; gap: 6px;">
                             <input type="number" id="lançarComandaNum" placeholder="NÚMERO DA COMANDA" style="font-size: 18px; font-weight: bold; padding: 12px; border: 3px solid white; background: white; color: var(--primary); text-align: center; border-radius: 4px;">
                             <button id="btnLimparComanda" onclick="limparComanda()" style="padding: 12px 16px; background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.6); border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; min-width: 70px;">✕ Limpar</button>
@@ -1141,25 +1427,28 @@
                     </div>
 
                     <!-- SECTION 2: CÓDIGO DO ITEM -->
-                    <div style="padding: 8px; background: white; border-bottom: 2px solid var(--border); flex-shrink: 0;">
+                    <div id="lancar-secao-codigo" style="padding: 8px; background: white; border-bottom: 2px solid var(--border); flex-shrink: 0;">
                         <div style="font-size: 9px; font-weight: bold; color: var(--gray); margin-bottom: 4px;">CÓDIGO DO ITEM</div>
                         <input type="number" id="lançarCodigoItem" placeholder="Digite o código..." style="font-size: 16px; font-weight: bold; padding: 10px; border: 3px solid var(--primary); background: white; width: 100%; box-sizing: border-box; border-radius: 3px;" disabled inputmode="numeric">
                     </div>
 
                     <!-- SECTION 3: LISTA DA COMANDA + TOTAL (dinâmico) -->
-                    <div style="flex: 0 0 auto; min-height: 0; display: flex; flex-direction: column; background: white; border-bottom: 2px solid var(--border); overflow: hidden;">
+                    <div id="lancar-secao-lista" style="flex: 0 0 auto; min-height: 0; display: flex; flex-direction: column; background: white; border-bottom: 2px solid var(--border); overflow: hidden;">
                         <!-- HEADER LISTA -->
-                        <div style="padding: 8px; background: var(--primary); color: white; border-bottom: 1px solid var(--border); flex-shrink: 0;">
+                        <div id="lancar-lista-header" style="padding: 8px; background: var(--primary); color: white; border-bottom: 1px solid var(--border); flex-shrink: 0;">
                             <div class="lnc-titulo">📋 ITENS DA COMANDA</div>
                         </div>
                         <!-- LISTA (flex: 1 para crescer, padding mínimo) -->
                         <div id="listaItensLançados" style="flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 6px;"></div>
                         <!-- TOTAL -->
-                        <div style="padding: 10px 6px; background: linear-gradient(135deg, #704D34 0%, #8B6F47 100%); color: white; border-top: 1px solid var(--border); flex-shrink: 0;">
+                        <div id="lancar-total-bar" onclick="toggleListaMobile(event)" style="padding: 10px 6px; background: linear-gradient(135deg, #704D34 0%, #8B6F47 100%); color: white; border-top: 1px solid var(--border); flex-shrink: 0;">
                             <div style="font-size: 9px; opacity: 0.9; margin-bottom: 2px;">TOTAL</div>
-                            <div id="totalComanda" style="font-size: 26px; font-weight: bold; margin-bottom: 8px;">R$ 0,00</div>
-                            
-                            <!-- ✅ BOTÃO ATALHO CHECKOUT (APENAS ADMIN) -->
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                <div id="totalComanda" style="font-size: 26px; font-weight: bold; flex:1;">R$ 0,00</div>
+                                <span id="mobileTotalToggle" style="font-size:14px; opacity:0.8;">▲</span>
+                            </div>
+
+                            <!-- ✅ BOTÃO ATALHO CHECKOUT (ADMIN + CAIXA) -->
                             <button id="btnAtalhoCheckout" onclick="irParaCheckout()" style="display: none; width: 100%; padding: 10px; background: linear-gradient(135deg, #3498DB 0%, #2980B9 100%); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; box-shadow: 0 2px 6px rgba(52, 152, 219, 0.3); transition: all 0.2s; background-image: linear-gradient(135deg, #3498DB 0%, #2980B9 100%); background-color: #3498DB !important;">💳 IR PARA CHECKOUT</button>
                         </div>
                     </div>
@@ -1593,6 +1882,7 @@
                             <button onclick="filtrarUsuariosPorPerfil('Todos')" class="filtro-perfil-btn active" data-filtro="Todos" style="padding: 6px 10px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">👥 Todos</button>
                             <button onclick="filtrarUsuariosPorPerfil('Admin')" class="filtro-perfil-btn" data-filtro="Admin" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">👑 Admin</button>
                             <button onclick="filtrarUsuariosPorPerfil('Gerente')" class="filtro-perfil-btn" data-filtro="Gerente" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">🧑‍💼 Gerente</button>
+                            <button onclick="filtrarUsuariosPorPerfil('Caixa')" class="filtro-perfil-btn" data-filtro="Caixa" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">💳 Caixa</button>
                             <button onclick="filtrarUsuariosPorPerfil('Atendente')" class="filtro-perfil-btn" data-filtro="Atendente" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">👤 Atendente</button>
                             <button onclick="filtrarUsuariosPorPerfil('Balança')" class="filtro-perfil-btn" data-filtro="Balança" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">⚖️ Balança</button>
                         </div>
@@ -1684,6 +1974,7 @@
                     <option value="">Selecione um perfil...</option>
                     <option value="Admin">👑 Admin</option>
                     <option value="Gerente">🧑‍💼 Gerente</option>
+                    <option value="Caixa">💳 Caixa</option>
                     <option value="Atendente">👤 Atendente</option>
                     <option value="Balança">⚖️ Balança</option>
                 </select>
@@ -2389,7 +2680,7 @@
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260602-v23-caixa-errfix';  // Timestamp único
+            const timestampAtual = '20260610-v28-balanca-8n1-debug';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -2410,19 +2701,33 @@
             renderAdminItensComFiltro();
             renderAdminUsuarios();
 
-            // ── Auto-login: restaurar sessão após F5 ─────────────────────
+            // ── Auto-login: restaurar sessão após F5 ou recarga mobile ──
             if (state.user && state.perfil) {
                 console.log('[Sessão] Restaurando sessão de', state.user);
 
                 // Atualizar header
                 document.getElementById('headerUser').textContent = state.user;
-                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : '👤 Atendente';
+                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : '👤 Atendente';
 
                 // Mostrar app diretamente
                 document.getElementById('loginScreen').classList.add('hidden');
                 document.getElementById('mainApp').classList.remove('hidden');
 
+                // Reativar modos especiais (balança/caixa) ao restaurar sessão
+                if (state.perfil === 'Balança') {
+                    document.body.classList.add('modo-balanca');
+                    _initWeightService();
+                } else if (state.perfil === 'Caixa') {
+                    document.body.classList.add('modo-caixa');
+                    const drawerUser   = document.getElementById('caixaDrawerUser');
+                    const drawerPerfil = document.getElementById('caixaDrawerPerfil');
+                    if (drawerUser)   drawerUser.textContent   = state.user;
+                    if (drawerPerfil) drawerPerfil.textContent = '💳 Caixa';
+                    caixaSwitchTo('lançar');
+                }
+
                 atualizarVisibilidadeAbas();
+                detectarModoMobile();
                 iniciarPolling();
 
                 // Renderizar com cache imediatamente
@@ -2444,6 +2749,11 @@
         });
 
         function setupEvents() {
+            // Redetecta modo mobile ao rotacionar a tela
+            window.addEventListener('resize', () => {
+                if (state.user) detectarModoMobile();
+            });
+
             // Login
             document.getElementById('btnLogin').addEventListener('click', handleLogin);
             document.getElementById('loginUser').addEventListener('keypress', (e) => e.key === 'Enter' && handleLogin());
@@ -2550,11 +2860,12 @@
             state.user = state.usuarios[user].nome;
             state.perfil = state.usuarios[user].perfil;
 
-            // Persistir sessão imediatamente para sobreviver ao F5
+            // Persistir sessão com TTL de 4h para sobreviver ao F5 e saída de bolso
             localStorage.setItem('michelin-session', JSON.stringify({
                 user:       state.user,
                 userLogado: state.userLogado,
-                perfil:     state.perfil
+                perfil:     state.perfil,
+                loginAt:    Date.now()  // TTL: 4 horas
             }));
 
             // Esconder login
@@ -2565,7 +2876,7 @@
 
             // ✅ Update header com informações
             document.getElementById('headerUser').textContent = `${state.user}`;
-            document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : '👤 Atendente';
+            document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : '👤 Atendente';
 
             // ✅ Limpar campos de senha
             document.getElementById('loginPassword').value = '';
@@ -2578,6 +2889,9 @@
             // ✅ APLICAR CONTROLE DE ACESSO POR PERFIL
             atualizarVisibilidadeAbas();
 
+            // 📱 MODO MOBILE — detecta automaticamente pelo tamanho da tela
+            detectarModoMobile();
+
             // ⚖️ MODO BALANÇA
             if (state.perfil === 'Balança') {
                 document.body.classList.add('modo-balanca');
@@ -2589,6 +2903,23 @@
                 } catch(e) { /* silencioso — alguns browsers bloqueiam sem gesto */ }
                 // Inicia leitura contínua da balança
                 _initWeightService();
+            }
+
+            // 💳 MODO CAIXA
+            if (state.perfil === 'Caixa') {
+                document.body.classList.add('modo-caixa');
+                try {
+                    const el = document.documentElement;
+                    if (el.requestFullscreen) el.requestFullscreen();
+                    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+                } catch(e) {}
+                // Preenche nome e perfil no drawer
+                const drawerUser   = document.getElementById('caixaDrawerUser');
+                const drawerPerfil = document.getElementById('caixaDrawerPerfil');
+                if (drawerUser)   drawerUser.textContent   = state.user;
+                if (drawerPerfil) drawerPerfil.textContent = '💳 Caixa';
+                // Inicia na tela Lançar com a aba ativa correta
+                caixaSwitchTo('lançar');
             }
 
             // ✅ INICIAR POLLING
@@ -2629,7 +2960,7 @@
             // 3. Comanda status = 'Aberta' OU (status = 'Em Preparo' E não paga - Preparo Já)
             // 4. Não em modo leitura
             
-            const ehAdmin = state.perfil === 'Admin';
+            const ehAdmin = ['Admin', 'Caixa'].includes(state.perfil);
             const temComanda = state.comandaAtual !== null && state.comandaAtual !== undefined;
             const comandaExiste = temComanda && state.comandas[state.comandaAtual];
             
@@ -2665,6 +2996,7 @@
             // ✅ MAPA DE PERMISSÕES
             const permissoes = {
                 'Admin':    ['lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'],
+                'Caixa':    ['lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'], // Acesso via drawer no modo full-screen
                 'Gerente':  ['lançar', 'preparo', 'admin'], // SEM Caixa (data-menu="dashboard" — abrir/fechar caixa, sangria); Admin restrito a Carnes/Estoque (ver atualizarVisibilidadeAbasAdmin)
                 'Atendente':['lançar', 'preparo'],
                 'Balança':  ['lançar']
@@ -2711,7 +3043,8 @@
             const perfil = state.perfil;
 
             const subAbasPermitidas = {
-                'Gerente': ['marnitasDia', 'estoque', 'operacional']
+                'Gerente': ['marnitasDia', 'estoque', 'operacional'],
+                'Caixa':   ['itens', 'marnitasDia', 'estoque']
             };
             const permitidas = subAbasPermitidas[perfil];
 
@@ -2792,8 +3125,12 @@
         function logout() { handleLogout(); }
 
         function handleLogout() {
-            // Sair do modo Balança se ativo
+            // Sair dos modos especiais
             document.body.classList.remove('modo-balanca');
+            document.body.classList.remove('modo-caixa');
+            document.body.classList.remove('modo-mobile');
+            document.body.classList.remove('mobile-lista-aberta');
+            closeCaixaDrawer();
             _destroyWeightService();
             try {
                 if (document.exitFullscreen) document.exitFullscreen();
@@ -2932,6 +3269,117 @@
                     if (input) input.focus();
                 }, 100);
             }
+
+            // Atualiza abas visuais no modo Caixa
+            if (state.perfil === 'Caixa') updateCaixaTabs(screenName);
+        }
+
+        // ========== MODO CAIXA: funções de navegação ==========
+
+        function caixaSwitchTo(screenName) {
+            // Usa o switchScreen padrão passando o btn do sidebar (para manter a lógica de ativo)
+            const btn = document.querySelector(`[data-menu="${screenName}"]`);
+            switchScreen(screenName, btn);
+            // updateCaixaTabs é chamado pelo hook dentro de switchScreen
+        }
+
+        function updateCaixaTabs(screenName) {
+            const tabLancar   = document.getElementById('caixaTabLancar');
+            const tabCheckout = document.getElementById('caixaTabCheckout');
+            if (!tabLancar || !tabCheckout) return;
+
+            const activeStyle   = { bg: 'rgba(255,255,255,0.18)', color: 'white',                    border: '4px solid white' };
+            const inactiveStyle = { bg: 'none',                   color: 'rgba(255,255,255,0.65)',    border: '4px solid transparent' };
+
+            const applyTab = (el, active) => {
+                el.style.background   = active ? activeStyle.bg   : inactiveStyle.bg;
+                el.style.color        = active ? activeStyle.color : inactiveStyle.color;
+                el.style.borderBottom = active ? activeStyle.border: inactiveStyle.border;
+            };
+
+            applyTab(tabLancar,   screenName === 'lançar');
+            applyTab(tabCheckout, screenName === 'checkout');
+        }
+
+        // ========== MODO MOBILE ==========
+
+        function detectarModoMobile() {
+            // Não aplica para Caixa/Balança (já têm seus modos dedicados)
+            if (['Caixa', 'Balança'].includes(state.perfil)) return;
+            const eMobile = window.innerWidth < 500;
+            document.body.classList.toggle('modo-mobile', eMobile);
+        }
+
+        function toggleMobileMenu() {
+            const menu    = document.getElementById('mobileMenu');
+            const overlay = document.getElementById('mobileMenuOverlay');
+            const isOpen  = menu.style.display === 'flex';
+            if (!isOpen) atualizarMobileMenu();
+            menu.style.display    = isOpen ? 'none' : 'flex';
+            overlay.style.display = isOpen ? 'none' : 'block';
+        }
+
+        function closeMobileMenu() {
+            document.getElementById('mobileMenu').style.display    = 'none';
+            document.getElementById('mobileMenuOverlay').style.display = 'none';
+        }
+
+        function atualizarMobileMenu() {
+            // Cabeçalho
+            const userEl = document.getElementById('mobileMenuUser');
+            if (userEl) userEl.textContent = (state.user || '') + ' · ' + (state.perfil || '');
+
+            // Itens de menu baseados em permissões
+            const labels = {
+                lançar: '📋 Lançar', checkout: '💳 Checkout',
+                preparo: '🍳 Preparo', dashboard: '💰 Caixa',
+                areceber: '📌 A Receber', admin: '⚙️ Admin'
+            };
+            const perms  = permissoes[state.perfil] || [];
+            const currentScreen = document.querySelector('.screen.active')?.id?.replace('screen-','');
+            const container = document.getElementById('mobileMenuItens');
+            if (!container) return;
+            container.innerHTML = perms.map(p => {
+                const isActive = currentScreen === p;
+                return `<button class="mobile-menu-btn${isActive ? ' active-screen' : ''}"
+                    onclick="closeMobileMenu(); const btn=document.querySelector('[data-menu=\\'${p}\\']'); switchScreen('${p}',btn);">
+                    ${labels[p] || p}
+                </button>`;
+            }).join('');
+        }
+
+        // Tap na barra de total expande/colapsa a lista de itens lançados
+        function toggleListaMobile(e) {
+            if (!document.body.classList.contains('modo-mobile')) return;
+            // Não colapsa se o clique foi no botão de checkout
+            if (e && e.target.closest('#btnAtalhoCheckout')) return;
+            document.body.classList.toggle('mobile-lista-aberta');
+            // Atualiza ícone do toggle
+            const icon = document.getElementById('mobileTotalToggle');
+            if (icon) icon.textContent = document.body.classList.contains('mobile-lista-aberta') ? '▼' : '▲';
+        }
+
+        // Fecha a lista ao lançar item (UX: foco volta para o cardápio)
+        function fecharListaMobile() {
+            document.body.classList.remove('mobile-lista-aberta');
+            const icon = document.getElementById('mobileTotalToggle');
+            if (icon) icon.textContent = '▲';
+        }
+
+        function toggleCaixaDrawer() {
+            const drawer  = document.getElementById('caixaDrawer');
+            const overlay = document.getElementById('caixaDrawerOverlay');
+            if (!drawer) return;
+            const isOpen = drawer.style.display === 'flex';
+            drawer.style.display  = isOpen ? 'none' : 'flex';
+            overlay.style.display = isOpen ? 'none' : 'block';
+        }
+
+        function closeCaixaDrawer() {
+            const drawer  = document.getElementById('caixaDrawer');
+            const overlay = document.getElementById('caixaDrawerOverlay');
+            if (drawer)  drawer.style.display  = 'none';
+            if (overlay) overlay.style.display = 'none';
         }
 
         // ========== SETUP ADMIN TABS ==========
@@ -3934,7 +4382,7 @@
             container.innerHTML = '';
 
             usuarios.forEach(([login, user]) => {
-                const badge = user.perfil === 'Admin' ? '👑' : user.perfil === 'Balança' ? '⚖️' : user.perfil === 'Gerente' ? '🧑‍💼' : '👤';
+                const badge = user.perfil === 'Admin' ? '👑' : user.perfil === 'Balança' ? '⚖️' : user.perfil === 'Gerente' ? '🧑‍💼' : user.perfil === 'Caixa' ? '💳' : '👤';
 
                 const div = document.createElement('div');
                 div.className = 'card';
@@ -3951,8 +4399,8 @@
                                 <span style="background: rgba(212,114,79,0.15); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-family: monospace;">
                                     @${login}
                                 </span>
-                                <span style="background: rgba(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '39,174,96' : user.perfil === 'Gerente' ? '155,89,182' : '41,128,185'}, 0.15); color: rgb(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '30,132,73' : user.perfil === 'Gerente' ? '142,68,173' : '41,128,185'}); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-weight: bold;">
-                                    ${user.perfil === 'Admin' ? 'ADMIN' : user.perfil === 'Balança' ? 'BALANÇA' : user.perfil === 'Gerente' ? 'GERENTE' : 'ATENDENTE'}
+                                <span style="background: rgba(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '39,174,96' : user.perfil === 'Gerente' ? '155,89,182' : user.perfil === 'Caixa' ? '22,160,133' : '41,128,185'}, 0.15); color: rgb(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '30,132,73' : user.perfil === 'Gerente' ? '142,68,173' : user.perfil === 'Caixa' ? '17,122,101' : '41,128,185'}); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-weight: bold;">
+                                    ${user.perfil === 'Admin' ? 'ADMIN' : user.perfil === 'Balança' ? 'BALANÇA' : user.perfil === 'Gerente' ? 'GERENTE' : user.perfil === 'Caixa' ? 'CAIXA' : 'ATENDENTE'}
                                 </span>
                             </div>
                             <!-- SENHA MASCARADA -->
@@ -4983,7 +5431,22 @@ function carregarComanda() {
                     btn.style.background = 'white';
                 };
                 btn.onclick = () => lançarItemPorClique(codigo);
-                
+
+                // Long press (mobile): 500ms → abre input de quantidade (só Fixo e Marmita)
+                if (item.tipo === 'Fixo' || item.tipo === 'Marmita') {
+                    let _lpTimer = null;
+                    btn.addEventListener('touchstart', (e) => {
+                        _lpTimer = setTimeout(() => {
+                            _lpTimer = null;
+                            e.preventDefault();
+                            abrirModalQuantidade(codigo, item.nome);
+                        }, 500);
+                    }, { passive: false });
+                    btn.addEventListener('touchend',    () => { if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; } });
+                    btn.addEventListener('touchmove',   () => { if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; } });
+                    btn.addEventListener('contextmenu', (e) => e.preventDefault());
+                }
+
                 container.appendChild(btn);
             });
         }
@@ -4991,14 +5454,62 @@ function carregarComanda() {
         function lançarItemPorClique(codigo) {
             // Guardar foco atual
             const elementoComFoco = document.activeElement;
-            
+
             document.getElementById('lançarCodigoItem').value = codigo;
             lançarItem();
-            
+
             // Restaurar foco para não ativar teclado numérico
             if (elementoComFoco && elementoComFoco !== document.body) {
                 setTimeout(() => elementoComFoco.focus(), 0);
             }
+        }
+
+        // Abre modal de quantidade (ativado por long press no mobile)
+        function abrirModalQuantidade(codigo, nome) {
+            // Remove modal anterior se existir
+            const old = document.getElementById('modalQtd');
+            if (old) old.remove();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'modalQtd';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
+            overlay.innerHTML = `
+                <div style="background:white;border-radius:12px;padding:24px 20px;width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.25);text-align:center;">
+                    <div style="font-size:13px;color:var(--gray);margin-bottom:4px;">Quantidade</div>
+                    <div style="font-size:17px;font-weight:bold;margin-bottom:16px;">${nome}</div>
+                    <input id="modalQtdInput" type="number" min="1" max="99" value="1"
+                        style="width:100%;font-size:32px;text-align:center;padding:10px;border:2px solid var(--primary);border-radius:8px;box-sizing:border-box;outline:none;">
+                    <div style="display:flex;gap:10px;margin-top:16px;">
+                        <button onclick="document.getElementById('modalQtd').remove();"
+                            style="flex:1;padding:14px;border:2px solid var(--border);border-radius:8px;background:none;font-size:15px;cursor:pointer;">
+                            Cancelar
+                        </button>
+                        <button onclick="confirmarModalQuantidade('${codigo}')"
+                            style="flex:1;padding:14px;background:var(--primary);border:none;border-radius:8px;color:white;font-size:15px;font-weight:bold;cursor:pointer;">
+                            Lançar
+                        </button>
+                    </div>
+                </div>
+            `;
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+            document.body.appendChild(overlay);
+            setTimeout(() => {
+                const inp = document.getElementById('modalQtdInput');
+                if (inp) { inp.focus(); inp.select(); }
+            }, 50);
+        }
+
+        function confirmarModalQuantidade(codigo) {
+            const inp = document.getElementById('modalQtdInput');
+            const qtd = inp ? parseInt(inp.value) || 1 : 1;
+            document.getElementById('modalQtd')?.remove();
+            // Lança o item N vezes
+            const el = document.getElementById('lançarCodigoItem');
+            const prev = document.activeElement;
+            el.value = codigo;
+            for (let i = 0; i < qtd; i++) lançarItem();
+            if (prev && prev !== document.body) setTimeout(() => prev.focus(), 0);
+            fecharListaMobile();
         }
 
         function removerItemLançado(idx) {
@@ -6949,12 +7460,18 @@ function carregarComanda() {
                 marnitasDia: state.marnitasDia,
                 caixa: state.caixa
             }));
-            // Persiste sessão separadamente para sobreviver ao F5
+            // Persiste sessão separadamente — preserva loginAt original para não resetar o TTL a cada save
             if (state.user) {
+                let loginAt = Date.now();
+                try {
+                    const prev = JSON.parse(localStorage.getItem('michelin-session') || '{}');
+                    if (prev.loginAt) loginAt = prev.loginAt; // mantém o tempo original de login
+                } catch(e) {}
                 localStorage.setItem('michelin-session', JSON.stringify({
-                    user:      state.user,
+                    user:       state.user,
                     userLogado: state.userLogado,
-                    perfil:    state.perfil
+                    perfil:     state.perfil,
+                    loginAt
                 }));
             }
         }
@@ -6992,15 +7509,23 @@ function carregarComanda() {
             console.log('📦 Itens carregados:', Object.keys(state.itens).length, 'itens');
             console.log('🔍 Primeiros itens:', state.itens['001'], state.itens['002'], state.itens['003']);
 
-            // Restaurar sessão se existir
+            // Restaurar sessão se existir e dentro do TTL de 4 horas
             const sessao = localStorage.getItem('michelin-session');
             if (sessao) {
                 try {
                     const s = JSON.parse(sessao);
-                    state.user      = s.user      || null;
-                    state.userLogado = s.userLogado || null;
-                    state.perfil    = s.perfil    || null;
-                } catch(e) {}
+                    const TTL_MS = 4 * 60 * 60 * 1000; // 4 horas
+                    const valida = s.loginAt && (Date.now() - s.loginAt) < TTL_MS;
+                    if (valida) {
+                        state.user       = s.user       || null;
+                        state.userLogado = s.userLogado || null;
+                        state.perfil     = s.perfil     || null;
+                    } else {
+                        // Sessão expirada — limpa só a sessão, mantém o cache de dados
+                        localStorage.removeItem('michelin-session');
+                        console.log('[Sessão] Expirada após 4h — novo login necessário');
+                    }
+                } catch(e) { localStorage.removeItem('michelin-session'); }
             }
         }
 
@@ -7387,6 +7912,12 @@ function carregarComanda() {
                 btn.onclick = () => selecionarComandaCheckout(key, comanda);
                 container.appendChild(btn);
             });
+
+            // Se já havia uma comanda selecionada, re-renderiza o painel com dados atuais.
+            // Isso garante que ao voltar do Lançar via aba, os novos itens aparecem imediatamente.
+            if (comandaCheckoutAtual && state.comandas[comandaCheckoutAtual]) {
+                selecionarComandaCheckout(comandaCheckoutAtual, state.comandas[comandaCheckoutAtual]);
+            }
         }
 
         function toggleCollapseComandas() {
@@ -7963,10 +8494,9 @@ var itens = comanda.itens || [];
                 }
             }
 
-            // Inicializa CH340/CH341 para 9600 baud, 8 data bits, 2 stop bits, sem paridade
+            // Inicializa CH340/CH341 para 9600 baud, 8 data bits, 1 stop bit, sem paridade (8N1)
             async _initUART() {
                 const d = this._device;
-                // Cada passo com try-catch individual — CH34x pode ignorar alguns comandos silenciosamente
                 const vout = async (label, req, val, idx) => {
                     console.log('[WeightUSB] initUART →', label, `req=0x${req.toString(16)} val=0x${val.toString(16)} idx=0x${idx.toString(16)}`);
                     try {
@@ -7979,41 +8509,52 @@ var itens = comanda.itens || [];
                     }
                 };
 
-                console.log('[WeightUSB] Iniciando _initUART...');
+                console.log('[WeightUSB] Iniciando _initUART → 9600 8N1...');
 
-                // Baud rate 9600: wValue=0x1312 (registradores), wIndex=0x02B2 (divisor)
+                // Baud rate 9600: wValue=0x1312, wIndex=0x02B2
                 await vout('baud_9600', 0x9A, 0x1312, 0x02B2);
 
-                // Linha 8N2: CS8=0x03 | STOP2=0x04 = 0x07
-                await vout('lcr_8N2', 0x9A, 0x2518, 0x07);
+                // Linha 8N1: CS8=0x03 (sem STOP2 — Urano usa 1 stop bit)
+                await vout('lcr_8N1', 0x9A, 0x2518, 0x03);
 
                 // Ativa DTR e RTS
                 await vout('dtr_rts', 0xA4, ~(0x20 | 0x40) & 0xFF, 0);
 
-                console.log('[WeightUSB] _initUART concluído → 9600 8N2 DTR+RTS');
+                console.log('[WeightUSB] _initUART concluído → 9600 8N1 DTR+RTS');
             }
 
+            // Sem polling — Urano envia dados continuamente quando estável.
+            // Polling com bytes desconhecidos pode confundir o protocolo.
             _startPolling() {
-                this._pollTimer = setInterval(async () => {
-                    if (!this._alive || !this._device) return;
-                    try {
-                        await this._device.transferOut(this._EP_OUT, this._POLL_CMD);
-                    } catch(e) {
-                        console.warn('[WeightUSB] Poll falhou:', e.message);
-                    }
-                }, 800);
+                console.log('[WeightUSB] Modo contínuo — sem polling ativo.');
             }
 
             async _readLoop() {
+                let _rawLog = [];  // acumula bytes brutos para diagnóstico
+                let _logTimer = setInterval(() => {
+                    if (_rawLog.length > 0) {
+                        console.log('[WeightUSB] RAW últimos 3s:', _rawLog.map(b => b.toString(16).padStart(2,'0')).join(' '));
+                        _rawLog = [];
+                    } else {
+                        console.log('[WeightUSB] RAW: nenhum byte recebido nos últimos 3s');
+                    }
+                }, 3000);
+
                 while (this._alive && this._device) {
                     try {
                         const result = await this._device.transferIn(this._EP_IN, 64);
-                        if (result.data && result.data.byteLength > 2) {
-                            // CH34x: primeiros 2 bytes = status (modem + line) — pula
-                            const payload = new Uint8Array(result.data.buffer, 2);
-                            this._processChunk(new TextDecoder().decode(payload));
+                        if (result.data && result.data.byteLength > 0) {
+                            const raw = new Uint8Array(result.data.buffer);
+                            _rawLog.push(...raw);
+                            // CH34x prepend 2 bytes de status quando byteLength >= 2
+                            const offset = (raw.length >= 2 && raw[0] <= 0x0F && raw[1] <= 0x1F) ? 2 : 0;
+                            if (raw.length > offset) {
+                                const payload = new Uint8Array(result.data.buffer, offset);
+                                this._processChunk(new TextDecoder('latin1').decode(payload));
+                            }
                         }
                     } catch(e) {
+                        clearInterval(_logTimer);
                         if (this._alive) {
                             console.error('[WeightUSB] Erro de leitura:', e.message);
                             this._status = 'error';
@@ -8021,6 +8562,7 @@ var itens = comanda.itens || [];
                         break;
                     }
                 }
+                clearInterval(_logTimer);
             }
 
             _processChunk(text) {
