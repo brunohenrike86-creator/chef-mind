@@ -7926,33 +7926,40 @@ var itens = comanda.itens || [];
             }
 
             async connect(onStep) {
+                let _lastStep = 'início';
                 const step = (msg) => {
+                    _lastStep = msg;
                     console.log('[WeightUSB]', msg);
                     if (onStep) onStep(msg);
                 };
                 if (!navigator.usb) throw new Error('WebUSB não disponível. Requer Chrome com HTTPS.');
                 try {
-                    step('Selecionando dispositivo...');
-                    this._device = await navigator.usb.requestDevice({
-                        filters: [{ vendorId: 0x1A86 }]
-                    });
-                    step('Abrindo dispositivo...');
+                    step('1 requestDevice...');
+                    this._device = await navigator.usb.requestDevice({ filters: [{ vendorId: 0x1A86 }] });
+                    step('2 open...');
                     await this._device.open();
-                    step('Selecionando configuração...');
-                    try { await this._device.selectConfiguration(1); } catch(e) { step('selectConfig ignorado: ' + e.message); }
-                    step('Reivindicando interface 0...');
-                    await this._device.claimInterface(0);
-                    step('Iniciando UART...');
+                    step('3 selectConfig...');
+                    try { await this._device.selectConfiguration(1); } catch(e) { /* já configurado */ }
+                    step('4 claimInterface 0...');
+                    let iface = 0;
+                    try {
+                        await this._device.claimInterface(0);
+                    } catch(e) {
+                        step('4b claimInterface 1...');
+                        await this._device.claimInterface(1);
+                        iface = 1;
+                    }
+                    step('5 initUART iface=' + iface + '...');
                     await this._initUART();
                     this._status = 'connected';
                     this._alive  = true;
-                    step('Conectado!');
+                    step('6 OK! Lendo...');
                     this._readLoop();
                     this._startPolling();
                 } catch(e) {
                     this._status = 'error';
-                    console.error('[WeightUSB] Falha:', e.message);
-                    throw e;
+                    console.error('[WeightUSB] Falha no passo "' + _lastStep + '":', e.message);
+                    throw new Error('Parou em [' + _lastStep + ']: ' + e.message);
                 }
             }
 
