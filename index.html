@@ -1237,6 +1237,9 @@
         /* Garante que Caixa e Balança não mostram mobileTopBar (têm sua própria nav) */
         body.modo-caixa  #mobileTopBar { display: none !important; }
         body.modo-balanca #mobileTopBar { display: none !important; }
+        /* No Lançar: tela full sem topbar — nav acessível via botão dentro da seção de comanda */
+        body.modo-mobile.lancar-ativo #mobileTopBar { display: none !important; }
+        body.modo-mobile.lancar-ativo #btnMobileMenuLancar { display: flex !important; }
 
         /* Seta de collapse da lista — só faz sentido no mobile */
         #mobileTotalToggle { display: none !important; }
@@ -1459,9 +1462,11 @@
                     <!-- SECTION 1: CAMPO DA COMANDA -->
                     <div id="lancar-secao-comanda" style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); flex-shrink: 0;">
                         <div id="lancar-label-comanda" style="color: white; font-size: 10px; font-weight: bold; margin-bottom: 6px; opacity: 0.9;">📋 SELECIONE A COMANDA</div>
-                        <div style="display: grid; grid-template-columns: 1fr auto; gap: 6px;">
+                        <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 6px;">
                             <input type="number" id="lançarComandaNum" placeholder="NÚMERO DA COMANDA" style="font-size: 18px; font-weight: bold; padding: 12px; border: 3px solid white; background: white; color: var(--primary); text-align: center; border-radius: 4px;">
                             <button id="btnLimparComanda" onclick="limparComanda()" style="padding: 12px 16px; background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.6); border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; min-width: 70px;">✕ Limpar</button>
+                            <!-- nav mobile — mesmo grid row, sem altura extra; visível só no Lançar mobile -->
+                            <button id="btnMobileMenuLancar" onclick="toggleMobileMenu()" style="display:none; padding:12px 10px; background:rgba(255,255,255,0.15); color:white; border:2px solid rgba(255,255,255,0.5); border-radius:4px; font-size:13px; font-weight:bold; cursor:pointer; white-space:nowrap;">≡ Menu</button>
                         </div>
                         <div id="statusComanda" style="display: none; padding: 8px; background: #27AE60; color: white; font-size: 11px; font-weight: bold; text-align: center; border-radius: 3px; margin-top: 6px;"></div>
                     </div>
@@ -2727,7 +2732,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             setTimeout(_atualizarDebug, 100); // DEBUG: mostra width logo no load
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260611-v57';  // Timestamp único
+            const timestampAtual = '20260611-v62';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -3030,17 +3035,17 @@
             }
         }
 
+        // Mapa de permissões no escopo do módulo — acessível por atualizarVisibilidadeAbas e atualizarMobileMenu
+        const permissoes = {
+            'Admin':    ['lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'],
+            'Caixa':    ['lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'],
+            'Gerente':  ['lançar', 'preparo', 'admin'],
+            'Atendente':['lançar', 'preparo'],
+            'Balança':  ['lançar']
+        };
+
         function atualizarVisibilidadeAbas() {
             const perfil = state.perfil;
-            
-            // ✅ MAPA DE PERMISSÕES
-            const permissoes = {
-                'Admin':    ['lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'],
-                'Caixa':    ['lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'], // Acesso via drawer no modo full-screen
-                'Gerente':  ['lançar', 'preparo', 'admin'], // SEM Caixa (data-menu="dashboard" — abrir/fechar caixa, sangria); Admin restrito a Carnes/Estoque (ver atualizarVisibilidadeAbasAdmin)
-                'Atendente':['lançar', 'preparo'],
-                'Balança':  ['lançar']
-            };
             
             const abas = permissoes[perfil] || [];
             
@@ -3243,6 +3248,17 @@
             // Remover ativa de TODAS as telas
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active'));
+            // Lançar full-screen no mobile: esconde topbar, mostra ☰ interno
+            document.body.classList.toggle('lancar-ativo', screenName === 'lançar');
+            // Full screen no mobile: esconde barra do navegador ao entrar no Lançar,
+            // sai do fullscreen ao navegar para outra tela
+            if (document.body.classList.contains('modo-mobile')) {
+                if (screenName === 'lançar') {
+                    try { document.documentElement.requestFullscreen(); } catch(e) {}
+                } else if (document.fullscreenElement) {
+                    try { document.exitFullscreen(); } catch(e) {}
+                }
+            }
 
             // Ativar APENAS a tela solicitada
             const screen = document.getElementById(`screen-${screenName}`);
@@ -3356,7 +3372,8 @@
         function detectarModoMobile() {
             // Não aplica para Caixa/Balança (já têm seus modos dedicados)
             if (['Caixa', 'Balança'].includes(state.perfil)) return;
-            const eMobile = window.innerWidth < 768;
+            // Usa matchMedia para alinhar exatamente com o CSS @media (max-width: 1023px)
+            const eMobile = window.matchMedia('(max-width: 1023px)').matches;
             document.body.classList.toggle('modo-mobile', eMobile);
 
             // Força display via JS — garante override do inline style="display:none"
@@ -5738,6 +5755,7 @@ function carregarComanda() {
             document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active'));
             document.getElementById('screen-lançar').classList.add('active');
             document.querySelector('[data-menu="lançar"]').classList.add('active');
+            document.body.classList.add('lancar-ativo');
             // Popula o campo de número e renderiza
             const comanda = state.comandas[comandaCheckoutAtual];
             const inputNum = document.getElementById('lançarComandaNum');
