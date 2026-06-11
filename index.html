@@ -767,8 +767,10 @@
                 flex: 1 !important; display: flex !important;
                 flex-direction: column !important; overflow: hidden !important; min-width: 0 !important;
             }
-            /* A lista de itens no painel esquerdo ocupa o espaço disponível */
-            #lancar-panel-left > div:nth-child(3) { flex: 1 !important; min-height: 0 !important; }
+            /* A lista de itens no painel esquerdo ocupa o espaço disponível.
+               ATENÇÃO: não usar :nth-child — o mobileTopBar é o 1º filho e desloca a contagem.
+               Usar ID direto para garantir que aponta para a section correta. */
+            #lancar-secao-lista { flex: 1 !important; min-height: 0 !important; overflow: hidden !important; }
 
             /* ── CHECKOUT: layout duas colunas ── */
             /* O scroll fica apenas na lista de comandas; o painel direito é fixo */
@@ -911,7 +913,8 @@
             display: none;
             position: fixed; inset: 0;
             background: rgba(0,0,0,0.55);
-            backdrop-filter: blur(3px);
+            /* NÃO usar backdrop-filter:blur — Chrome bug: cria compositing layer que
+               bloqueia pointer events globalmente mesmo com pointer-events:none */
             z-index: 99999;
             pointer-events: none;       /* não bloqueia interação */
             align-items: center;
@@ -1099,7 +1102,7 @@
         body.modo-caixa #btnIrLancar   { padding: 16px !important; font-size: 14px !important; border-radius: 6px !important; }
 
         /* ========== MODO MOBILE — Lançar otimizado para celular ========== */
-        /* Ativado por JS quando innerWidth < 500px e perfil não é Caixa/Balança */
+        /* Ativado por JS quando innerWidth < 768px e perfil não é Caixa/Balança */
 
         /* Não setar display aqui — .screen.active já faz isso.
            Setar apenas o layout interno quando a tela está ativa */
@@ -1215,13 +1218,29 @@
         body.modo-mobile .item-cat-btn img { width: 52px !important; height: 52px !important; }
         body.modo-mobile .cat-preco     { font-size: 13px !important; }
 
-        /* ===== MOBILE FULL SCREEN — esconde header e sidebar ===== */
+        /* ===== MOBILE FULL SCREEN (JS class — layout interno do Lançar) ===== */
         body.modo-mobile .header  { display: none !important; }
         body.modo-mobile .sidebar { display: none !important; }
         body.modo-mobile .content { margin-left: 0 !important; padding-top: 0 !important; }
-
-        /* Tira de nav no topo: aparece só no mobile */
+        body.modo-mobile .screen.active { flex: 1 !important; min-height: 0 !important; }
         body.modo-mobile #mobileTopBar { display: flex !important; }
+
+        /* ===== MOBILE NAV — CSS media query (independe de JS) =====
+           Abaixo de 1024px: esconde header e sidebar, mostra a barra de nav
+           Caixa e Balança têm seus próprios layouts e substituem via modo-caixa/modo-balanca */
+        @media (max-width: 1023px) {
+            .header  { display: none !important; }
+            .sidebar { display: none !important; }
+            #mobileTopBar { display: flex !important; }
+            .screen.active { flex: 1 !important; min-height: 0 !important; }
+        }
+        /* Garante que Caixa e Balança não mostram mobileTopBar (têm sua própria nav) */
+        body.modo-caixa  #mobileTopBar { display: none !important; }
+        body.modo-balanca #mobileTopBar { display: none !important; }
+
+        /* Seta de collapse da lista — só faz sentido no mobile */
+        #mobileTotalToggle { display: none !important; }
+        body.modo-mobile #mobileTotalToggle { display: inline !important; }
 
         /* ===== MOBILE DRAWER ===== */
         #mobileMenu .mobile-menu-btn {
@@ -1237,6 +1256,19 @@
     </style>
 </head>
 <body>
+    <!-- DEBUG OVERLAY — remover após confirmar mobile (v55) -->
+    <div id="debugOverlay" style="position:fixed; bottom:8px; right:8px; background:rgba(0,0,0,0.75); color:#0f0; font-family:monospace; font-size:11px; padding:6px 10px; border-radius:6px; z-index:200000; pointer-events:none; white-space:pre;"></div>
+
+    <!-- MODE SPLASH — captura user gesture para requestFullscreen (Balança e Caixa) -->
+    <div id="balancaSplash" style="display:none; position:fixed; inset:0; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); z-index:100000; align-items:center; justify-content:center; flex-direction:column; gap:20px;">
+        <div id="splashIcon" style="font-size:72px; line-height:1;">⚖️</div>
+        <div style="font-size:26px; font-weight:bold; color:white; letter-spacing:1px;">Michelin Bufê</div>
+        <div id="splashSubtitle" style="font-size:14px; color:rgba(255,255,255,0.75);">Sistema de Balança — Pronto</div>
+        <button onclick="_iniciarSessaoEspecial()" style="margin-top:12px; padding:18px 52px; font-size:18px; font-weight:bold; background:white; color:var(--primary); border:none; border-radius:12px; cursor:pointer; box-shadow:0 6px 24px rgba(0,0,0,0.3); transition:transform 0.1s;" onmousedown="this.style.transform='scale(0.97)'" onmouseup="this.style.transform=''">
+            ▶ Iniciar Operação
+        </button>
+    </div>
+
     <!-- SYNC LOADING CENTRAL (pós-login, não bloqueia interação) -->
     <div id="syncBanner">
         <div id="syncCard">
@@ -1399,6 +1431,16 @@
 
             <!-- CONTENT -->
             <div class="content">
+                <!-- MOBILE NAV STRIP — nível de app, visível em todas as telas no mobile -->
+                <div id="mobileTopBar" style="display:none; align-items:center; gap:10px; padding:0 10px; height:40px; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.15);">
+                    <button onclick="toggleMobileMenu()" style="width:36px; height:36px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); border-radius:6px; color:white; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">☰</button>
+                    <div style="flex:1; display:flex; flex-direction:column; justify-content:center; overflow:hidden;">
+                        <div style="font-size:12px; font-weight:bold; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">🍽️ Michelin</div>
+                        <div id="mobileTopBarUser" style="font-size:10px; color:rgba(255,255,255,0.75); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+                        <div id="debugWidth" style="font-size:9px; color:rgba(255,255,255,0.5);"></div>
+                    </div>
+                </div>
+
                 <!-- ABRIR COMANDA -->
                 <div id="screen-abrir" class="screen active" style="justify-content: flex-start; padding-top: 8px; background: linear-gradient(135deg, rgba(212,114,79,0.05), rgba(245,169,98,0.05));">
                     <div style="width: 100%; padding: 0 4px;">
@@ -1414,14 +1456,6 @@
 
                 <!-- PAINEL ESQUERDO: comanda + código + lista (em telas grandes vira coluna) -->
                 <div id="lancar-panel-left" style="display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;">
-                    <!-- MOBILE NAV STRIP — só visível em modo-mobile -->
-                    <div id="mobileTopBar" style="display:none; align-items:center; gap:10px; padding:0 10px; height:40px; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.15);">
-                        <button onclick="toggleMobileMenu()" style="width:36px; height:36px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); border-radius:6px; color:white; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">☰</button>
-                        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; overflow:hidden;">
-                            <div style="font-size:12px; font-weight:bold; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">🍽️ Michelin</div>
-                            <div id="mobileTopBarUser" style="font-size:10px; color:rgba(255,255,255,0.75); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
-                        </div>
-                    </div>
                     <!-- SECTION 1: CAMPO DA COMANDA -->
                     <div id="lancar-secao-comanda" style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); flex-shrink: 0;">
                         <div id="lancar-label-comanda" style="color: white; font-size: 10px; font-weight: bold; margin-bottom: 6px; opacity: 0.9;">📋 SELECIONE A COMANDA</div>
@@ -2691,8 +2725,9 @@
 
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(_atualizarDebug, 100); // DEBUG: mostra width logo no load
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260610-v33-balanca-sem-timeout';  // Timestamp único
+            const timestampAtual = '20260611-v55-debug';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -2729,6 +2764,7 @@
                 if (state.perfil === 'Balança') {
                     document.body.classList.add('modo-balanca');
                     _initWeightService();
+                    _mostrarSplash('Balança');
                 } else if (state.perfil === 'Caixa') {
                     document.body.classList.add('modo-caixa');
                     const drawerUser   = document.getElementById('caixaDrawerUser');
@@ -2736,6 +2772,7 @@
                     if (drawerUser)   drawerUser.textContent   = state.user;
                     if (drawerPerfil) drawerPerfil.textContent = '💳 Caixa';
                     caixaSwitchTo('lançar');
+                    _mostrarSplash('Caixa');
                 }
 
                 atualizarVisibilidadeAbas();
@@ -2907,31 +2944,19 @@
             // ⚖️ MODO BALANÇA
             if (state.perfil === 'Balança') {
                 document.body.classList.add('modo-balanca');
-                // Solicita fullscreen (funciona melhor quando instalado como PWA)
-                try {
-                    const el = document.documentElement;
-                    if (el.requestFullscreen) el.requestFullscreen();
-                    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-                } catch(e) { /* silencioso — alguns browsers bloqueiam sem gesto */ }
-                // Inicia leitura contínua da balança
                 _initWeightService();
+                _mostrarSplash('Balança'); // splash captura user gesture para fullscreen
             }
 
             // 💳 MODO CAIXA
             if (state.perfil === 'Caixa') {
                 document.body.classList.add('modo-caixa');
-                try {
-                    const el = document.documentElement;
-                    if (el.requestFullscreen) el.requestFullscreen();
-                    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-                } catch(e) {}
-                // Preenche nome e perfil no drawer
                 const drawerUser   = document.getElementById('caixaDrawerUser');
                 const drawerPerfil = document.getElementById('caixaDrawerPerfil');
                 if (drawerUser)   drawerUser.textContent   = state.user;
                 if (drawerPerfil) drawerPerfil.textContent = '💳 Caixa';
-                // Inicia na tela Lançar com a aba ativa correta
                 caixaSwitchTo('lançar');
+                _mostrarSplash('Caixa'); // splash captura user gesture para fullscreen
             }
 
             // ✅ INICIAR POLLING
@@ -2946,12 +2971,15 @@
             const syncBanner = document.getElementById('syncBanner');
             syncBanner.classList.add('visible');
 
+            // Timeout de segurança: banner sempre some em 25s (cobre 20s do AbortController + margem)
+            const _syncTimeout = setTimeout(() => syncBanner.classList.remove('visible'), 25000);
             try {
                 await Promise.all([
                     _loadFromSheetsPromise || Promise.resolve(),
                     pollFromSheets()
                 ]);
             } catch(e) { /* usa o que tiver */ }
+            clearTimeout(_syncTimeout);
 
             syncBanner.classList.remove('visible');
 
@@ -3315,11 +3343,25 @@
 
         // ========== MODO MOBILE ==========
 
+        function _atualizarDebug() {
+            const el = document.getElementById('debugOverlay');
+            if (!el) return;
+            const w = window.innerWidth;
+            const mq = window.matchMedia('(max-width: 1023px)').matches;
+            const cls = document.body.className;
+            el.textContent = `w=${w} mq1023=${mq}\nbody: ${cls||'(none)'}`;
+        }
+        window.addEventListener('resize', _atualizarDebug);
+
         function detectarModoMobile() {
             // Não aplica para Caixa/Balança (já têm seus modos dedicados)
             if (['Caixa', 'Balança'].includes(state.perfil)) return;
-            const eMobile = window.innerWidth < 500;
+            const eMobile = window.innerWidth < 768;
             document.body.classList.toggle('modo-mobile', eMobile);
+            _atualizarDebug();
+            // DEBUG: mostra a largura atual na topbar (remover depois)
+            const dbg = document.getElementById('debugWidth');
+            if (dbg) dbg.textContent = `w=${window.innerWidth} ${eMobile?'MOBILE':'DESKTOP'}`;
             if (eMobile) {
                 const el = document.getElementById('mobileTopBarUser');
                 if (el) el.textContent = (state.user || '') + (state.perfil ? ' · ' + state.perfil : '');
@@ -7200,7 +7242,7 @@ function carregarComanda() {
 
             container.innerHTML = '';
             let total = 0;
-            const _isAdmin = state.perfil === 'Admin';
+            const _isAdmin = ['Admin', 'Caixa'].includes(state.perfil);
             const _comandaPaga = comanda.status === 'Fechada/Paga'; // B1: sem edição em comanda fechada
 
             // REGRA: Buffet por kg NÃO agrupa. Tudo mais agrupa.
@@ -8650,6 +8692,197 @@ var itens = comanda.itens || [];
             onWeightUpdate(cb) { this._listeners.push(cb); }
         }
 
+        // ── 2b. SerialWeightProvider (Web Serial API — PC Desktop Chrome) ───
+        // Muito mais simples que WebUSB: o OS (driver CH34x) gerencia o UART,
+        // não precisamos fazer initUART manualmente. Funciona em Chrome ≥89 no
+        // Windows/Mac/Linux. NÃO funciona no Android (apenas Bluetooth Serial).
+        class SerialWeightProvider {
+            constructor() {
+                this._port        = null;
+                this._reader      = null;
+                this._status      = 'disconnected';
+                this._listeners   = [];
+                this._alive       = false;
+                this._buffer      = '';
+                this._pollTimer   = null;
+                this._connecting  = false; // mutex — impede dois connect() simultâneos
+            }
+
+            async connect(onStep) {
+                const step = (msg) => {
+                    console.log('[WeightSerial]', msg);
+                    if (onStep) onStep(msg);
+                };
+                if (!this._port) throw new Error('Porta não selecionada — chame requestPortDirect() primeiro.');
+
+                // Mutex: se já conectado ou conectando, retorna imediatamente.
+                // Evita race condition entre auto-connect (login) e click manual.
+                if (this._status === 'connected') {
+                    step('3 Já conectado!');
+                    return;
+                }
+                if (this._connecting) {
+                    step('3 Conectando...');
+                    return;
+                }
+                this._connecting = true;
+                this._status     = 'connecting'; // oculta botão durante a abertura
+                _updateWeightStatusBadge && _updateWeightStatusBadge();
+                _atualizarBotaoConectarBalanca && _atualizarBotaoConectarBalanca();
+
+                try {
+                    if (this._port.readable !== null) {
+                        // Porta já aberta — não chama open() de novo (travaria).
+                        // Apenas reinicia o readLoop se não estiver rodando.
+                        step('2 Porta já aberta — reconectando leitura...');
+                    } else {
+                        step('2 Abrindo 9600 8N1...');
+                        // Timeout de 4s — se travar, desconecte e reconecte o cabo USB.
+                        const openTimeout = new Promise((_, rej) =>
+                            setTimeout(() => rej(new Error('Desconecte e reconecte o cabo USB, depois tente novamente')), 4000));
+                        await Promise.race([
+                            this._port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' }),
+                            openTimeout
+                        ]);
+                    }
+                    this._alive  = true;
+                    this._status = 'connected';
+                    step('3 OK! Lendo...');
+                    // Para polling anterior (evita timers duplicados em reconexões)
+                    clearInterval(this._pollTimer);
+                    this._pollTimer = null;
+                    this._startPolling();
+                    // Só inicia novo readLoop se readable não estiver bloqueado
+                    // (locked = readLoop anterior ainda ativo, vai morrer sozinho)
+                    if (!this._port.readable.locked) {
+                        this._readLoop();
+                    } else {
+                        this._debugLog('readLoop já ativo — aguardando liberação');
+                    }
+                } catch(e) {
+                    this._status     = 'error';
+                    this._connecting = false;
+                    // Limpa a porta — estado sujo. Próximo clique pedirá nova seleção.
+                    try { await this._port.close(); } catch(_) {}
+                    this._port = null;
+                    throw new Error('Falha ao abrir porta serial: ' + e.message);
+                }
+                this._connecting = false;
+            }
+
+            // Urano não transmite espontaneamente — envia ENQ (0x05) a cada 1.5s
+            // para solicitar leitura. Mesmo padrão que usávamos no WebUSB.
+            _startPolling() {
+                this._pollTimer = setInterval(async () => {
+                    if (!this._alive || !this._port || !this._port.writable) return;
+                    let writer;
+                    try {
+                        writer = this._port.writable.getWriter();
+                        await writer.write(new Uint8Array([0x05])); // ENQ
+                        this._debugLog('→ ENQ');
+                    } catch(e) {
+                        this._debugLog('poll ERRO: ' + e.message);
+                    } finally {
+                        if (writer) try { writer.releaseLock(); } catch(e) {}
+                    }
+                }, 1500);
+            }
+
+            async _readLoop() {
+                if (!this._alive || !this._port || !this._port.readable) return;
+                const decoder = new TextDecoder('latin1');
+                // Variável LOCAL — disconnect() pode zerar this._reader mas o finally
+                // ainda tem referência para chamar releaseLock() corretamente.
+                const reader = this._port.readable.getReader();
+                this._reader = reader;
+                try {
+                    while (this._alive) {
+                        const { value, done } = await reader.read();
+                        if (done) { this._debugLog('stream done — reiniciando'); break; }
+                        if (value && value.byteLength > 0) {
+                            const text = decoder.decode(value, { stream: true });
+                            this._debugLog('RX: ' + JSON.stringify(text));
+                            this._processChunk(text);
+                        }
+                    }
+                } catch(e) {
+                    if (this._alive) {
+                        this._debugLog('ERRO: ' + e.message);
+                        // NÃO seta status='error' — mantém 'connected' para não mostrar
+                        // o botão de reconexão desnecessariamente
+                    }
+                } finally {
+                    try { reader.releaseLock(); } catch(e) {}
+                    if (this._reader === reader) this._reader = null;
+                }
+                // Auto-reinicia enquanto estiver vivo, mas só se readable não estiver
+                // bloqueado por outro readLoop (evita loop infinito de tentativas)
+                if (this._alive && this._port && this._port.readable && !this._port.readable.locked) {
+                    await new Promise(r => setTimeout(r, 300));
+                    this._readLoop();
+                }
+            }
+
+            _debugLog(msg) {
+                const box = document.getElementById('balancaDebugBox');
+                const log = document.getElementById('balancaDebugLog');
+                if (!box || !log) return;
+                box.style.display = 'block';
+                box.onclick = () => { box.style.display = 'none'; };
+                const line = document.createElement('div');
+                line.textContent = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' ' + msg;
+                log.prepend(line);
+                if (log.children.length > 30) log.lastChild.remove();
+            }
+
+            _processChunk(text) {
+                this._buffer += text;
+                const parts  = this._buffer.split(/[\r\n\x1b]/);
+                this._buffer = parts.pop();
+                parts.forEach(l => this._parseLine(l.trim()));
+            }
+
+            // Urano POP-S: \x1b[T2\x1b[B\x1b[N0 0,210 kg 0,00 \x1b[N1 0,00 \x1b[E\x1b[P1
+            _parseLine(line) {
+                if (!line) return;
+                const clean   = line.replace(/\x1b\[[^A-Za-z]*[A-Za-z]/g, ' ');
+                this._debugLog('LINE: ' + JSON.stringify(line));
+                const toFloat = s => parseFloat(s.replace(',', '.'));
+                const kgMatch = clean.match(/([0-9]+[,\.][0-9]+)\s*kg/i);
+                const gMatch  = clean.match(/([0-9]+[,\.][0-9]+)\s*g\b/i);
+                const rawNum  = clean.match(/^\s*\+?\s*([0-9]+[,\.][0-9]+)\s*$/);
+                let gramas = null;
+                if (kgMatch)     gramas = Math.round(toFloat(kgMatch[1]) * 1000);
+                else if (gMatch) gramas = Math.round(toFloat(gMatch[1]));
+                else if (rawNum) gramas = toFloat(rawNum[1]) > 10
+                    ? Math.round(toFloat(rawNum[1]))
+                    : Math.round(toFloat(rawNum[1]) * 1000);
+                if (gramas !== null && gramas >= 0) {
+                    this._debugLog('✅ ' + gramas + 'g');
+                    console.log('[WeightSerial] ✅ Peso:', gramas, 'g');
+                    this._listeners.forEach(cb => { try { cb(gramas); } catch(e) {} });
+                }
+            }
+
+            async disconnect() {
+                this._alive  = false;
+                this._status = 'disconnected';
+                clearInterval(this._pollTimer);
+                this._pollTimer = null;
+                // Cancela o reader — _readLoop vai sair do while e liberar o lock no finally
+                try { if (this._reader) await this._reader.cancel(); } catch(e) {}
+                this._reader = null;
+                // Aguarda _readLoop liberar o lock antes de fechar a porta
+                await new Promise(r => setTimeout(r, 300));
+                try { if (this._port) await this._port.close(); } catch(e) {}
+                this._port = null; // nula para getPorts() retornar handle limpo na próxima conexão
+                console.log('[WeightSerial] Desconectado.');
+            }
+
+            getStatus()        { return this._status; }
+            onWeightUpdate(cb) { this._listeners.push(cb); }
+        }
+
         // ── 3. WeightService ────────────────────────────────
         class WeightService {
             constructor() {
@@ -8658,7 +8891,7 @@ var itens = comanda.itens || [];
                 this._lastStableWeight = null;
                 this._lastStableTs     = null;
                 this._window           = [];      // { value, ts }
-                this._WINDOW_MS        = 500;
+                this._WINDOW_MS        = 2000; // 2s cobre polling 1.5s da balança serial
                 this._MAX_DELTA        = 5;       // gramas
                 this._modalInterval    = null;
             }
@@ -8689,11 +8922,13 @@ var itens = comanda.itens || [];
                 const now = Date.now();
                 this._lastWeight = grams;
 
-                // Janela deslizante de 500ms
+                // Janela deslizante de 2000ms (cobre 1+ leituras em polling 1.5s)
+                // Mínimo: 1 leitura — balança serial envia 1 resposta por ENQ,
+                // não tem fluxo contínuo como mock. 1 leitura estável já é confiável.
                 this._window.push({ value: grams, ts: now });
                 this._window = this._window.filter(r => now - r.ts <= this._WINDOW_MS);
 
-                if (this._window.length < 3) return;
+                if (this._window.length < 1) return;
 
                 const vals = this._window.map(r => r.value);
                 const min  = Math.min(...vals);
@@ -8766,15 +9001,60 @@ var itens = comanda.itens || [];
 
         const WEIGHT_PROFILES = ['Balança']; // perfis que usam balança
 
-        function _initWeightService() {
+        async function _initWeightService() {
             if (!WEIGHT_PROFILES.includes(state.perfil)) return;
             if (weightService) return; // já iniciado
-            // WebUSB direto no CH34x — Web Serial API não funciona em Android Chrome para USB
-            const provider = new WebUSBWeightProviderCH34x();
-            weightService  = new WeightService();
+
+            const provider = navigator.serial
+                ? new SerialWeightProvider()
+                : new WebUSBWeightProviderCH34x();
+            weightService = new WeightService();
             weightService.init(provider);
             _updateWeightStatusBadge();
-            _weightLog('serviço iniciado', 'provider=Mock');
+            _weightLog('serviço iniciado', 'provider=' + provider.constructor.name);
+
+            // Auto-conecta se já há porta autorizada — getPorts() NÃO precisa de user gesture.
+            // Após a primeira autorização (via btnConectarBalanca), Chrome lembra a porta.
+            // Nas sessões seguintes, a conexão acontece automaticamente no login.
+            if (navigator.serial) {
+                try {
+                    const ports = await navigator.serial.getPorts();
+                    if (ports.length > 0) {
+                        _weightLog('auto-connect', 'porta autorizada encontrada — conectando...');
+                        provider._port = ports[0]; // seta porta diretamente, sem user gesture
+                        weightService.connectProvider()
+                            .then(() => _weightLog('auto-connect', 'OK'))
+                            .catch(e => _weightLog('auto-connect falhou', e.message));
+                    } else {
+                        _weightLog('auto-connect', 'nenhuma porta autorizada — aguardando gesto do usuário');
+                    }
+                } catch(e) {
+                    _weightLog('auto-connect erro', e.message);
+                }
+            }
+        }
+
+        // ── SPLASH para Balança e Caixa: captura user gesture e aciona fullscreen ──
+        function _mostrarSplash(perfil) {
+            const icone    = { 'Balança': '⚖️', 'Caixa': '💳' };
+            const legenda  = { 'Balança': 'Sistema de Balança — Pronto', 'Caixa': 'Sistema de Caixa — Pronto' };
+            const icon = document.getElementById('splashIcon');
+            const sub  = document.getElementById('splashSubtitle');
+            if (icon) icon.textContent = icone[perfil]  || '🍽️';
+            if (sub)  sub.textContent  = legenda[perfil] || 'Pronto';
+            const splash = document.getElementById('balancaSplash');
+            if (splash) splash.style.display = 'flex';
+        }
+
+        async function _iniciarSessaoEspecial() {
+            // requestFullscreen AQUI dentro de click handler real — user gesture garantido
+            try {
+                await document.documentElement.requestFullscreen();
+            } catch(e) {
+                // Fullscreen rejeitado — ignora; CSS modo-balanca/modo-caixa já faz height:100dvh
+            }
+            const splash = document.getElementById('balancaSplash');
+            if (splash) splash.style.display = 'none';
         }
 
         function _destroyWeightService() {
@@ -8803,27 +9083,59 @@ var itens = comanda.itens || [];
         function _atualizarBotaoConectarBalanca() {
             const btn = document.getElementById('btnConectarBalanca');
             if (!btn || !weightService) return;
-            const conectado = weightService.getStatus() === 'connected';
-            btn.style.display = conectado ? 'none' : 'block';
+            const st = weightService.getStatus();
+            // Oculta botão se conectado OU se conectando (evita duplo clique durante auto-connect)
+            btn.style.display = (st === 'connected' || st === 'connecting') ? 'none' : 'block';
         }
 
         async function conectarBalancaManual() {
             if (!weightService) return;
+            const provider = weightService._provider;
             const btn = document.getElementById('btnConectarBalanca');
-            if (btn) { btn.disabled = true; btn.textContent = '⏳ Conectando...'; }
 
-            // Timeout de segurança — evita botão travado se connect() nunca resolver
-            const timer = setTimeout(() => {
-                if (btn && btn.textContent.includes('Conectando')) {
-                    btn.disabled = false;
-                    btn.textContent = '🔌 Conectar Balança';
-                    mostrarToast('❌ Timeout — verifique o console para diagnóstico');
+            if (provider instanceof SerialWeightProvider) {
+                // requestPort() como PRIMEIRA AWAIT — sem nenhum await anterior.
+                // Dois casos de uso SEPARADOS:
+                //   - Este botão: SEMPRE mostra picker (clareza, sem estado sujo)
+                //   - Auto-connect no login: usa getPorts() silenciosamente
+                // Isso elimina a ambiguidade de "porta autorizada mas inválida".
+                let port;
+                try {
+                    port = await navigator.serial.requestPort(); // ← PRIMEIRA await, picker aparece
+                } catch(e) {
+                    // Usuário fechou o picker ou erro de permissão — silencioso
+                    // Restaura foco da página (Chrome pode ficar sem foco após fechar o dialog)
+                    window.focus();
+                    document.body.focus();
+                    return;
                 }
+                // Restaura foco da página após fechar o dialog do browser
+                // Chrome às vezes não devolve o foco corretamente após requestPort()
+                window.focus();
+                // Desconecta a conexão anterior se existir antes de trocar a porta
+                if (provider._status === 'connected' || provider._status === 'connecting') {
+                    provider._alive = false;
+                    clearInterval(provider._pollTimer);
+                    provider._pollTimer = null;
+                    try { if (provider._reader) await provider._reader.cancel(); } catch(_) {}
+                    await new Promise(r => setTimeout(r, 200));
+                    try { if (provider._port) await provider._port.close(); } catch(_) {}
+                }
+                provider._port       = port;
+                provider._status     = 'disconnected';
+                provider._connecting = false;
+            }
+
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Abrindo...'; }
+
+            const timer = setTimeout(() => {
+                if (btn) { btn.disabled = false; btn.textContent = '🔌 Conectar Balança'; }
+                mostrarToast('❌ Timeout — desconecte e reconecte o cabo USB');
             }, 10000);
 
             try {
                 await weightService.connectProvider((msg) => {
-                    if (btn) btn.textContent = '⏳ ' + msg; // mostra passo atual na tela
+                    if (btn) btn.textContent = '⏳ ' + msg;
                 });
                 clearTimeout(timer);
                 mostrarToast('✅ Balança conectada!');
