@@ -2732,7 +2732,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             setTimeout(_atualizarDebug, 100); // DEBUG: mostra width logo no load
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260611-v62';  // Timestamp único
+            const timestampAtual = '20260611-v65';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -8723,14 +8723,15 @@ var itens = comanda.itens || [];
         // Windows/Mac/Linux. NÃO funciona no Android (apenas Bluetooth Serial).
         class SerialWeightProvider {
             constructor() {
-                this._port        = null;
-                this._reader      = null;
-                this._status      = 'disconnected';
-                this._listeners   = [];
-                this._alive       = false;
-                this._buffer      = '';
-                this._pollTimer   = null;
-                this._connecting  = false; // mutex — impede dois connect() simultâneos
+                this._port           = null;
+                this._reader         = null;
+                this._status         = 'disconnected';
+                this._listeners      = [];
+                this._alive          = false;
+                this._buffer         = '';
+                this._pollTimer      = null;
+                this._connecting     = false; // mutex — impede dois connect() simultâneos
+                this._reconnectTimer = null;  // handle do setTimeout de reconexão
             }
 
             async connect(onStep) {
@@ -8832,20 +8833,53 @@ var itens = comanda.itens || [];
                     }
                 } catch(e) {
                     if (this._alive) {
-                        this._debugLog('ERRO: ' + e.message);
-                        // NÃO seta status='error' — mantém 'connected' para não mostrar
-                        // o botão de reconexão desnecessariamente
+                        this._debugLog('ERRO readLoop: ' + e.message);
+                        // Não seta status ainda — _scheduleReconnect cuida disso
                     }
                 } finally {
                     try { reader.releaseLock(); } catch(e) {}
                     if (this._reader === reader) this._reader = null;
                 }
-                // Auto-reinicia enquanto estiver vivo, mas só se readable não estiver
-                // bloqueado por outro readLoop (evita loop infinito de tentativas)
-                if (this._alive && this._port && this._port.readable && !this._port.readable.locked) {
-                    await new Promise(r => setTimeout(r, 300));
-                    this._readLoop();
+                // Se ainda está vivo e o stream encerrou (done=true ou erro),
+                // precisa close() + open() para recuperar — simples restart não basta.
+                if (this._alive && this._port) {
+                    this._scheduleReconnect('stream encerrado');
                 }
+            }
+
+            // Fecha a porta, aguarda e reabre — único jeito de recuperar um stream em erro.
+            // Chamado pelo _readLoop quando o stream termina inesperadamente.
+            // Retenta indefinidamente (com 2s de intervalo) — restaurante não pode parar.
+            _scheduleReconnect(reason) {
+                if (this._reconnectTimer) return; // já agendado — evita duplicatas
+                this._debugLog('🔄 Reconectando: ' + (reason || ''));
+                this._status = 'reconnecting'; // badge fica amarelo, botão oculto
+                _updateWeightStatusBadge && _updateWeightStatusBadge();
+                _atualizarBotaoConectarBalanca && _atualizarBotaoConectarBalanca();
+                this._reconnectTimer = setTimeout(async () => {
+                    this._reconnectTimer = null;
+                    if (!this._alive) return; // desconectado intencionalmente enquanto aguardava
+                    this._debugLog('🔄 Tentando reabrir porta...');
+                    // Limpa polling e fecha porta para limpar estado sujo
+                    clearInterval(this._pollTimer);
+                    this._pollTimer = null;
+                    try { if (this._port) await this._port.close(); } catch(_) {}
+                    // _port ainda aponta para o mesmo objeto — open() funciona em porta fechada
+                    this._status     = 'disconnected';
+                    this._connecting = false;
+                    try {
+                        await this.connect(() => {});
+                        this._debugLog('✅ Reconectado!');
+                    } catch(e) {
+                        this._debugLog('❌ Reconexão falhou: ' + e.message + ' — tentando em 3s');
+                        if (this._alive) {
+                            this._reconnectTimer = setTimeout(() => {
+                                this._reconnectTimer = null;
+                                if (this._alive) this._scheduleReconnect('retry');
+                            }, 3000);
+                        }
+                    }
+                }, 2000);
             }
 
             _debugLog(msg) {
@@ -8894,6 +8928,8 @@ var itens = comanda.itens || [];
                 this._status = 'disconnected';
                 clearInterval(this._pollTimer);
                 this._pollTimer = null;
+                // Cancela reconexão automática agendada — se foi logoff, não deve reconectar
+                if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
                 // Cancela o reader — _readLoop vai sair do while e liberar o lock no finally
                 try { if (this._reader) await this._reader.cancel(); } catch(e) {}
                 this._reader = null;
@@ -9046,7 +9082,16 @@ var itens = comanda.itens || [];
                     const ports = await navigator.serial.getPorts();
                     if (ports.length > 0) {
                         _weightLog('auto-connect', 'porta autorizada encontrada — conectando...');
-                        provider._port = ports[0]; // seta porta diretamente, sem user gesture
+                        const port = ports[0];
+                        // Garante porta fechada antes de conectar.
+                        // Pode estar aberta de uma sessão anterior (logoff não aguarda disconnect async).
+                        // port.close() durante disconnect paralelo é seguro — ambos são try/catch.
+                        if (port.readable !== null) {
+                            _weightLog('auto-connect', 'porta ainda aberta — fechando antes de reconectar');
+                            try { await port.close(); } catch(_) {}
+                            await new Promise(r => setTimeout(r, 200));
+                        }
+                        provider._port = port;
                         weightService.connectProvider()
                             .then(() => _weightLog('auto-connect', 'OK'))
                             .catch(e => _weightLog('auto-connect falhou', e.message));
@@ -9056,6 +9101,40 @@ var itens = comanda.itens || [];
                 } catch(e) {
                     _weightLog('auto-connect erro', e.message);
                 }
+
+                // Evento: cabo reconectado fisicamente
+                // Chrome detecta a reconexão USB e dispara este evento.
+                // Atualiza a referência da porta e agenda reconexão caso esteja em erro.
+                navigator.serial.addEventListener('connect', async () => {
+                    const p = weightService && weightService._provider;
+                    if (!p || !(p instanceof SerialWeightProvider)) return;
+                    if (p._status === 'connected' || p._status === 'connecting') return;
+                    _weightLog('serial:connect', 'dispositivo USB plugado — atualizando porta');
+                    try {
+                        const ports = await navigator.serial.getPorts();
+                        if (ports.length > 0) {
+                            p._port = ports[0]; // atualiza referência (mesma porta, novo handle)
+                            if (!p._reconnectTimer) {
+                                p._alive = true; // garante que tentará reconectar
+                                p._scheduleReconnect('cabo reconectado');
+                            }
+                        }
+                    } catch(e) { _weightLog('serial:connect erro', e.message); }
+                });
+
+                // Evento: cabo desconectado fisicamente
+                // NÃO interrompe _alive — o _readLoop vai receber o erro e chamar
+                // _scheduleReconnect sozinho. Aqui apenas atualizamos a UI imediatamente.
+                navigator.serial.addEventListener('disconnect', (e) => {
+                    const p = weightService && weightService._provider;
+                    if (!p || !(p instanceof SerialWeightProvider)) return;
+                    if (p._port !== e.target) return; // não é nossa porta
+                    _weightLog('serial:disconnect', 'cabo USB removido');
+                    p._status = 'reconnecting'; // badge amarelo imediato
+                    _updateWeightStatusBadge && _updateWeightStatusBadge();
+                    _atualizarBotaoConectarBalanca && _atualizarBotaoConectarBalanca();
+                    // _readLoop vai perceber o erro em <1.5s e chamar _scheduleReconnect
+                });
             }
         }
 
@@ -9094,12 +9173,20 @@ var itens = comanda.itens || [];
         function _updateWeightStatusBadge() {
             const badge = document.getElementById('weightStatusBadge');
             if (!badge) return;
-            if (weightService && weightService.getStatus() === 'connected') {
-                badge.style.display = 'block';
+            const st = weightService ? weightService.getStatus() : 'disconnected';
+            if (st === 'connected') {
+                badge.style.display    = 'block';
                 badge.style.background = '#f0faf5';
                 badge.style.color      = '#27ae60';
                 badge.style.borderColor = '#a8e6c8';
                 badge.textContent = '⚖️ BALANÇA';
+            } else if (st === 'reconnecting') {
+                // Cabo caiu — reconexão automática em andamento
+                badge.style.display    = 'block';
+                badge.style.background = '#fffbf0';
+                badge.style.color      = '#d97706';
+                badge.style.borderColor = '#fde68a';
+                badge.textContent = '⚖️ Reconectando...';
             } else {
                 badge.style.display = 'none';
             }
@@ -9109,8 +9196,25 @@ var itens = comanda.itens || [];
             const btn = document.getElementById('btnConectarBalanca');
             if (!btn || !weightService) return;
             const st = weightService.getStatus();
-            // Oculta botão se conectado OU se conectando (evita duplo clique durante auto-connect)
-            btn.style.display = (st === 'connected' || st === 'connecting') ? 'none' : 'block';
+            // Botão sempre visível — escape hatch garantido mesmo quando sistema acha que está OK.
+            // Texto e cor mudam conforme estado.
+            btn.style.display = 'block';
+            if (st === 'connected') {
+                btn.textContent  = '🔄 Reconectar Balança';
+                btn.style.background = '#f0f0f0';
+                btn.style.color      = '#555';
+                btn.disabled = false;
+            } else if (st === 'reconnecting' || st === 'connecting') {
+                btn.textContent  = '⏳ Reconectando...';
+                btn.style.background = '#fff8e1';
+                btn.style.color      = '#d97706';
+                btn.disabled = true;
+            } else {
+                btn.textContent  = '🔌 Conectar Balança';
+                btn.style.background = '';
+                btn.style.color      = '';
+                btn.disabled = false;
+            }
         }
 
         async function conectarBalancaManual() {
