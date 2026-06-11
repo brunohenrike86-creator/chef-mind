@@ -2727,7 +2727,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             setTimeout(_atualizarDebug, 100); // DEBUG: mostra width logo no load
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260611-v55-debug';  // Timestamp único
+            const timestampAtual = '20260611-v57';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -3358,10 +3358,17 @@
             if (['Caixa', 'Balança'].includes(state.perfil)) return;
             const eMobile = window.innerWidth < 768;
             document.body.classList.toggle('modo-mobile', eMobile);
+
+            // Força display via JS — garante override do inline style="display:none"
+            // (CSS !important deveria ser suficiente, mas JS é definitivo)
+            const topbar  = document.getElementById('mobileTopBar');
+            const header  = document.querySelector('.header');
+            const sidebar = document.querySelector('.sidebar');
+            if (topbar)  topbar.style.display  = eMobile ? 'flex' : 'none';
+            if (header)  header.style.display  = eMobile ? 'none' : '';
+            if (sidebar) sidebar.style.display = eMobile ? 'none' : '';
+
             _atualizarDebug();
-            // DEBUG: mostra a largura atual na topbar (remover depois)
-            const dbg = document.getElementById('debugWidth');
-            if (dbg) dbg.textContent = `w=${window.innerWidth} ${eMobile?'MOBILE':'DESKTOP'}`;
             if (eMobile) {
                 const el = document.getElementById('mobileTopBarUser');
                 if (el) el.textContent = (state.user || '') + (state.perfil ? ' · ' + state.perfil : '');
@@ -9090,29 +9097,51 @@ var itens = comanda.itens || [];
 
         async function conectarBalancaManual() {
             if (!weightService) return;
+            // Web Serial não disponível (mobile, Firefox, etc.)
+            if (!navigator.serial) {
+                mostrarToast('⚠️ Web Serial não suportado neste navegador');
+                return;
+            }
             const provider = weightService._provider;
             const btn = document.getElementById('btnConectarBalanca');
 
             if (provider instanceof SerialWeightProvider) {
-                // requestPort() como PRIMEIRA AWAIT — sem nenhum await anterior.
-                // Dois casos de uso SEPARADOS:
-                //   - Este botão: SEMPRE mostra picker (clareza, sem estado sujo)
-                //   - Auto-connect no login: usa getPorts() silenciosamente
-                // Isso elimina a ambiguidade de "porta autorizada mas inválida".
-                let port;
-                try {
-                    port = await navigator.serial.requestPort(); // ← PRIMEIRA await, picker aparece
-                } catch(e) {
-                    // Usuário fechou o picker ou erro de permissão — silencioso
-                    // Restaura foco da página (Chrome pode ficar sem foco após fechar o dialog)
-                    window.focus();
-                    document.body.focus();
+                // Guard: evita chamar requestPort() simultaneamente
+                // (requestPort() escaneia portas COM do OS — pode travar o Chrome inteiro)
+                if (provider._requestPortPending) {
+                    mostrarToast('⏳ Aguarde...');
                     return;
                 }
-                // Restaura foco da página após fechar o dialog do browser
-                // Chrome às vezes não devolve o foco corretamente após requestPort()
-                window.focus();
-                // Desconecta a conexão anterior se existir antes de trocar a porta
+
+                let port;
+
+                // ESTRATÉGIA: reutiliza porta já autorizada (sem abrir picker do OS).
+                // Só chama requestPort() na primeira vez (sem porta autorizada ainda).
+                // requestPort() escaneia portas COM via OS — sem cabo conectado pode
+                // travar o processo do Chrome inteiro, afetando outras abas também.
+                const existingPorts = await navigator.serial.getPorts();
+                if (existingPorts.length > 0) {
+                    port = existingPorts[0]; // reusa porta autorizada sem dialog
+                } else {
+                    // Primeira vez: precisa do picker do OS.
+                    // IMPORTANTE: requestPort() escaneia portas COM — sem cabo pode
+                    // travar o Chrome inteiro. Confirmação síncrona antes de chamar.
+                    const ok = confirm('Conecte o cabo USB da balança antes de continuar.\n\nCabo conectado? Clique OK para abrir o seletor de porta.');
+                    if (!ok) return;
+                    provider._requestPortPending = true;
+                    try {
+                        port = await navigator.serial.requestPort();
+                    } catch(e) {
+                        window.focus();
+                        document.body.focus();
+                        provider._requestPortPending = false;
+                        return;
+                    }
+                    provider._requestPortPending = false;
+                    window.focus();
+                }
+
+                // Desconecta conexão anterior se existir antes de trocar a porta
                 if (provider._status === 'connected' || provider._status === 'connecting') {
                     provider._alive = false;
                     clearInterval(provider._pollTimer);
