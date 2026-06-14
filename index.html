@@ -2326,6 +2326,11 @@
                 </div>
             </div>
 
+            <div class="modal-field">
+                <div class="modal-label">Cód. de barras <span style="font-size:10px; color:var(--gray); font-weight:normal;">(opcional — EAN ou código interno)</span></div>
+                <input type="text" id="modalCodigoBarras" class="modal-input" placeholder="Ex: 7891991010083">
+            </div>
+
             <div class="modal-buttons">
                 <button class="modal-btn-secondary" onclick="fecharModal()">Cancelar</button>
                 <button class="modal-btn-primary" id="btnSalvarItem" onclick="salvarItem()">Salvar</button>
@@ -2394,6 +2399,11 @@
             <div class="modal-field">
                 <div class="modal-label">Preço</div>
                 <div style="padding: 10px; background: var(--bg-light); border-radius: 6px; font-size: 13px; font-weight: bold; color: var(--primary);" id="vizPreco">—</div>
+            </div>
+
+            <div class="modal-field" id="vizEanField">
+                <div class="modal-label">Cód. de barras (EAN)</div>
+                <div style="padding: 10px; background: var(--bg-light); border-radius: 6px; font-size: 13px; font-family: monospace;" id="vizEan">—</div>
             </div>
 
             <div class="modal-field" id="vizFotoField" style="display:none;">
@@ -2554,7 +2564,8 @@
                             icone: item.icone || '🍽️',
                             categoria: categoriaFinal,
                             tipo: tipoInferido,
-                            foto: item.foto || null
+                            foto: item.foto || null,
+                            codigo_barras: item.codigo_barras || ''
                         };
                     });
                     if (Object.keys(novoItens).length > 0) {
@@ -2732,7 +2743,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             setTimeout(_atualizarDebug, 100); // DEBUG: mostra width logo no load
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260611-v65';  // Timestamp único
+            const timestampAtual = '20260612-v73';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -2747,6 +2758,7 @@
             updateDate();
             setupEvents();
             setupAdminTabs();
+            _initBarcodeListener(); // leitor de código de barras USB (keyboard wedge)
 
             // Renderizar listas admin
             gerarFiltrosCategorias();
@@ -7772,6 +7784,7 @@ function carregarComanda() {
             document.getElementById('modalTipo').value = 'Fixo';
             document.getElementById('modalPreco').value = '';
             document.getElementById('modalCategoria').innerHTML = '—';
+            document.getElementById('modalCodigoBarras').value = '';
             selecionarTipo('Fixo');
             _resetFotoUI();
             document.getElementById('modalItem').classList.add('active');
@@ -7787,6 +7800,7 @@ function carregarComanda() {
             document.getElementById('modalNome').value = item.nome;
             document.getElementById('modalTipo').value = item.tipo;
             document.getElementById('modalPreco').value = item.preco;
+            document.getElementById('modalCodigoBarras').value = item.codigo_barras || '';
 
             const categoria = categorizarItem(item.nome, item.tipo);
             document.getElementById('modalCategoria').textContent = categoria;
@@ -7837,6 +7851,7 @@ function carregarComanda() {
             const nome = document.getElementById('modalNome').value.trim();
             const tipo = document.getElementById('modalTipo').value;
             const preco = parseFloat(document.getElementById('modalPreco').value);
+            const codigoBarras = document.getElementById('modalCodigoBarras').value.trim();
 
             if (!nome || !tipo || !preco || isNaN(preco)) {
                 showToast('Preencha todos os campos', 'error');
@@ -7870,13 +7885,14 @@ function carregarComanda() {
 
             if (itemEmEdicao) {
                 // Editar
-                state.itens[itemEmEdicao].nome      = nome;
-                state.itens[itemEmEdicao].tipo      = tipo;
-                state.itens[itemEmEdicao].preco     = preco;
-                state.itens[itemEmEdicao].categoria = categoria;
-                state.itens[itemEmEdicao].foto      = fotoUrl;
+                state.itens[itemEmEdicao].nome          = nome;
+                state.itens[itemEmEdicao].tipo          = tipo;
+                state.itens[itemEmEdicao].preco         = preco;
+                state.itens[itemEmEdicao].categoria     = categoria;
+                state.itens[itemEmEdicao].foto          = fotoUrl;
+                state.itens[itemEmEdicao].codigo_barras = codigoBarras;
                 saveStorage();
-                sheetsAPI('atualizarItemCardapio', { codigo: itemEmEdicao, nome, tipo, preco, categoria });
+                sheetsAPI('atualizarItemCardapio', { codigo: itemEmEdicao, nome, tipo, preco, categoria, codigo_barras: codigoBarras });
                 showToast(`Item #${itemEmEdicao} atualizado`, 'success');
             } else {
                 // Novo — usa o código já gerado acima para foto e item ficarem sincronizados
@@ -7884,10 +7900,11 @@ function carregarComanda() {
                 state.itens[codigo] = {
                     codigo, nome, tipo, preco, categoria,
                     foto: fotoUrl,
+                    codigo_barras: codigoBarras,
                     dataCriacao: new Date().toISOString()
                 };
                 saveStorage();
-                sheetsAPI('novoItemCardapio', { codigo, nome, tipo, preco, categoria });
+                sheetsAPI('novoItemCardapio', { codigo, nome, tipo, preco, categoria, codigo_barras: codigoBarras });
                 showToast(`Item #${codigo} cadastrado`, 'success');
             }
 
@@ -7912,6 +7929,11 @@ function carregarComanda() {
             document.getElementById('vizCategoria').innerHTML = `<span style="font-size: 14px; margin-right: 4px;">${icone}</span> ${categoria}`;
             
             document.getElementById('vizPreco').textContent = `R$ ${item.preco.toFixed(2)}${tipoLabel}`;
+
+            // EAN / código de barras
+            const ean = item.codigo_barras || '';
+            document.getElementById('vizEan').textContent = ean || '—';
+            document.getElementById('vizEan').style.color = ean ? 'var(--text-dark)' : 'var(--gray)';
 
             // Foto
             const vizFotoField = document.getElementById('vizFotoField');
@@ -8758,9 +8780,18 @@ var itens = comanda.itens || [];
 
                 try {
                     if (this._port.readable !== null) {
-                        // Porta já aberta — não chama open() de novo (travaria).
-                        // Apenas reinicia o readLoop se não estiver rodando.
-                        step('2 Porta já aberta — reconectando leitura...');
+                        // Porta ainda aberta da sessão anterior (disconnect() não fecha mais).
+                        // Cancela reader stale se houver nesta instância e reutiliza a porta.
+                        if (this._reader) {
+                            try { await this._reader.cancel(); } catch(_) {}
+                            this._reader = null;
+                        }
+                        // Safety: se readable ainda estiver locked (releaseLock() do readLoop anterior
+                        // ainda em microtask queue), aguarda até 150ms para liberar.
+                        if (this._port.readable.locked) {
+                            await new Promise(r => setTimeout(r, 150));
+                        }
+                        step('2 Reconectando...');
                     } else {
                         step('2 Abrindo 9600 8N1...');
                         // Timeout de 4s — se travar, desconecte e reconecte o cabo USB.
@@ -8774,17 +8805,12 @@ var itens = comanda.itens || [];
                     this._alive  = true;
                     this._status = 'connected';
                     step('3 OK! Lendo...');
-                    // Para polling anterior (evita timers duplicados em reconexões)
                     clearInterval(this._pollTimer);
                     this._pollTimer = null;
                     this._startPolling();
-                    // Só inicia novo readLoop se readable não estiver bloqueado
-                    // (locked = readLoop anterior ainda ativo, vai morrer sozinho)
-                    if (!this._port.readable.locked) {
-                        this._readLoop();
-                    } else {
-                        this._debugLog('readLoop já ativo — aguardando liberação');
-                    }
+                    // Sempre inicia _readLoop — reader stale já foi cancelado acima se havia.
+                    // Removido o check readable.locked que impedia start após re-login.
+                    this._readLoop();
                 } catch(e) {
                     this._status     = 'error';
                     this._connecting = false;
@@ -8928,16 +8954,17 @@ var itens = comanda.itens || [];
                 this._status = 'disconnected';
                 clearInterval(this._pollTimer);
                 this._pollTimer = null;
-                // Cancela reconexão automática agendada — se foi logoff, não deve reconectar
                 if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
-                // Cancela o reader — _readLoop vai sair do while e liberar o lock no finally
+                // Cancela o reader — _readLoop sai do while e chama releaseLock() no finally.
                 try { if (this._reader) await this._reader.cancel(); } catch(e) {}
                 this._reader = null;
-                // Aguarda _readLoop liberar o lock antes de fechar a porta
-                await new Promise(r => setTimeout(r, 300));
-                try { if (this._port) await this._port.close(); } catch(e) {}
-                this._port = null; // nula para getPorts() retornar handle limpo na próxima conexão
-                console.log('[WeightSerial] Desconectado.');
+                // NÃO fecha a porta nem zera this._port.
+                // Chrome seta port.readable = null quando port.close() é INICIADO (não quando completa).
+                // Se nova sessão vê readable === null e chama port.open() enquanto o close() antigo
+                // ainda está rodando em background, port.open() fica travado indefinidamente.
+                // Solução: deixar a porta ABERTA entre sessões. connect() reutiliza via readable !== null.
+                // A porta só é fechada em _scheduleReconnect (recuperação de erro real).
+                console.log('[WeightSerial] Desconectado (porta mantida aberta para re-uso).');
             }
 
             getStatus()        { return this._status; }
@@ -9083,13 +9110,15 @@ var itens = comanda.itens || [];
                     if (ports.length > 0) {
                         _weightLog('auto-connect', 'porta autorizada encontrada — conectando...');
                         const port = ports[0];
-                        // Garante porta fechada antes de conectar.
-                        // Pode estar aberta de uma sessão anterior (logoff não aguarda disconnect async).
-                        // port.close() durante disconnect paralelo é seguro — ambos são try/catch.
                         if (port.readable !== null) {
-                            _weightLog('auto-connect', 'porta ainda aberta — fechando antes de reconectar');
-                            try { await port.close(); } catch(_) {}
-                            await new Promise(r => setTimeout(r, 200));
+                            // Porta ainda aberta (logoff via botão Sair): connect() reutiliza sem close/open.
+                            _weightLog('auto-connect', 'porta aberta — reutilizando sessão anterior');
+                        } else {
+                            // Porta fechada pelo Chrome no unload (refresh/fechar aba).
+                            // Chrome seta readable=null quando fecha, mas o OS pode levar ~1s para liberar.
+                            // Sem esse delay, port.open() trava indefinidamente.
+                            _weightLog('auto-connect', 'porta fechada — aguardando OS liberar (1s)...');
+                            await new Promise(r => setTimeout(r, 1000));
                         }
                         provider._port = port;
                         weightService.connectProvider()
@@ -9229,11 +9258,10 @@ var itens = comanda.itens || [];
 
             if (provider instanceof SerialWeightProvider) {
                 // Guard: evita chamar requestPort() simultaneamente
-                // (requestPort() escaneia portas COM do OS — pode travar o Chrome inteiro)
-                if (provider._requestPortPending) {
-                    mostrarToast('⏳ Aguarde...');
-                    return;
-                }
+                if (provider._requestPortPending) { mostrarToast('⏳ Aguarde...'); return; }
+                // Guard: evita race com auto-connect em andamento
+                // (resetar _connecting durante port.open() causa corrupção de estado)
+                if (provider._connecting) { mostrarToast('⏳ Conectando, aguarde...'); return; }
 
                 let port;
 
@@ -9294,6 +9322,159 @@ var itens = comanda.itens || [];
                 clearTimeout(timer);
                 mostrarToast('❌ ' + (e.message || 'Erro ao conectar balança'));
                 if (btn) { btn.disabled = false; btn.textContent = '🔌 Conectar Balança'; }
+            }
+        }
+
+        // ── LEITOR DE CÓDIGO DE BARRAS ───────────────────────────────────────
+        // Prefixo fixo nas comandas: CMD-{numero} (hardcoded — impresso nas comandas físicas).
+        // Se mudar, requer reimpressão das comandas. Configurabilidade aqui seria uma armadilha.
+        const COMANDA_BARCODE_PREFIX = 'CMD-';
+
+        let _bcBuffer = '';
+        let _bcTimer  = null;
+        let _barcodeListenerInited = false;
+
+        function _initBarcodeListener() {
+            if (_barcodeListenerInited) return;
+            _barcodeListenerInited = true;
+
+            let _bcStartTime = 0;
+
+            // Usa capture phase (true) para interceptar ANTES do input receber o evento,
+            // mesmo quando há foco num campo — necessário para keyboard wedge com inputs ativos.
+            // Discriminação scanner vs. digitação humana: scanner envia 5+ chars em < 200ms;
+            // digitação humana em 5 chars leva no mínimo 400ms mesmo para digitadores muito rápidos.
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey || e.altKey || e.metaKey) return;
+                if (e.key.length !== 1 && e.key !== 'Enter') return;
+
+                if (e.key === 'Enter') {
+                    const elapsed = Date.now() - _bcStartTime;
+                    // >= 5 chars montados em < 200ms → velocidade de scanner, não de humano
+                    if (_bcBuffer.length >= 5 && elapsed < 200) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        clearTimeout(_bcTimer);
+                        const code = _bcBuffer;
+                        _bcBuffer = '';
+                        // Limpa inputs de Lançar que receberam chars do scan
+                        const activeEl = document.activeElement;
+                        if (activeEl && ['lançarComandaNum', 'lançarCodigoItem'].includes(activeEl.id)) {
+                            activeEl.value = '';
+                        }
+                        _processBarcode(code);
+                        return;
+                    }
+                    _bcBuffer = '';
+                    clearTimeout(_bcTimer);
+                    return;
+                }
+
+                if (_bcBuffer.length === 0) _bcStartTime = Date.now();
+                _bcBuffer += e.key;
+                clearTimeout(_bcTimer);
+                // Se demorar >80ms entre teclas → não é scanner (buffer descartado)
+                _bcTimer = setTimeout(() => { _bcBuffer = ''; }, 80);
+                // Chars também chegam ao input focado — o Enter acima decide se era scan
+            }, true);
+
+            console.log('[Barcode] Listener inicializado (capture phase)');
+        }
+
+        function _processBarcode(code) {
+            console.log('[Barcode] Lido:', code);
+            if (code.startsWith(COMANDA_BARCODE_PREFIX)) {
+                const numero = parseInt(code.replace(COMANDA_BARCODE_PREFIX, ''), 10);
+                if (!isNaN(numero) && numero > 0) _onComandaScanned(numero);
+            } else {
+                _onItemScanned(code);
+            }
+        }
+
+        function _onComandaScanned(numero) {
+            const telaAtiva = document.querySelector('.screen.active')?.id?.replace('screen-', '');
+
+            if (telaAtiva === 'lançar') {
+                // Seta o número no input e chama carregarComanda() normalmente
+                const input = document.getElementById('lançarComandaNum');
+                if (!input) return;
+                input.value = String(numero);
+                carregarComanda();
+
+            } else if (telaAtiva === 'checkout') {
+                const dataAtual = new Date().toISOString().split('T')[0];
+                const key = `${numero}-${dataAtual}`;
+                const comanda = state.comandas[key];
+                if (!comanda) {
+                    mostrarToast(`Comanda #${numero} não encontrada`);
+                    return;
+                }
+                // Mesma regra do filtro da lista — comanda paga/encerrada não aparece nos cards
+                // e também não deve ser selecionável via scanner
+                if (comanda.status === 'Fechada/Paga' || comanda.paid || comanda.encerramento) {
+                    mostrarToast(`⚠️ Comanda #${numero} já encerrada`);
+                    return;
+                }
+                selecionarComandaCheckout(key, comanda);
+
+            } else {
+                mostrarToast(`⚠️ Abra a tela Lançar ou Checkout para usar o leitor`);
+            }
+        }
+
+        function _onItemScanned(codigoBarras) {
+            const telaAtiva = document.querySelector('.screen.active')?.id?.replace('screen-', '');
+            if (telaAtiva !== 'lançar') return; // scan de item só faz sentido na tela Lançar
+
+            if (!state.comandaAtual) {
+                mostrarToast('Selecione uma comanda antes de bipar um item');
+                return;
+            }
+            if (state.modoLeitura) {
+                mostrarToast('Modo consulta — edição desativada');
+                return;
+            }
+
+            // Busca no cardápio por codigo_barras (match exato, case-insensitive não necessário — EAN é numérico)
+            // String() protege contra Sheets retornar codigo_barras como number (EAN numérico)
+            const itemEntry = Object.entries(state.itens).find(
+                ([, item]) => item.codigo_barras && String(item.codigo_barras).trim() === codigoBarras.trim()
+            );
+
+            if (!itemEntry) {
+                mostrarToast(`Item não identificado: ${codigoBarras}`);
+                return;
+            }
+
+            const [codigo, item] = itemEntry;
+            const comanda = state.comandas[state.comandaAtual];
+
+            if (item.nome.toLowerCase().includes('quilo') || item.tipo === 'Gramas') {
+                // Item por peso — abre o modal (requer peso da balança)
+                abrirModalBuffetQuilo(codigo, item);
+                return;
+            }
+
+            if (item.tipo === 'Fixo') {
+                const _itemFixo = {
+                    codigo, nome: item.nome, tipo: item.tipo,
+                    preco: item.preco, quantidade: 1, observacao: '',
+                    icone: getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo))
+                };
+                comanda.itens.push(_itemFixo);
+                _itemFixo._pendingAdd = sheets_addItem(state.comandaAtual, _itemFixo, {
+                    codigo, nome: item.nome, quantidade: 1, preco: item.preco,
+                    observacao: '', preparo_ja: false
+                }).then(() => delete _itemFixo._pendingAdd);
+                atualizarTotalComanda(state.comandaAtual);
+                saveStorage();
+                renderizarListaLançada();
+                mostrarToast(`✅ ${item.nome} lançado`);
+                resetIdleTimer();
+            } else {
+                // Marmita — abre o modal para seleção de carnes
+                document.getElementById('lançarCodigoItem').value = codigo;
+                lancarItem();
             }
         }
 
