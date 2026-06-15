@@ -2203,7 +2203,7 @@
 
                 <!-- Botões -->
                 <div style="display: flex; flex-direction: column; gap: 8px;">
-                    <button onclick="confirmarPesoModal()"
+                    <button id="btnConfirmarPesoModal" onclick="confirmarPesoModal()"
                         style="width: 100%; padding: 15px; background: linear-gradient(135deg, #D4724F 0%, #B85840 100%);
                                color: white; border: none; border-radius: 10px; font-weight: bold;
                                cursor: pointer; font-size: 17px;
@@ -2743,7 +2743,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             setTimeout(_atualizarDebug, 100); // DEBUG: mostra width logo no load
             // ✅ FORÇAR LIMPEZA DO CACHE - USANDO TIMESTAMP
-            const timestampAtual = '20260612-v73';  // Timestamp único
+            const timestampAtual = '20260614-v75';  // Timestamp único
             const timestampSalvo = localStorage.getItem('michelin-timestamp');
             
             if (timestampSalvo !== timestampAtual) {
@@ -2758,7 +2758,7 @@
             updateDate();
             setupEvents();
             setupAdminTabs();
-            _initBarcodeListener(); // leitor de código de barras USB (keyboard wedge)
+            // barcode listener inicializado dentro de setupTelaLançar()
 
             // Renderizar listas admin
             gerarFiltrosCategorias();
@@ -3182,6 +3182,13 @@
         function logout() { handleLogout(); }
 
         function handleLogout() {
+            // Limpar estado e UI da tela Lançar antes de qualquer outra coisa
+            // limparComanda() já zera state.comandaAtual, modoLeitura, cancela idle e reseta o DOM
+            limparComanda();
+            // Fecha modal de peso se estiver aberta
+            const _mbq = document.getElementById('modalBuffetQuilo');
+            if (_mbq) _mbq.style.display = 'none';
+
             // Sair dos modos especiais
             document.body.classList.remove('modo-balanca');
             document.body.classList.remove('modo-caixa');
@@ -4705,9 +4712,9 @@
                         // ✅ MOSTRAR BOTÃO ATALHO (comanda nova aberta)
                         atualizarVisibilidadeBotaoAtalho();
 
-                        // Focus no código
-                        setTimeout(() => document.getElementById('lançarCodigoItem').focus(), 100);
-                        
+                        // Focus no código (ignorado em modo-mobile)
+                        setTimeout(_focusCodigoItem, 100);
+
                         state.itemEmEdicao = null;
                     }, 100);
                 }
@@ -4872,8 +4879,8 @@ function carregarComanda() {
             renderizarItensDisponiveis();
             resetIdleTimer();
 
-            // Focus no código
-            setTimeout(() => document.getElementById('lançarCodigoItem').focus(), 100);
+            // Focus no código (ignorado em modo-mobile)
+            setTimeout(_focusCodigoItem, 100);
         }
 
         function limparTelaLançar() {
@@ -4943,7 +4950,7 @@ function carregarComanda() {
             renderizarListaLançada();
             renderizarItensDisponiveis();
             resetIdleTimer();
-            setTimeout(() => { if (inputCodigo) inputCodigo.focus(); }, 100);
+            setTimeout(_focusCodigoItem, 100); // ignorado em modo-mobile
 
             // ⚖️ MODO BALANÇA: abre modal de peso automaticamente (item 002 - Buffet p/ Quilo)
             if (state.perfil === 'Balança') {
@@ -4959,8 +4966,22 @@ function carregarComanda() {
             state.modoLeitura = false;
             limparTelaLançar();
             const input = document.getElementById('lançarComandaNum');
-            if (input) { input.value = ''; input.focus(); }
+            if (input) {
+                input.value = '';
+                if (!document.body.classList.contains('modo-mobile')) input.focus();
+            }
         }
+
+        // Focus no campo de código — ignorado em modo-mobile (campo oculto, teclado indesejado)
+        function _focusCodigoItem() {
+            if (document.body.classList.contains('modo-mobile')) {
+                if (document.activeElement) document.activeElement.blur();
+                return;
+            }
+            const el = document.getElementById('lançarCodigoItem');
+            if (el) el.focus();
+        }
+
 
         // ✅ LIMPAR TELA ABRIR
         function limparTelaAbrir() {
@@ -5114,10 +5135,8 @@ function carregarComanda() {
             marnitaEmEdicao = null;
             marnitaCarnesSelecionadas = [];
             
-            // ✅ RESTAURAR FOCUS NO INPUT (com delay para garantir)
-            setTimeout(() => {
-                document.getElementById('lançarCodigoItem').focus();
-            }, 100);
+            // ✅ RESTAURAR FOCUS NO INPUT (com delay para garantir; ignorado em modo-mobile)
+            setTimeout(_focusCodigoItem, 100);
         }
 
         // ✅ TOGGLE PREPARO JÁ
@@ -5232,7 +5251,7 @@ function carregarComanda() {
             
             fecharModalMarnita();
             document.getElementById('lançarCodigoItem').value = '';
-            document.getElementById('lançarCodigoItem').focus();
+            _focusCodigoItem();
             
             // ✅ RESETAR CHECKBOX
             document.getElementById('checkboxPreparoJa').checked = false;
@@ -5259,11 +5278,12 @@ function carregarComanda() {
             if (!state.itens[codigo]) {
                 showToast('Item não encontrado', 'error');
                 document.getElementById('lançarCodigoItem').value = '';
-                document.getElementById('lançarCodigoItem').focus();
+                _focusCodigoItem();
                 return;
             }
 
             const item = state.itens[codigo];
+
             const comanda = state.comandas[state.comandaAtual];
 
             // REGRA: Se o NOME contém "Quilo" → abre prompt para peso
@@ -7415,7 +7435,9 @@ function carregarComanda() {
                 _updateWeightStatusBadge();
                 _atualizarBotaoConectarBalanca(); // mostra "Conectar Balança" se ainda não conectou
                 weightService.fillModal();  // preenche imediatamente se já há peso
-                // _syncModal() do WeightService continua atualizando a cada 300ms
+                // Foca o botão Confirmar — não o inputPeso — para que Enter funcione mas
+                // _syncModal() continue atualizando o input a cada 300ms (seria bloqueado se focado)
+                setTimeout(() => document.getElementById('btnConfirmarPesoModal')?.focus(), 100);
                 _weightLog('modal aberta', 'status=' + weightService.getStatus() + ' peso=' + (weightService.getLastStableWeight() ?? 'nenhum'));
             } else {
                 // Usuário sem balança: foco para digitação manual
@@ -7538,13 +7560,98 @@ function carregarComanda() {
             }
 
             if (inputCodigo) {
-                inputCodigo.addEventListener('keypress', (e) => {
+                // keydown em vez de keypress — mais confiável em type="number" e scanners USB
+                inputCodigo.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
                         lançarItem();
                     }
                 });
             }
+
+            // ── Barcode scan via capture phase ──
+            // Captura Enter do scanner independente do foco — desde que não estejamos no formulário de login.
+            // SÓ chama preventDefault quando detecta velocidade de scanner (>=5 chars em <200ms),
+            // então digitação humana lenta nunca é interceptada.
+            let _bcBuf = '', _bcT0 = 0, _bcTim = null;
+            document.addEventListener('keydown', (e) => {
+                // Nunca interceptar se o foco está no formulário de login
+                const focusedId = document.activeElement && document.activeElement.id;
+                if (focusedId === 'loginUser' || focusedId === 'loginPassword' || focusedId === 'btnLogin') return;
+
+                if (e.ctrlKey || e.altKey || e.metaKey) return;
+                if (e.key.length !== 1 && e.key !== 'Enter') return;
+
+                if (e.key === 'Enter') {
+                    const elapsed = Date.now() - _bcT0;
+                    if (_bcBuf.length >= 5 && elapsed < 200) {
+                        // Velocidade de scanner — interceptar
+                        e.preventDefault();
+                        e.stopPropagation();
+                        clearTimeout(_bcTim);
+                        const code = _bcBuf;
+                        _bcBuf = '';
+                        _processarCodigoScanner(code);
+                    } else {
+                        _bcBuf = '';
+                        clearTimeout(_bcTim);
+                    }
+                    return;
+                }
+
+                if (_bcBuf.length === 0) _bcT0 = Date.now();
+                _bcBuf += e.key;
+                clearTimeout(_bcTim);
+                _bcTim = setTimeout(() => { _bcBuf = ''; }, 80);
+            }, true); // capture phase
+        }
+
+        function _processarCodigoScanner(code) {
+            const telaLancar   = document.getElementById('screen-lançar');
+            const telaCheckout = document.getElementById('screen-checkout');
+            const emLancar     = telaLancar   && telaLancar.classList.contains('active');
+            const emCheckout   = telaCheckout && telaCheckout.classList.contains('active');
+
+            // ── Comanda (prefixo CMD-) ──
+            if (code.startsWith('CMD-')) {
+                const numero = code.slice(4);
+                if (emLancar) {
+                    document.getElementById('lançarComandaNum').value = numero;
+                    carregarComanda();
+                } else if (emCheckout) {
+                    const chave = Object.keys(state.comandas).find(k => String(state.comandas[k].numero) === numero);
+                    if (!chave) { showToast('Comanda #' + numero + ' não encontrada', 'error'); return; }
+                    const comanda = state.comandas[chave];
+                    if (comanda.status === 'Fechada/Paga' || comanda.paid || comanda.encerramento) {
+                        showToast('⚠️ Comanda #' + numero + ' já encerrada', 'warning'); return;
+                    }
+                    selecionarComandaCheckout(chave, comanda);
+                } else {
+                    showToast('⚠️ Abra Lançar ou Checkout para usar o leitor', 'warning');
+                }
+                return;
+            }
+
+            // ── EAN de item ──
+            if (!emLancar) { showToast('⚠️ Abra a tela Lançar para bipar itens', 'warning'); return; }
+            if (!state.comandaAtual) { showToast('Carregue uma comanda antes de bipar itens', 'warning'); return; }
+
+            // Limpa chars que o scanner jogou no input ativo
+            const activeEl = document.activeElement;
+            if (activeEl && (activeEl.id === 'lançarCodigoItem' || activeEl.id === 'lançarComandaNum')) {
+                activeEl.value = '';
+            }
+
+            // Busca por EAN (codigo_barras pode vir como número do Sheets — normaliza com String())
+            const entry = Object.entries(state.itens).find(
+                ([, it]) => it.codigo_barras && String(it.codigo_barras).trim() === code.trim()
+            );
+            if (!entry) {
+                showToast('❌ EAN não cadastrado: ' + code, 'error');
+                return;
+            }
+            document.getElementById('lançarCodigoItem').value = entry[0];
+            lançarItem();
         }
 
         // ========== STORAGE ==========
@@ -8146,6 +8253,8 @@ function carregarComanda() {
                 const telaVisivel = telaLancar && telaLancar.classList.contains('active');
                 if (!telaVisivel || !state.comandaAtual) return;
                 const num = state.comandaAtual.split('-')[0];
+                // Fecha modal de peso aberta antes de limpar (evita modal órfã)
+                fecharModalBuffet();
                 limparComanda();
                 showToast('⏱ Comanda #' + num + ' limpa por inatividade (1 min)', 'warning');
             }, IDLE_MS);
@@ -9030,6 +9139,17 @@ var itens = comanda.itens || [];
                         this._lastStableTs     = now;
                         console.log('[WeightService] ✅ Peso estabilizado:', stable, 'g');
                     }
+                } else {
+                    // Oscilando — mas se todas as leituras recentes são próximas de zero,
+                    // a balança está vazia (muitas escalas não enviam 0 limpo ao retirar o prato).
+                    const ZERO_BAND = 15; // g — margem para oscilação de balança vazia
+                    if (this._window.length >= 2 && vals.every(v => Math.abs(v) <= ZERO_BAND)) {
+                        if (this._lastStableWeight !== 0) {
+                            this._lastStableWeight = 0;
+                            this._lastStableTs     = now;
+                            console.log('[WeightService] ⚖️ Balança vazia detectada (oscilação ≤ ' + ZERO_BAND + 'g)');
+                        }
+                    }
                 }
             }
 
@@ -9168,7 +9288,7 @@ var itens = comanda.itens || [];
         }
 
         // ── SPLASH para Balança e Caixa: captura user gesture e aciona fullscreen ──
-        function _mostrarSplash(perfil) {
+        async function _mostrarSplash(perfil) {
             const icone    = { 'Balança': '⚖️', 'Caixa': '💳' };
             const legenda  = { 'Balança': 'Sistema de Balança — Pronto', 'Caixa': 'Sistema de Caixa — Pronto' };
             const icon = document.getElementById('splashIcon');
@@ -9177,6 +9297,16 @@ var itens = comanda.itens || [];
             if (sub)  sub.textContent  = legenda[perfil] || 'Pronto';
             const splash = document.getElementById('balancaSplash');
             if (splash) splash.style.display = 'flex';
+
+            // Tenta requestFullscreen no contexto do gesto do login (normalmente ainda ativo,
+            // pois o código até aqui é majoritariamente síncrono após o clique em "Entrar").
+            // Se funcionar, dispensa o clique manual em "Iniciar Operação".
+            try {
+                await document.documentElement.requestFullscreen();
+                if (splash) splash.style.display = 'none'; // sucesso — fecha splash automaticamente
+            } catch(e) {
+                // Gesto já expirou ou permissão negada — splash permanece para capturar próximo toque
+            }
         }
 
         async function _iniciarSessaoEspecial() {
