@@ -5393,7 +5393,7 @@ function carregarComanda() {
                     resetIdleTimer();
                 }
                 document.getElementById('lançarCodigoItem').value = '';
-                document.getElementById('lançarCodigoItem').blur();
+                _focusCodigoItem();
                 saveStorage();
                 renderizarListaLançada();
                 return;
@@ -5404,7 +5404,7 @@ function carregarComanda() {
 
             saveStorage();
             document.getElementById('lançarCodigoItem').value = '';
-            document.getElementById('lançarCodigoItem').blur();
+            _focusCodigoItem();
             renderizarListaLançada();
         }
 
@@ -5617,16 +5617,12 @@ function carregarComanda() {
         }
 
         function lançarItemPorClique(codigo) {
-            // Guardar foco atual
-            const elementoComFoco = document.activeElement;
-
             document.getElementById('lançarCodigoItem').value = codigo;
             lançarItem();
 
-            // Restaurar foco para não ativar teclado numérico
-            if (elementoComFoco && elementoComFoco !== document.body) {
-                setTimeout(() => elementoComFoco.focus(), 0);
-            }
+            // ✅ Devolve o foco pro campo de código (desktop) — _focusCodigoItem ignora
+            // em modo-mobile (apenas faz blur), então não ativa teclado numérico no celular
+            setTimeout(_focusCodigoItem, 0);
         }
 
         // Abre modal de quantidade (ativado por long press no mobile)
@@ -7500,7 +7496,9 @@ function carregarComanda() {
             document.getElementById('inputPeso').blur(); // ✅ Garantir blur
             itemQuilo = null;
             document.getElementById('lançarCodigoItem').value = '';
-            // ❌ Removido focus - não abre teclado de novo!
+            // ✅ RESTAURAR FOCUS NO CÓDIGO (desktop only — _focusCodigoItem ignora em modo-mobile,
+            // então não reabre teclado numérico no celular)
+            setTimeout(_focusCodigoItem, 100);
         }
 
         function lançarBuffetLivre() {
@@ -7531,6 +7529,7 @@ function carregarComanda() {
             renderizarListaLançada();
             showToast('🥗 Buffet Livre lançado', 'success');
             resetIdleTimer();
+            setTimeout(_focusCodigoItem, 100);
         }
 
         function calcularTotalModal() {
@@ -8301,8 +8300,9 @@ function carregarComanda() {
                 const telaVisivel = telaLancar && telaLancar.classList.contains('active');
                 if (!telaVisivel || !state.comandaAtual) return;
                 const num = state.comandaAtual.split('-')[0];
-                // Fecha modal de peso aberta antes de limpar (evita modal órfã)
+                // Fecha qualquer modal aberta (peso/buffet, marmita) antes de limpar — evita modal órfã
                 fecharModalBuffet();
+                fecharModalMarnita();
                 limparComanda();
                 showToast('⏱ Comanda #' + num + ' limpa por inatividade (1 min)', 'warning');
             }, IDLE_MS);
