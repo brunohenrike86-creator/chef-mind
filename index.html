@@ -2653,19 +2653,21 @@
 
                         const isPaid = !!(cmd.timestamp_pagamento);
 
-                        // Jornada de preparo: status baseado em marmitas, preparo_já e pagamento
+                        // Jornada de preparo: status alto-nível baseado em marmitas,
+                        // preparo_já e pagamento. O status de PREPARO (Aguardando/Em
+                        // Preparo/Concluído) não é mais persistido aqui — é recalculado
+                        // sempre por derivarStatusPreparo() a partir dos timestamps dos
+                        // itens (já mapeados acima por mapItemSheets).
                         const isEmPreparo  = cmd.status === 'em_preparo';
                         const temMarmita   = itens.some(i => i.tipo === 'Marmita');
                         const temPreparoJa = itens.some(i => i.preparo_ja);
-                        let statusFinal, statusPreparo = null, dataInicioEspera = null;
+                        let statusFinal;
                         if (isPaid && temMarmita) {
-                            statusFinal = 'Em Preparo'; statusPreparo = 'Aguardando';
-                            dataInicioEspera = cmd.timestamp_pagamento || null;
+                            statusFinal = 'Em Preparo';
                         } else if (isPaid) {
                             statusFinal = 'Fechada/Paga';
                         } else if (isEmPreparo || temPreparoJa) {
-                            statusFinal = 'Em Preparo'; statusPreparo = 'Aguardando';
-                            dataInicioEspera = cmd.timestamp_abertura || null;
+                            statusFinal = 'Em Preparo';
                         } else {
                             statusFinal = 'Aberta';
                         }
@@ -2674,8 +2676,6 @@
                             _id:              cmd.id,
                             numero:           numeroNormSheets,
                             status:           statusFinal,
-                            statusPreparo:    statusPreparo,
-                            dataInicioEspera: dataInicioEspera,
                             data,
                             paid:             isPaid,
                             encerramento:     cmd.encerramento || null,
@@ -2684,6 +2684,7 @@
                             dataPagamento:    cmd.timestamp_pagamento || null,
                             formaPagamento:   cmd.forma_pagamento || null,
                             nomeCliente:      cmd.nome_cliente || null,
+                            canal:            cmd.canal || 'presencial',
                             itens
                         };
                     }
@@ -4863,17 +4864,25 @@ function carregarComanda() {
                 return;
             }
 
-            // ✅ COMANDA EM PREPARO MAS NÃO PAGA = PERMITIR EDIÇÃO (Preparo Já)
+            // ✅ COMANDA EM PREPARO MAS NÃO PAGA = PERMITIR EDIÇÃO (Preparo Já ou Pedido Online)
             if (comanda.status === 'Em Preparo' && !comanda.paid) {
-                // Comanda com Preparo Já → ainda está aberta, permite lançamento
+                // Comanda com Preparo Já → ainda está aberta, permite lançamento.
+                // Pedido online também cai aqui (nasce direto em 'Em Preparo'), então
+                // sinalizamos diferente pro atendente não confundir com "preparo p/ mesa".
+                const ehOnlineLancar = comanda.canal === 'online';
                 state.comandaAtual = key;
                 state.modoLeitura = false;  // PERMITE EDIÇÃO
                 state.itemEmEdicao = null;
 
+                // ✅ Texto de "comanda carregada" fica sempre azul — verde aqui dá a
+                // impressão de "comanda criada" (cor usada nesse outro contexto). A tag
+                // 🌐 ONLINE já diferencia o canal sem precisar mudar a cor de fundo.
                 const statusEl = document.getElementById('statusComanda');
                 statusEl.style.background = '#2980B9';
                 statusEl.style.color = 'white';
-                statusEl.textContent = `✅ Comanda #${numero} carregada`;
+                statusEl.textContent = ehOnlineLancar
+                    ? `🌐 Comanda #${numero} (PEDIDO ONLINE) carregada`
+                    : `✅ Comanda #${numero} carregada`;
                 statusEl.style.display = 'block';
 
                 // Habilitar edição
@@ -4887,7 +4896,10 @@ function carregarComanda() {
                 renderizarListaLançada();
                 renderizarItensDisponiveis();
                 resetIdleTimer();
-                showToast('⚡ Comanda com Preparo p/ mesa - continue lançando', 'info');
+                showToast(
+                    ehOnlineLancar ? '🌐 Pedido online - continue lançando' : '⚡ Comanda com Preparo p/ mesa - continue lançando',
+                    'info'
+                );
                 return;
             }
 
@@ -5289,14 +5301,13 @@ function carregarComanda() {
             renderizarListaLançada();
             
             // ✅ SE PREPARO JÁ → MOVE COMANDA PARA PREPARO SE AINDA NÃO ESTIVER
+            // (o card do KDS em si aparece sozinho via derivarStatusPreparo — aqui só
+            // ajustamos o status alto-nível da comanda pra "Em Preparo", que é usado em
+            // outras telas como Checkout/lançar)
             if (preparoJa) {
                 if (comanda.status !== 'Em Preparo' && comanda.status !== 'Fechada/Paga') {
                     // Move comanda para preparo (sem pagamento)
                     comanda.status = 'Em Preparo';
-                    comanda.dataInicioEspera = comanda.dataInicioEspera || new Date().toISOString();
-                    if (comanda.statusPreparo === null || comanda.statusPreparo === undefined) {
-                        comanda.statusPreparo = 'Aguardando';
-                    }
                     saveStorage();
                     renderizarPreapro();
                     // ✅ Sincroniza status com servidor para outros devices verem no preparo
@@ -5903,18 +5914,10 @@ function carregarComanda() {
             comanda.dataPagamento = new Date().toISOString();
             if (obsAReceber) comanda.obsAReceber = obsAReceber;
             
-            // Jornada de preparo: marmitas vão para fila ao pagar
+            // Jornada de preparo: marmitas vão para fila ao pagar (card do KDS aparece
+            // sozinho via derivarStatusPreparo; aqui só ajustamos o status alto-nível)
             const temMarmita = comanda.itens.some(item => item.tipo === 'Marmita');
-            if (temMarmita) {
-                if (comanda.status !== 'Em Preparo') {
-                    comanda.status = 'Em Preparo';
-                    comanda.dataInicioEspera = new Date().toISOString();
-                    if (!comanda.statusPreparo) { comanda.statusPreparo = 'Aguardando'; }
-                    comanda.atendentePreparo = null;
-                }
-            } else {
-                comanda.status = 'Fechada/Paga';
-            }
+            comanda.status = temMarmita ? 'Em Preparo' : 'Fechada/Paga';
             
             saveStorage();
             // ☁️ SHEETS: registrar pagamento
@@ -6052,21 +6055,76 @@ function carregarComanda() {
         // ========== PREPARO (KDS) ==========
         let timerPreparoInterval = null;
 
+        // Itens que passam pela esteira da cozinha (KDS). Bebidas/quilo (tipo
+        // Fixo/Gramas) não têm timestamp de preparo e ficam fora dessa conta.
+        function itensDoPreparo(comanda) {
+            return (comanda.itens || []).filter(i => i.tipo === 'Marmita');
+        }
+
+        // ===== STATUS DE PREPARO — FONTE ÚNICA DE VERDADE =====
+        // Antes, o status de preparo da comanda vivia em campos locais mutáveis
+        // (comanda.statusPreparo / dataInicioEspera / dataConclusaoPreparo /
+        // preparoFinalizado) que tinham que ser setados manualmente em todo lugar
+        // que alterava um item (lançar item, pagar, poll de outro device...) e
+        // reconciliados a cada poll — cada ponto esquecido virava um bug novo
+        // (ex.: card "ressuscitando" como Aguardando, ou não conseguir passar
+        // pelo preparo uma 2ª vez na mesma comanda).
+        //
+        // Agora o status nunca é guardado — é sempre recalculado, na hora, a
+        // partir dos timestamps de preparo de cada ITEM (timestamp_inicio_preparo/
+        // timestamp_concluido, persistidos no GAS e propagados via mapItemSheets).
+        // Isso elimina a reconciliação inteira: não existe estado local pra ficar
+        // desincronizado. E resolve de quebra o caso de uma comanda passar pelo
+        // preparo mais de uma vez — um item novo lançado depois de uma rodada já
+        // concluída simplesmente não tem timestamp nenhum, e a comanda volta a
+        // aparecer como Aguardando automaticamente, mesmo com itens antigos prontos.
+        //
+        // Retorna null se a comanda não deve aparecer no KDS agora.
+        function derivarStatusPreparo(comanda) {
+            const itens = itensDoPreparo(comanda);
+            if (itens.length === 0) return null;
+
+            const pendentes = itens.filter(i => !i.timestampConcluido);
+
+            if (pendentes.length === 0) {
+                // Tudo concluído. Card some 45s após a última conclusão — calculado
+                // por matemática de data, não por setTimeout mexendo em flag local
+                // (então funciona igual depois de reload ou em outro device).
+                const concluidos = itens.map(i => i.timestampConcluido).filter(Boolean).sort();
+                const ultimoConcluido = concluidos[concluidos.length - 1];
+                if (ultimoConcluido && (Date.now() - new Date(ultimoConcluido).getTime()) < 45000) {
+                    const inicios = itens.map(i => i.timestampInicioPreparo).filter(Boolean).sort();
+                    const inicio = inicios[0] || comanda.dataPagamento || comanda.dataCriacao || ultimoConcluido;
+                    return { status: 'Concluído', referencia: ultimoConcluido, inicio, fim: ultimoConcluido, atendente: null };
+                }
+                return null; // expirou — sai do KDS
+            }
+
+            const iniciados = pendentes.filter(i => i.timestampInicioPreparo);
+            if (iniciados.length > 0) {
+                const inicios = iniciados.map(i => i.timestampInicioPreparo).sort();
+                const atendente = iniciados.map(i => i.usuarioPreparo).filter(Boolean)[0] || null;
+                return { status: 'Em Preparo', referencia: inicios[0], inicio: inicios[0], fim: null, atendente };
+            }
+
+            // Aguardando — sem timestamp de criação por item no frontend, usa a
+            // referência da comanda (pagamento ou abertura) como tempo de espera.
+            const referencia = comanda.dataPagamento || comanda.dataCriacao || new Date().toISOString();
+            return { status: 'Aguardando', referencia, inicio: referencia, fim: null, atendente: null };
+        }
+
         function renderizarPreapro() {
             const dataAtual = new Date().toISOString().split('T')[0];
 
             const todas = Object.entries(state.comandas)
-                .filter(([key, cmd]) =>
-                    cmd.data === dataAtual &&
-                    !cmd.encerramento &&
-                    cmd.status === 'Em Preparo' &&
-                    cmd.statusPreparo !== null && cmd.statusPreparo !== undefined
-                )
-                .sort((a, b) => new Date(a[1].dataInicioEspera) - new Date(b[1].dataInicioEspera));
+                .filter(([key, cmd]) => cmd.data === dataAtual && !cmd.encerramento)
+                .map(([key, cmd]) => [key, cmd, derivarStatusPreparo(cmd)])
+                .filter(([, , d]) => d !== null)
+                .sort((a, b) => new Date(a[2].referencia) - new Date(b[2].referencia));
 
-            const aguardando = todas.filter(([,c]) => c.statusPreparo === 'Aguardando');
-            const emPreparo  = todas.filter(([,c]) => c.statusPreparo === 'Em Preparo');
-            const concluidos = todas.filter(([,c]) => c.statusPreparo === 'Concluído');
+            const aguardando = todas.filter(([, , d]) => d.status === 'Aguardando');
+            const emPreparo  = todas.filter(([, , d]) => d.status === 'Em Preparo');
+            const concluidos = todas.filter(([, , d]) => d.status === 'Concluído');
 
             const area = document.getElementById('areaPreparando');
 
@@ -6084,8 +6142,8 @@ function carregarComanda() {
                 bloco.innerHTML = `<div style="font-size:15px; font-weight:900; color:${cor}; text-transform:uppercase; letter-spacing:1.5px; padding:8px 12px; background:${cor}22; border-left:5px solid ${cor}; border-radius:4px; margin-bottom:10px;">${titulo} <span style="font-size:13px; opacity:0.8;">(${lista.length})</span></div>`;
                 const grid = document.createElement('div');
                 grid.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:8px;';
-                lista.forEach(([key, comanda]) => {
-                    const card = criarCardPreparo(key, comanda);
+                lista.forEach(([key, comanda, derivado]) => {
+                    const card = criarCardPreparo(key, comanda, derivado);
                     if (card) grid.appendChild(card);
                 });
                 bloco.appendChild(grid);
@@ -6097,23 +6155,20 @@ function carregarComanda() {
             renderBloco(concluidos, '✓ Concluído',   '#27AE60');
         }
 
-        function criarCardPreparo(key, comanda) {
-            // ✅ SE STATUSREPARO FOR NULL, SIGNIFICA QUE JÁ EXPIROU
-            // NÃO RENDERIZAR NADA
-            if (comanda.statusPreparo === null || comanda.statusPreparo === undefined) {
-                return null;  // Retorna null, não cria card
-            }
-            
+        function criarCardPreparo(key, comanda, derivado) {
+            derivado = derivado || derivarStatusPreparo(comanda);
+            if (!derivado) return null;  // não está em preparo agora — não cria card
+
             const card = document.createElement('div');
-            
-            const statusPreparo = comanda.statusPreparo;
-            
+
+            const statusPreparo = derivado.status;
+
             // Definir cores por status
             let corBorda = 'var(--primary)';
             let corFundo = 'white';
             let corTexto = 'var(--text-dark)';
             let emoji = '⏳';
-            
+
             if (statusPreparo === 'Em Preparo') {
                 corBorda = '#F39C12';
                 emoji = '👨‍🍳';
@@ -6123,9 +6178,9 @@ function carregarComanda() {
                 corTexto = 'white';
                 emoji = '✓';
             }
-            
+
             // Calcular tempo
-            const dataEspera = new Date(comanda.dataInicioEspera);
+            const dataEspera = new Date(derivado.referencia);
             const agora = new Date();
             const diff = Math.floor((agora - dataEspera) / 1000);
             const minutos = Math.floor(diff / 60);
@@ -6147,8 +6202,11 @@ function carregarComanda() {
                 </div>
             `).join('');
 
-            const temPreparoJa = comanda.itens.some(i => i.preparo_ja);
+            // Pedido online também nasce com preparo_ja=true em todos os itens (pula a etapa
+            // 'aberta'), então sem excluir canal online aqui essa condição mostraria a tag
+            // de "PREPARO P/ MESA" em todo pedido online também — por isso o canal !== 'online'.
             const ehPedidoOnline = comanda.canal === 'online';
+            const temPreparoJa = !ehPedidoOnline && comanda.itens.some(i => i.preparo_ja);
             const divBorder = corTexto === 'white' ? 'rgba(255,255,255,0.3)' : 'var(--border)';
 
             card.style.cssText = `
@@ -6177,7 +6235,7 @@ function carregarComanda() {
                 <div style="flex:1;">
                     ${marnitasHTML || `<div style="font-size:13px; opacity:0.4;">—</div>`}
                 </div>
-                ${comanda.atendentePreparo ? `<div style="font-size:11px; opacity:0.6; border-top:1px solid ${divBorder}; padding-top:6px;">por ${comanda.atendentePreparo}</div>` : ''}
+                ${derivado.atendente ? `<div style="font-size:11px; opacity:0.6; border-top:1px solid ${divBorder}; padding-top:6px;">por ${derivado.atendente}</div>` : ''}
                 <div>
                     ${statusPreparo === 'Aguardando' ? `
                         <button onclick="iniciarPreparo('${key}')" style="width:100%; padding:14px; background:#F39C12; color:white; border:none; border-radius:6px; cursor:pointer; font-size:16px; font-weight:bold; min-height:50px; box-shadow:0 2px 6px rgba(243,156,18,0.4);">▶ INICIAR PREPARO</button>
@@ -6190,54 +6248,66 @@ function carregarComanda() {
             return card;
         }
 
+        // Marca como iniciado todo item de marmita ainda pendente (não iniciado
+        // e não concluído). Otimista: já atualiza o timestamp local pra UI
+        // refletir na hora, mas o dado persistido (e a verdade pra qualquer
+        // outro device) vem do GAS — o próximo poll só confirma o que já está
+        // aqui. Sem essa otimização, e sem nenhuma flag paralela: se a chamada
+        // ao GAS falhar, o próximo poll simplesmente não vai trazer o
+        // timestamp e o card volta a aparecer como Aguardando — não tem como
+        // "travar" num estado incorreto.
         function iniciarPreparo(key) {
             const comanda = state.comandas[key];
             if (!comanda) return;
-            
-            comanda.statusPreparo = 'Em Preparo';
-            comanda.dataInicioPreapro = new Date().toISOString();
-            comanda.atendentePreparo = state.user || 'Atendente'; // ✅ PEGA NOME DO USUÁRIO LOGADO
-            
+
+            const pendentes = itensDoPreparo(comanda).filter(i => !i.timestampInicioPreparo && !i.timestampConcluido);
+            if (pendentes.length === 0) return;
+            const agora = new Date().toISOString();
+            const usuario = state.userLogado || state.user || '';
+            pendentes.forEach(i => {
+                i.timestampInicioPreparo = agora;
+                i.usuarioPreparo = usuario || 'Atendente';
+                if (i._id) sheetsAPI('iniciarPreparo', { item_id: i._id, usuario });
+            });
+
             saveStorage();
-            // ☁️ SHEETS: marcar marmitas como em preparo
-            (comanda.itens || []).filter(i => i._id).forEach(i =>
-                sheetsAPI('iniciarPreparo', { item_id: i._id, usuario: state.userLogado || '' })
-            );
             renderizarPreapro();
         }
 
         function concluirPreparo(key) {
             const comanda = state.comandas[key];
             if (!comanda) return;
-            
-            comanda.statusPreparo = 'Concluído';
-            comanda.dataConclusaoPreparo = new Date().toISOString();
-            
+
+            const pendentes = itensDoPreparo(comanda).filter(i => !i.timestampConcluido);
+            if (pendentes.length === 0) return;
+            const agora = new Date().toISOString();
+            pendentes.forEach(i => {
+                i.timestampConcluido = agora;
+                if (i._id) sheetsAPI('concluirPreparo', { item_id: i._id });
+            });
+
             saveStorage();
-            // ☁️ SHEETS: marcar marmitas como concluídas
-            (comanda.itens || []).filter(i => i._id).forEach(i =>
-                sheetsAPI('concluirPreparo', { item_id: i._id })
-            );
             renderizarPreapro();
             renderizarFullscreen(); // Atualizar fullscreen também
             mostrarFlashConcluido(key); // Flash 3s no fullscreen
             showToast(`✓ Comanda #${comanda.numero} pronta!`, 'success');
-            
-            // ✅ DESAPARECER EM 45 SEGUNDOS
+
+            // Fecha a comanda localmente se já estava paga (sem marmita pendente
+            // de outra rodada — derivarStatusPreparo trataria isso de qualquer
+            // forma, isso só evita o card ficar pendurado em outras telas).
+            if (comanda.paid && itensDoPreparo(comanda).every(i => i.timestampConcluido)) {
+                comanda.status = 'Fechada/Paga';
+                saveStorage();
+            }
+
+            // O card "Concluído" some sozinho 45s depois (ver derivarStatusPreparo,
+            // que calcula isso por data, não por flag). Esse setTimeout só força um
+            // re-render pra UI refletir o sumiço sem precisar esperar o próximo poll
+            // — se ele não disparar (reload, fechar aba), não tem problema: o próximo
+            // poll/render recalcula certinho do mesmo jeito.
             setTimeout(() => {
-                if (comanda.statusPreparo === 'Concluído') {
-                    comanda.statusPreparo = null;
-                    comanda.dataConclusaoPreparo = null;
-                    
-                    // Se já foi paga, fecha a comanda
-                    if (comanda.paid) {
-                        comanda.status = 'Fechada/Paga';
-                    }
-                    
-                    saveStorage();
-                    renderizarPreapro();
-                    renderizarFullscreen();
-                }
+                renderizarPreapro();
+                renderizarFullscreen();
             }, 45000);
         }
 
@@ -6306,17 +6376,14 @@ function carregarComanda() {
             const dataAtual = new Date().toISOString().split('T')[0];
 
             const todasComandas = Object.entries(state.comandas)
-                .filter(([key, cmd]) =>
-                    cmd.data === dataAtual &&
-                    !cmd.encerramento &&
-                    cmd.status === 'Em Preparo' &&
-                    cmd.statusPreparo !== null && cmd.statusPreparo !== undefined
-                )
-                .sort((a, b) => new Date(a[1].dataInicioEspera) - new Date(b[1].dataInicioEspera));
+                .filter(([key, cmd]) => cmd.data === dataAtual && !cmd.encerramento)
+                .map(([key, cmd]) => [key, cmd, derivarStatusPreparo(cmd)])
+                .filter(([, , d]) => d !== null)
+                .sort((a, b) => new Date(a[2].referencia) - new Date(b[2].referencia));
 
-            const aguardando = todasComandas.filter(([,c]) => c.statusPreparo === 'Aguardando');
-            const emPreparo  = todasComandas.filter(([,c]) => c.statusPreparo === 'Em Preparo');
-            const concluidos = todasComandas.filter(([,c]) => c.statusPreparo === 'Concluído');
+            const aguardando = todasComandas.filter(([, , d]) => d.status === 'Aguardando');
+            const emPreparo  = todasComandas.filter(([, , d]) => d.status === 'Em Preparo');
+            const concluidos = todasComandas.filter(([, , d]) => d.status === 'Concluído');
 
             const renderCol = (lista, areaId) => {
                 const area = document.getElementById(areaId);
@@ -6326,8 +6393,8 @@ function carregarComanda() {
                     area.innerHTML = '<div style="text-align:center; color:rgba(255,255,255,0.2); padding:30px 0; font-size:14px;">—</div>';
                     return;
                 }
-                lista.forEach(([key, comanda]) => {
-                    const card = criarCardFullscreen(key, comanda);
+                lista.forEach(([key, comanda, derivado]) => {
+                    const card = criarCardFullscreen(key, comanda, derivado);
                     if (card) area.appendChild(card);
                 });
             };
@@ -6337,11 +6404,12 @@ function carregarComanda() {
             renderCol(concluidos, 'areaFullscreenConcluidos');
         }
 
-        function criarCardFullscreen(key, comanda) {
-            if (comanda.statusPreparo === null || comanda.statusPreparo === undefined) return null;
+        function criarCardFullscreen(key, comanda, derivado) {
+            derivado = derivado || derivarStatusPreparo(comanda);
+            if (!derivado) return null;
 
             const card = document.createElement('div');
-            const statusPreparo = comanda.statusPreparo;
+            const statusPreparo = derivado.status;
 
             let corBorda, corFundo;
             if (statusPreparo === 'Concluído') {
@@ -6355,9 +6423,8 @@ function carregarComanda() {
             // Timer — só para Em Preparo (congela na conclusão)
             let timerHTML = '';
             if (statusPreparo === 'Em Preparo' || statusPreparo === 'Concluído') {
-                const dataEspera = new Date(comanda.dataInicioEspera);
-                const dataFim = statusPreparo === 'Concluído' && comanda.dataConclusaoPreparo
-                    ? new Date(comanda.dataConclusaoPreparo) : new Date();
+                const dataEspera = new Date(derivado.inicio);
+                const dataFim = derivado.fim ? new Date(derivado.fim) : new Date();
                 const diff = Math.floor((dataFim - dataEspera) / 1000);
                 const min = Math.floor(diff / 60);
                 const seg = diff % 60;
@@ -6500,7 +6567,14 @@ function carregarComanda() {
                 tipo:       cat === 'marmita' || cat === 'marmitas' ? 'Marmita' :
                             cat === 'gramas'  ? 'Gramas' : 'Fixo',
                 observacao: i.observacao || '',
-                preparo_ja: String(i.preparo_ja).toLowerCase() === 'true'
+                preparo_ja: String(i.preparo_ja).toLowerCase() === 'true',
+                // Timestamps de preparo (persistidos no GAS por iniciarPreparo/concluirPreparo).
+                // São a FONTE ÚNICA DE VERDADE do status de preparo da comanda — ver
+                // derivarStatusPreparo(). Sem isso aqui, o frontend não tem como saber se um
+                // item específico já foi iniciado/concluído na cozinha.
+                timestampInicioPreparo: i.timestamp_inicio_preparo || null,
+                timestampConcluido:     i.timestamp_concluido || null,
+                usuarioPreparo:         i.usuario_preparo || null
             };
         }
 
@@ -6562,18 +6636,17 @@ function carregarComanda() {
                         const itens = (itensCmd || [])
                             .filter(i => String(i.removido).toLowerCase() !== 'true')
                             .map(mapItemSheets);
-                        // Jornada de preparo
+                        // Jornada de preparo: status alto-nível da comanda (Aberta / Em
+                        // Preparo / Fechada-Paga). O status de PREPARO em si (Aguardando/
+                        // Em Preparo/Concluído, exibido no KDS) não é mais guardado aqui —
+                        // é sempre recalculado na hora por derivarStatusPreparo() a partir
+                        // dos timestamps dos itens, então não tem nada pra reconciliar.
                         const temMarmita   = itens.some(i => i.tipo === 'Marmita');
                         const temPreparoJa = itens.some(i => i.preparo_ja);
                         let statusFinal = cmd.status === 'em_preparo' ? 'Em Preparo'
                                         : novoPaid ? 'Fechada/Paga' : 'Aberta';
-                        let statusPreparoFinal = null, dataInicioFinal = null;
-                        if ((novoPaid && temMarmita) || cmd.status === 'em_preparo') {
-                            statusFinal = 'Em Preparo'; statusPreparoFinal = 'Aguardando';
-                            dataInicioFinal = cmd.timestamp_pagamento || cmd.timestamp_abertura || null;
-                        } else if (!novoPaid && temPreparoJa) {
-                            statusFinal = 'Em Preparo'; statusPreparoFinal = 'Aguardando';
-                            dataInicioFinal = cmd.timestamp_abertura || null;
+                        if ((novoPaid && temMarmita) || cmd.status === 'em_preparo' || (!novoPaid && temPreparoJa)) {
+                            statusFinal = 'Em Preparo';
                         }
 
                         state.comandas[chave] = {
@@ -6586,8 +6659,6 @@ function carregarComanda() {
                             itens,
                             total:            parseFloat(cmd.total) || 0,
                             dataCriacao:      cmd.timestamp_abertura || null,
-                            dataInicioEspera: dataInicioFinal,
-                            statusPreparo:    statusPreparoFinal,
                             formaPagamento:   cmd.forma_pagamento || null,
                             dataPagamento:    cmd.timestamp_pagamento || null,
                             nomeCliente:      cmd.nome_cliente || null,
@@ -6611,10 +6682,7 @@ function carregarComanda() {
                                 if (itensCmd) local.itens = itensCmd.filter(i => String(i.removido).toLowerCase() !== 'true').map(mapItemSheets);
                             }
                             const temMarmita = (local.itens || []).some(i => i.tipo === 'Marmita');
-                            if (temMarmita || cmd.status === 'em_preparo') {
-                                local.status = 'Em Preparo';
-                                if (!local.statusPreparo) { local.statusPreparo = 'Aguardando'; local.dataInicioEspera = cmd.timestamp_pagamento || new Date().toISOString(); }
-                            } else { local.status = 'Fechada/Paga'; }
+                            local.status = (temMarmita || cmd.status === 'em_preparo') ? 'Em Preparo' : 'Fechada/Paga';
                             localMudou = true;
 
                         // CASO 2: Status mudou sem ser pagamento (preparo_já em outro device)
@@ -6622,17 +6690,14 @@ function carregarComanda() {
                             const novoStatus = cmd.status === 'em_preparo' ? 'Em Preparo' : 'Aberta';
                             if (local.status !== novoStatus) {
                                 local.status = novoStatus;
-                                if (novoStatus === 'Em Preparo' && !local.statusPreparo) {
-                                    local.statusPreparo = 'Aguardando'; local.dataInicioEspera = local.dataInicioEspera || new Date().toISOString();
-                                }
-                                localMudou = true;
-                            } else if (novoStatus === 'Em Preparo' && !local.statusPreparo) {
-                                local.statusPreparo = 'Aguardando'; local.dataInicioEspera = local.dataInicioEspera || new Date().toISOString();
                                 localMudou = true;
                             }
                         }
 
                         // CASO 3: Sincroniza itens se total mudou E não é a comanda ativa
+                        // (isso já traz os timestamps de preparo atualizados via mapItemSheets
+                        // — é só essa sincronização de itens que o KDS de outro device precisa;
+                        // não existe mais "status de preparo" pra reconciliar separadamente).
                         const totalServer = parseFloat(cmd.total) || 0;
                         // Se admin editou preço manualmente há menos de 60s, bloquear re-sync
                         // para não sobrescrever com valores antigos do Sheets enquanto a API atualiza
@@ -6657,14 +6722,11 @@ function carregarComanda() {
                                     });
                                 }
                                 local.total  = totalServer;
-                                // Detecta preparo_já lançado em outro device via flag no item
-                                if (!local.paid && !local.statusPreparo) {
-                                    const temPreparoJa = serverItems.some(i => i.preparo_ja);
-                                    if (temPreparoJa) {
-                                        local.status       = 'Em Preparo';
-                                        local.statusPreparo = 'Aguardando';
-                                        local.dataInicioEspera = local.dataInicioEspera || new Date().toISOString();
-                                    }
+                                // Preparo_já lançado em outro device: garante que a comanda
+                                // apareça como "Em Preparo" no status alto-nível (o card do KDS
+                                // em si já aparece sozinho via derivarStatusPreparo).
+                                if (!local.paid && local.status !== 'Em Preparo' && serverItems.some(i => i.preparo_ja)) {
+                                    local.status = 'Em Preparo';
                                 }
                                 localMudou = true;
                             }
@@ -7168,12 +7230,10 @@ function carregarComanda() {
             
             const pagas = comandasHoje.filter(cmd => cmd.paid === true).length;
             
-            // ✅ EM PREPARO = TUDO que tem statusPreparo !== null (card visível)
-            // Quando card expira, statusPreparo vira null → sai da contagem
-            // Mas continua contando em ABERTA (porque ainda não foi paga)
-            const emPreparo = comandasHoje.filter(cmd => 
-                cmd.statusPreparo !== null && cmd.statusPreparo !== undefined  // Só se tem card na tela
-            ).length;
+            // ✅ EM PREPARO = comandas com card visível agora no KDS (derivarStatusPreparo
+            // não-nulo). Quando o card expira (45s após concluído), sai da contagem —
+            // mas continua contando em ABERTA (porque ainda não foi paga).
+            const emPreparo = comandasHoje.filter(cmd => derivarStatusPreparo(cmd) !== null).length;
             
             const totalDia = pagas + abertas;  // Total = pagas + abertas (inclui Preparo Já)
             
@@ -8150,17 +8210,25 @@ function carregarComanda() {
                 const btn = document.createElement('button');
                 
                 // ✅ DESTACAR COMANDAS COM PREPARO JÁ
+                // Comanda online também nasce com preparo_ja=true em todos os itens (pula a
+                // etapa 'aberta'), então essa condição sozinha sempre seria true pra pedido
+                // online também — mostrando "PREP. P/ MESA" junto com "ONLINE", o que não faz
+                // sentido (online não foi "lançado numa mesa"). Por isso excluímos canal
+                // online aqui: a tag de mesa só é relevante pra comanda física.
+                const ehPedidoOnlineCk = comanda.canal === 'online';
                 let borderColor = 'var(--primary)';
                 let badge = '';
-                if (comanda.status === 'Em Preparo' && !comanda.paid) {
+                if (!ehPedidoOnlineCk && comanda.status === 'Em Preparo' && !comanda.paid) {
                     borderColor = '#F39C12';  // Laranja para Preparo Já
                     badge = '<div style="font-size: 6px; color: #F39C12; font-weight: bold;">⚡ PREP. P/ MESA</div>';
                 }
-                // ✅ DESTACAR COMANDAS DE PEDIDO ONLINE (mesmo sinalizador visual do Preparo,
-                // pra não confundir o atendente sobre uma comanda que ninguém abriu manualmente)
-                if (comanda.canal === 'online') {
+                // ✅ DESTACAR COMANDAS DE PEDIDO ONLINE — sempre, independente de status de
+                // preparo (a comanda é online desde a criação e isso nunca muda; antes essa
+                // tag podia "desaparecer" por causa da race condition no canal — ver fix em
+                // novoPedidoOnline no GAS).
+                if (ehPedidoOnlineCk) {
                     borderColor = '#27AE60';  // Verde para Pedido Online
-                    badge += '<div style="font-size: 6px; color: #27AE60; font-weight: bold;">🌐 ONLINE</div>';
+                    badge = '<div style="font-size: 6px; color: #27AE60; font-weight: bold;">🌐 ONLINE</div>';
                 }
 
                 btn.style.cssText = `
