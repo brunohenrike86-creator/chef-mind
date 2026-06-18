@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Pedido Online — Chef Mind</title>
+<style>
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    :root {
+        --primary: #D4724F;
+        --primary-dark: #B85840;
+        --accent: #F5A962;
+        --danger: #E74C3C;
+        --warning: #F39C12;
+        --success: #27AE60;
+        --text-dark: #2C1810;
+        --text-light: #FFFFFF;
+        --bg-light: #F9F7F4;
+        --bg-white: #FFFFFF;
+        --border: #D4A574;
+        --gray: #8B7355;
+    }
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: var(--bg-light);
+        color: var(--text-dark);
+        min-height: 100vh;
+    }
+    header.marca {
+        background: var(--bg-white);
+        border-bottom: 3px solid var(--primary);
+        padding: 14px 16px;
+        text-align: center;
+    }
+    header.marca .nome { font-size: 19px; font-weight: bold; color: var(--text-dark); }
+    header.marca .sub { font-size: 12px; color: var(--gray); margin-top: 2px; }
+    #app {
+        max-width: 460px;
+        margin: 0 auto;
+        padding: 16px 16px 60px;
+    }
+    .card {
+        background: var(--bg-white);
+        border-radius: 14px;
+        padding: 16px;
+        margin-bottom: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .titulo-card { font-size: 15px; font-weight: bold; color: var(--text-dark); margin-bottom: 10px; }
+    .label-secao { font-size: 13px; color: var(--gray); margin: 14px 0 8px; }
+    .label-secao:first-child { margin-top: 0; }
+    .dica { font-size: 12px; color: var(--gray); margin-top: 6px; }
+    .dica.ok { color: var(--success); font-weight: bold; }
+    .chips { display:flex; flex-wrap:wrap; gap:8px; }
+    .chip {
+        font-size: 14px;
+        padding: 10px 16px;
+        border-radius: 10px;
+        border: 2px solid var(--border);
+        color: var(--text-dark);
+        background: var(--bg-white);
+        cursor: pointer;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        user-select: none;
+    }
+    .chip.selecionado {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+        font-weight: bold;
+    }
+    .chip.desabilitado {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+    .qtd-control { display:flex; align-items:center; gap:16px; }
+    .qtd-btn {
+        width: 40px; height: 40px;
+        border-radius: 10px;
+        border: 2px solid var(--border);
+        background: var(--bg-white);
+        font-size: 20px;
+        display:flex; align-items:center; justify-content:center;
+        cursor: pointer;
+        color: var(--primary);
+        font-weight: bold;
+    }
+    .qtd-valor { font-size: 18px; font-weight: bold; min-width: 20px; text-align:center; }
+    input[type="text"], input[type="tel"] {
+        width: 100%;
+        font-size: 15px;
+        padding: 12px;
+        border-radius: 10px;
+        border: 2px solid var(--border);
+        font-family: inherit;
+        background: var(--bg-white);
+        color: var(--text-dark);
+    }
+    input[type="text"]:focus, input[type="tel"]:focus { outline:none; border-color: var(--primary); }
+    .btn {
+        width: 100%;
+        font-size: 16px;
+        font-weight: bold;
+        padding: 14px;
+        border-radius: 10px;
+        border: none;
+        cursor: pointer;
+        min-height: 48px;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primario { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: #fff; }
+    .btn-fantasma { background: var(--bg-white); border: 2px dashed var(--border); color: var(--gray); }
+    .btn-secundario { background: var(--bg-light); border: 2px solid var(--border); color: var(--text-dark); }
+    .acoes-pedido { display:flex; flex-direction:column; gap:10px; margin-top: 12px; }
+    .item-carrinho {
+        display:flex; justify-content:space-between; align-items:flex-start;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--bg-light);
+    }
+    .item-carrinho:last-child { border-bottom:none; }
+    .item-nome { font-size: 14px; font-weight:bold; }
+    .item-detalhe { font-size: 12px; color: var(--gray); margin-top:2px; }
+    .item-preco { font-size: 13px; font-weight:bold; color: var(--primary); white-space:nowrap; margin-left:10px; }
+    .item-lixeira { font-size: 18px; color: var(--danger); cursor:pointer; padding: 4px; }
+    .linha-item-dir { display:flex; align-items:center; gap:10px; }
+    .vazio { font-size: 13px; color: var(--gray); text-align:center; padding: 12px 4px; }
+    .aviso {
+        background: #FDEDEC;
+        color: var(--danger);
+        font-size: 13px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        margin-bottom: 12px;
+    }
+    .linha-total {
+        display:flex; justify-content:space-between; align-items:baseline;
+        border-top: 2px solid var(--bg-light);
+        padding-top: 10px;
+        margin-top: 6px;
+    }
+    .linha-total .valor { font-size: 22px; font-weight: bold; color: var(--primary); }
+    .nota-retirada { font-size: 13px; color: var(--gray); margin: 12px 0 14px; display:flex; gap:6px; align-items:flex-start; }
+    .campo { margin-bottom: 12px; }
+    .campo label { font-size: 13px; color: var(--gray); display:block; margin-bottom:6px; }
+    .tela-centro { text-align:center; }
+    .icone-ok {
+        width: 56px; height:56px; border-radius:50%;
+        background: #E8F8EF; color: var(--success);
+        font-size: 28px; display:flex; align-items:center; justify-content:center;
+        margin: 0 auto 12px;
+    }
+    .codigo-pedido { font-size: 34px; font-weight:bold; color: var(--primary); margin: 6px 0 16px; }
+    .resumo-confirmacao {
+        background: var(--bg-light); border-radius: 10px; padding: 12px 14px;
+        text-align:left; font-size: 13px; line-height:1.6; margin-bottom:18px;
+    }
+    .progresso { display:flex; align-items:center; justify-content:center; gap:6px; margin: 18px 0; }
+    .etapa { display:flex; flex-direction:column; align-items:center; gap:6px; }
+    .bola { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; }
+    .bola.feita { background:#E8F8EF; color: var(--success); }
+    .bola.atual { background:#FEF3E2; color: var(--warning); }
+    .bola.futura { background: var(--bg-light); color: var(--gray); }
+    .etapa-label { font-size: 11px; color: var(--gray); }
+    .etapa-label.atual { font-weight:bold; color: var(--text-dark); }
+    .linha-progresso { width: 36px; height:3px; }
+    .linha-progresso.feita { background: var(--success); }
+    .linha-progresso.futura { background: var(--border); }
+    .mensagem-status { font-size: 17px; font-weight: bold; margin-top: 4px; }
+    .submensagem-status { font-size: 13px; color: var(--gray); margin-top:4px; }
+    .link-discreto { font-size: 12px; color: var(--gray); text-align:center; margin-top: 18px; text-decoration: underline; cursor:pointer; }
+    .ajuda-bloco {
+        margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--bg-light);
+    }
+    .ajuda-titulo { font-size: 13px; color: var(--gray); margin-bottom: 10px; }
+    .ajuda-acoes { display:flex; gap:10px; }
+    .ajuda-btn {
+        flex: 1;
+        display:flex; align-items:center; justify-content:center; gap:8px;
+        font-size: 14px; font-weight:bold;
+        padding: 12px;
+        border-radius: 10px;
+        text-decoration:none;
+        min-height: 48px;
+    }
+    .ajuda-btn.whatsapp { background:#E8F8EF; color:#1E8449; }
+    .ajuda-btn.telefone { background:#FEF3E2; color:#B9770E; }
+    .tela-fechado .icone-fechado {
+        width: 56px; height:56px; border-radius:50%;
+        background: #FDEDEC; color: var(--danger);
+        font-size: 26px; display:flex; align-items:center; justify-content:center;
+        margin: 0 auto 12px;
+    }
+    .horario-funcionamento { font-size: 14px; color: var(--text-dark); margin: 10px 0 4px; font-weight:bold; }
+    .loading-spinner {
+        text-align:center; padding: 40px 16px; color: var(--gray); font-size: 14px;
+    }
+</style>
+</head>
+<body>
+<header class="marca">
+    <div class="nome">🍱 Michelin Restaurante</div>
+    <div class="sub">Pedido online · Retire e pague no caixa</div>
+</header>
+<div id="app"><div class="loading-spinner">Carregando opções do dia...</div></div>
+
+<script>
+// ===== Config do backend (mesma URL usada pelo app principal) =====
+const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbwAaSxDyP5NC8HlJ9AgMVWOV0CzjFfbr1DLNwSIp3BgEymvHGaYb2VLz5gY58dgOTg98w/exec';
+
+// ===== Chaves de localStorage =====
+// Sessão ativa: comanda em andamento neste aparelho (recuperação ao fechar/reabrir o navegador)
+const CHAVE_SESSAO = 'chefMind_pedidoOnline_sessao';
+// Dados do cliente: nome/whatsapp lembrados SEM expiração, pra pré-popular o form na próxima visita
+const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
+
+// Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
+// na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
+// igual ao protótipo validado e revisitar isso só se houver pedido fora de horário na prática.
+const HORARIO_ABERTURA_MIN = 11 * 60;        // 11:00
+const HORARIO_FECHAMENTO_MIN = 14 * 60 + 30; // 14:30
+const WHATSAPP_AJUDA = '5541997829474';      // 41 99782-9474, com DDI 55
+const TELEFONE_AJUDA = '+5541997829474';
+
+function estaDentroDoHorario() {
+    const agora = new Date();
+    if (agora.getDay() === 0) return false; // domingo não atende
+    const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
+    return minutosAgora >= HORARIO_ABERTURA_MIN && minutosAgora < HORARIO_FECHAMENTO_MIN;
+}
+
+// ===== Chamadas à API =====
+// Regra 9: GETs usam AbortController com timeout de 20s.
+async function apiGet(action, params) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    const qs = new URLSearchParams(Object.assign({ action }, params || {})).toString();
+    try {
+        const resp = await fetch(`${SHEETS_API_URL}?${qs}`, { signal: controller.signal });
+        return await resp.json();
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+// Regra 2: POST NUNCA usa AbortController/signal — o GAS responde via redirect HTTP 302
+// e o signal cancelaria a requisição no meio do redirect, perdendo a escrita silenciosamente.
+async function apiPost(action, payload) {
+    const resp = await fetch(SHEETS_API_URL, {
+        method: 'POST',
+        body: JSON.stringify(Object.assign({ action }, payload))
+    });
+    return await resp.json();
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function lerClienteSalvo() {
+    try { return JSON.parse(localStorage.getItem(CHAVE_CLIENTE) || 'null') || { nome: '', whatsapp: '' }; }
+    catch (e) { return { nome: '', whatsapp: '' }; }
+}
+
+function salvarClienteLembrado(nome, whatsapp) {
+    localStorage.setItem(CHAVE_CLIENTE, JSON.stringify({ nome, whatsapp }));
+}
+
+function lerSessaoAtiva() {
+    try { return JSON.parse(localStorage.getItem(CHAVE_SESSAO) || 'null'); }
+    catch (e) { return null; }
+}
+
+function salvarSessaoAtiva(dados) {
+    localStorage.setItem(CHAVE_SESSAO, JSON.stringify(dados));
+}
+
+function limparSessaoAtiva() {
+    localStorage.removeItem(CHAVE_SESSAO);
+}
+
+// ===== Estado em memória =====
+// TAMANHOS é montado a partir do cardápio real (cada marmita "Marmita P/M/G" vira uma
+// opção de tamanho). maxCarnes (quantas carnes por tamanho) não existe como campo no
+// cardápio — é uma regra de UX fixa replicada do protótipo já validado com o usuário
+// (P = 1 carne, M/G = 2 carnes), não uma config de backend.
+const MAX_CARNES_POR_LETRA = { P: 1, M: 2, G: 2 };
+
+let TAMANHOS = {};      // { P: {label, preco, codigo, maxCarnes}, ... }
+let CARNES_DO_DIA = [];
+let BEBIDAS_CARDAPIO = []; // [{codigo, nome, preco}]
+
+let state = {
+    tamanho: null,
+    carnesSelecionadas: [],
+    qtd: 1,
+    obs: '',
+    carrinho: [],
+    bebidaAberta: false,
+    bebidas: [],
+    nome: '',
+    whatsapp: '',
+    erro: '',
+    obsAberta: false,
+    rolarParaPedidoAoRenderizar: false,
+    rolarParaConfiguradorAoRenderizar: false,
+    enviando: false
+};
+
+let view = 'carregando';
+let intervaloPolling = null;
+let pedidoAtual = null; // { comandaId, numero, nome, itens, bebidas, total } — sessão ativa em memória
+
+function erro(msg) {
+    state.erro = msg;
+    render();
+    setTimeout(() => { state.erro = ''; render(); }, 3500);
+}
+
+function mascararWhatsapp(valor) {
+    const d = valor.replace(/\D/g, '').slice(0, 11);
+    if (d.length === 0) return '';
+    if (d.length <= 2) return `(${d}`;
+    if (d.length <= 6) return `(${d.slice(0,2)}) ${d.slice(2)}`;
+    if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+    return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+}
+
+function aoDigitarWhatsapp(valorDigitado) {
+    state.whatsapp = mascararWhatsapp(valorDigitado);
+    const campo = document.getElementById('campoWhatsapp');
+    if (campo) campo.value = state.whatsapp;
+}
+
+function selecionarTamanho(t) {
+    state.tamanho = t;
+    const max = TAMANHOS[t].maxCarnes;
+    if (state.carnesSelecionadas.length > max) {
+        state.carnesSelecionadas = state.carnesSelecionadas.slice(0, max);
+    }
+    render();
+}
+
+function toggleCarne(nome) {
+    if (!state.tamanho) { erro('Escolha o tamanho primeiro'); return; }
+    const max = TAMANHOS[state.tamanho].maxCarnes;
+    const idx = state.carnesSelecionadas.indexOf(nome);
+    if (idx >= 0) {
+        state.carnesSelecionadas.splice(idx, 1);
+    } else if (max === 1) {
+        state.carnesSelecionadas = [nome];
+    } else if (state.carnesSelecionadas.length >= max) {
+        erro(`Máximo de ${max} carnes para esse tamanho`);
+        return;
+    } else {
+        state.carnesSelecionadas.push(nome);
+    }
+    render();
+}
+
+function alterarQtd(delta) {
+    state.qtd = Math.max(1, state.qtd + delta);
+    render();
+}
+
+function toggleObsAberta() {
+    state.obsAberta = !state.obsAberta;
+    render();
+}
+
+function adicionarAoPedido() {
+    if (!state.tamanho) { erro('Escolha o tamanho da marmita'); return; }
+    if (state.carnesSelecionadas.length === 0) { erro('Escolha pelo menos 1 carne'); return; }
+    state.carrinho.push({
+        tamanho: state.tamanho,
+        codigo: TAMANHOS[state.tamanho].codigo,
+        carnes: [...state.carnesSelecionadas],
+        qtd: state.qtd,
+        obs: state.obs.trim(),
+        precoUnit: TAMANHOS[state.tamanho].preco
+    });
+    state.tamanho = null;
+    state.carnesSelecionadas = [];
+    state.qtd = 1;
+    state.obs = '';
+    state.obsAberta = false;
+    state.rolarParaPedidoAoRenderizar = true;
+    render();
+}
+
+function removerDoCarrinho(i) {
+    state.carrinho.splice(i, 1);
+    render();
+}
+
+function irParaConfigurador() {
+    state.rolarParaConfiguradorAoRenderizar = true;
+    render();
+}
+
+function toggleBebidaAberta() {
+    state.bebidaAberta = !state.bebidaAberta;
+    render();
+}
+
+function adicionarBebida(codigo, nome, preco) {
+    const existente = state.bebidas.find(b => b.codigo === codigo);
+    if (existente) existente.qtd++;
+    else state.bebidas.push({ codigo, nome, preco, qtd: 1 });
+    render();
+}
+
+function removerBebida(codigo) {
+    state.bebidas = state.bebidas.filter(b => b.codigo !== codigo);
+    render();
+}
+
+function calcularTotal() {
+    const totalMarmitas = state.carrinho.reduce((s, i) => s + i.qtd * i.precoUnit, 0);
+    const totalBebidas = state.bebidas.reduce((s, b) => s + b.qtd * b.preco, 0);
+    return totalMarmitas + totalBebidas;
+}
+
+async function confirmarPedido() {
+    if (!estaDentroDoHorario()) { view = 'fechado'; render(); return; }
+    if (state.carrinho.length === 0) { erro('Adicione pelo menos uma marmita ao pedido'); return; }
+    if (!state.nome.trim()) { erro('Informe seu nome'); return; }
+    const digitosWhatsapp = state.whatsapp.replace(/\D/g, '');
+    if (digitosWhatsapp.length < 10) { erro('Informe um WhatsApp válido com DDD'); return; }
+
+    state.enviando = true;
+    render();
+
+    const payload = {
+        nomeCliente: state.nome.trim(),
+        whatsapp: digitosWhatsapp,
+        itens: state.carrinho.map(item => ({
+            codigo: item.codigo,
+            quantidade: item.qtd,
+            carne: item.carnes.join(' + '),
+            obs: item.obs
+        })),
+        bebidas: state.bebidas.map(b => ({ codigo: b.codigo, quantidade: b.qtd }))
+    };
+
+    let resultado;
+    try {
+        // Sem signal (Regra 2) — mesmo que o cliente feche a aba logo depois, o POST
+        // já foi disparado e a comanda é criada no Sheets independente da resposta.
+        resultado = await apiPost('novoPedidoOnline', payload);
+    } catch (e) {
+        state.enviando = false;
+        erro('Não foi possível enviar o pedido. Verifique sua internet e tente de novo.');
+        return;
+    }
+
+    state.enviando = false;
+
+    if (!resultado || resultado.erro) {
+        erro((resultado && resultado.erro) || 'Erro ao enviar o pedido. Tente de novo.');
+        return;
+    }
+
+    salvarClienteLembrado(state.nome.trim(), state.whatsapp.trim());
+
+    pedidoAtual = {
+        comandaId: resultado.comandaId,
+        numero: resultado.numero,
+        nome: state.nome.trim(),
+        itens: state.carrinho,
+        bebidas: state.bebidas,
+        total: calcularTotal()
+    };
+    salvarSessaoAtiva(pedidoAtual);
+
+    view = 'confirmacao';
+    render();
+}
+
+function irParaStatus() {
+    view = 'status';
+    render();
+    iniciarPolling();
+}
+
+function novoPedido() {
+    limparSessaoAtiva();
+    pararPolling();
+    pedidoAtual = null;
+    const clienteSalvo = lerClienteSalvo();
+    state = {
+        tamanho: null, carnesSelecionadas: [], qtd: 1, obs: '', carrinho: [],
+        bebidaAberta: false, bebidas: [],
+        nome: clienteSalvo.nome || '', whatsapp: clienteSalvo.whatsapp || '',
+        erro: '', obsAberta: false,
+        rolarParaPedidoAoRenderizar: false, rolarParaConfiguradorAoRenderizar: false,
+        enviando: false
+    };
+    view = estaDentroDoHorario() ? 'form' : 'fechado';
+    render();
+}
+
+// Polling do status real — a cada 3s, conforme o plano (QA exige refletir em até ~3s).
+// Só fica ativo enquanto a tela de status está visível.
+function iniciarPolling() {
+    pararPolling();
+    consultarStatus();
+    intervaloPolling = setInterval(consultarStatus, 3000);
+}
+
+function pararPolling() {
+    if (intervaloPolling) { clearInterval(intervaloPolling); intervaloPolling = null; }
+}
+
+async function consultarStatus() {
+    if (!pedidoAtual || view !== 'status') { pararPolling(); return; }
+    try {
+        const resultado = await apiGet('getStatusPedidoOnline', { comandaId: pedidoAtual.comandaId });
+        if (resultado && !resultado.erro) {
+            pedidoAtual.status = resultado.status;
+            pedidoAtual.total = resultado.total;
+            render();
+        }
+    } catch (e) {
+        // Falha de rede pontual no polling não deve travar a tela — só tenta de novo no próximo ciclo.
+    }
+}
+
+function renderAjuda() {
+    return `
+        <div class="ajuda-bloco">
+            <div class="ajuda-titulo">Precisa de ajuda ou tem alguma dúvida?</div>
+            <div class="ajuda-acoes">
+                <a class="ajuda-btn whatsapp" href="https://wa.me/${WHATSAPP_AJUDA}" target="_blank" rel="noopener">💬 WhatsApp</a>
+                <a class="ajuda-btn telefone" href="tel:${TELEFONE_AJUDA}">📞 Ligar</a>
+            </div>
+        </div>
+    `;
+}
+
+function renderFormulario() {
+    const letrasTamanho = Object.keys(TAMANHOS);
+    const max = state.tamanho ? TAMANHOS[state.tamanho].maxCarnes : null;
+
+    if (letrasTamanho.length === 0) {
+        return `
+            <div class="card tela-centro">
+                <div class="titulo-card">Sem marmitas disponíveis agora</div>
+                <div class="dica">Volte mais tarde ou fale com a gente pelo WhatsApp.</div>
+                ${renderAjuda()}
+            </div>
+        `;
+    }
+
+    const chipsTamanho = letrasTamanho.map(t => `
+        <div class="chip ${state.tamanho === t ? 'selecionado' : ''}" onclick="selecionarTamanho('${t}')">${TAMANHOS[t].label} · R$ ${TAMANHOS[t].preco.toFixed(2)}</div>
+    `).join('');
+
+    const dicaTamanho = state.tamanho
+        ? `<div class="dica">Tamanho ${state.tamanho}: ${max === 1 ? 'escolha 1 carne' : 'escolha até 2 carnes'}</div>`
+        : `<div class="dica">Escolha o tamanho pra liberar as carnes</div>`;
+
+    const chipsCarne = CARNES_DO_DIA.length > 0 ? CARNES_DO_DIA.map(c => {
+        const selecionada = state.carnesSelecionadas.includes(c);
+        const atingiuMax = state.tamanho && max > 1 && state.carnesSelecionadas.length >= max && !selecionada;
+        return `<div class="chip ${selecionada ? 'selecionado' : ''} ${atingiuMax ? 'desabilitado' : ''}" onclick="toggleCarne('${c.replace(/'/g,"\\'")}')">${selecionada ? '✓ ' : ''}${escapeHtml(c)}</div>`;
+    }).join('') : `<div class="dica">Sem carnes cadastradas para hoje — fale com a gente pelo WhatsApp.</div>`;
+
+    const dicaCarne = state.tamanho && max > 1
+        ? `<div class="dica ${state.carnesSelecionadas.length === max ? 'ok' : ''}">${state.carnesSelecionadas.length} de ${max} carnes selecionadas</div>`
+        : '';
+
+    const linhasMarmitas = state.carrinho.map((item, i) => `
+        <div class="item-carrinho">
+            <div>
+                <div class="item-nome">${item.qtd}x Marmita ${item.tamanho}</div>
+                <div class="item-detalhe">${escapeHtml(item.carnes.join(' + '))}</div>
+                ${item.obs ? `<div class="item-detalhe">↳ ${escapeHtml(item.obs)}</div>` : ''}
+            </div>
+            <div class="linha-item-dir">
+                <div class="item-preco">R$ ${(item.qtd * item.precoUnit).toFixed(2)}</div>
+                <div class="item-lixeira" onclick="removerDoCarrinho(${i})">🗑</div>
+            </div>
+        </div>
+    `).join('');
+
+    const linhasBebidas = state.bebidas.map(b => `
+        <div class="item-carrinho">
+            <div>
+                <div class="item-nome">${b.qtd}x ${escapeHtml(b.nome)}</div>
+            </div>
+            <div class="linha-item-dir">
+                <div class="item-preco">R$ ${(b.qtd * b.preco).toFixed(2)}</div>
+                <div class="item-lixeira" onclick="removerBebida(${b.codigo})">🗑</div>
+            </div>
+        </div>
+    `).join('');
+
+    const itensPedido = (state.carrinho.length === 0 && state.bebidas.length === 0)
+        ? `<div class="vazio">Configure sua marmita acima e toque em "Adicionar ao pedido"</div>`
+        : linhasMarmitas + linhasBebidas;
+
+    const listaBebidasDisponiveis = state.bebidaAberta
+        ? (BEBIDAS_CARDAPIO.length > 0
+            ? `<div class="chips" style="margin-top:10px;">${BEBIDAS_CARDAPIO.map(b => `
+                <div class="chip" onclick="adicionarBebida(${b.codigo}, '${b.nome.replace(/'/g,"\\'")}', ${b.preco})">${escapeHtml(b.nome)} · R$ ${b.preco.toFixed(2)}</div>
+              `).join('')}</div>`
+            : `<div class="dica" style="margin-top:10px;">Sem bebidas disponíveis agora</div>`)
+        : '';
+
+    const total = calcularTotal();
+
+    return `
+        ${state.erro ? `<div class="aviso">${escapeHtml(state.erro)}</div>` : ''}
+
+        <div class="card" id="cardConfigurador">
+            <div class="titulo-card">Peça sua marmita</div>
+            <div class="dica" style="margin-bottom:12px;">Acompanha arroz, feijão, macarrão, batata e salada do buffet — você escolhe só o tamanho e a carne.</div>
+
+            <div class="label-secao">Tamanho</div>
+            <div class="chips">${chipsTamanho}</div>
+            ${dicaTamanho}
+
+            <div class="label-secao">Carne</div>
+            <div class="chips">${chipsCarne}</div>
+            ${dicaCarne}
+
+            <div class="label-secao">Quantidade</div>
+            <div class="qtd-control">
+                <div class="qtd-btn" onclick="alterarQtd(-1)">−</div>
+                <div class="qtd-valor">${state.qtd}</div>
+                <div class="qtd-btn" onclick="alterarQtd(1)">+</div>
+            </div>
+
+            ${state.obsAberta
+                ? `<div class="label-secao">Observação (opcional)</div>
+                   <input type="text" placeholder="Ex: sem cebola, não gosto de pimenta" value="${escapeHtml(state.obs)}" oninput="state.obs = this.value">`
+                : `<div class="link-discreto" style="margin-top:14px; text-align:left;" onclick="toggleObsAberta()">+ Alguma observação sobre o pedido?</div>`
+            }
+
+            <div style="margin-top:16px;">
+                <button class="btn btn-primario" onclick="adicionarAoPedido()">+ Adicionar ao pedido</button>
+            </div>
+        </div>
+
+        <div class="card" id="cardPedido">
+            <div class="titulo-card">Seu pedido</div>
+            ${itensPedido}
+
+            <div class="linha-total">
+                <span>Total</span>
+                <span class="valor">R$ ${total.toFixed(2)}</span>
+            </div>
+
+            <div class="acoes-pedido">
+                <button class="btn btn-fantasma" onclick="irParaConfigurador()">+ Adicionar outra marmita</button>
+                <button class="btn btn-secundario" onclick="toggleBebidaAberta()">${state.bebidaAberta ? '− Fechar opções de bebida' : '+ Adicionar bebida'}</button>
+            </div>
+            ${listaBebidasDisponiveis}
+        </div>
+
+        <div class="card">
+            <div class="titulo-card">Finalizar pedido</div>
+            <div class="nota-retirada">🏠 Retire e pague no caixa do restaurante</div>
+
+            <div class="campo">
+                <label>Seu nome</label>
+                <input type="text" placeholder="Como podemos te chamar" value="${escapeHtml(state.nome)}" oninput="state.nome = this.value">
+            </div>
+            <div class="campo">
+                <label>WhatsApp</label>
+                <input type="tel" id="campoWhatsapp" placeholder="(00) 00000-0000" value="${escapeHtml(state.whatsapp)}" oninput="aoDigitarWhatsapp(this.value)">
+            </div>
+
+            <button class="btn btn-primario" ${state.enviando ? 'disabled' : ''} onclick="confirmarPedido()">${state.enviando ? 'Enviando...' : 'Confirmar pedido · R$ ' + total.toFixed(2)}</button>
+        </div>
+    `;
+}
+
+function renderConfirmacao() {
+    const pedido = pedidoAtual;
+    const resumoItens = pedido.itens.map(i => `${i.qtd}x Marmita ${i.tamanho} — ${escapeHtml(i.carnes.join(' + '))}`).join('<br>');
+    const resumoBebidas = pedido.bebidas.map(b => `${b.qtd}x ${escapeHtml(b.nome)}`).join('<br>');
+
+    return `
+        <div class="card tela-centro">
+            <div class="icone-ok">✓</div>
+            <div class="titulo-card" style="font-size:16px;">Pedido recebido</div>
+            <div class="codigo-pedido">#${pedido.numero}</div>
+            <div class="resumo-confirmacao">
+                ${resumoItens}
+                ${resumoBebidas ? '<br>' + resumoBebidas : ''}
+                <br><br><b>Total: R$ ${pedido.total.toFixed(2)}</b>
+            </div>
+            <button class="btn btn-primario" onclick="irParaStatus()">Acompanhar meu pedido</button>
+        </div>
+    `;
+}
+
+function renderFechado() {
+    return `
+        <div class="card tela-centro tela-fechado">
+            <div class="icone-fechado">🕒</div>
+            <div class="titulo-card" style="font-size:16px;">Fora do horário de pedido online</div>
+            <div class="dica">No momento não estamos recebendo pedidos pela internet</div>
+            <div class="horario-funcionamento">Horário de atendimento: 11h00 às 14h30</div>
+            <div class="dica">De segunda a sábado · fechado aos domingos</div>
+            <div class="dica">Volte dentro desse horário pra fazer seu pedido</div>
+            ${renderAjuda()}
+        </div>
+    `;
+}
+
+function renderStatus() {
+    const pedido = pedidoAtual;
+    if (!pedido) { view = 'form'; return renderFormulario(); }
+
+    // 'aguardando' é só o estado inicial otimista enquanto o 1º polling não voltou ainda
+    const statusServidor = pedido.status || 'em_preparo';
+    const etapas = ['em_preparo', 'pronto'];
+    const labels = { 'em_preparo': 'Em preparo', 'pronto': 'Pronto' };
+    const idxAtual = statusServidor === 'pronto' || statusServidor === 'concluido' ? 1 : 0;
+
+    const bolinhas = etapas.map((e, i) => {
+        let classe = 'futura';
+        let icone = '○';
+        if (i < idxAtual) { classe = 'feita'; icone = '✓'; }
+        else if (i === idxAtual) { classe = 'atual'; icone = i === 0 ? '🔥' : '✓'; }
+        return `
+            ${i > 0 ? `<div class="linha-progresso ${i <= idxAtual ? 'feita' : 'futura'}"></div>` : ''}
+            <div class="etapa">
+                <div class="bola ${classe}">${icone}</div>
+                <div class="etapa-label ${i === idxAtual ? 'atual' : ''}">${labels[e]}</div>
+            </div>
+        `;
+    }).join('');
+
+    const mensagens = {
+        'em_preparo': ['Sua marmita está sendo preparada', 'Pode vir buscar em poucos minutos'],
+        'pronto': ['Sua marmita está pronta!', 'Pode vir buscar e pagar no caixa'],
+        'concluido': ['Pedido finalizado', 'Obrigado pela visita!']
+    };
+    const msg = mensagens[statusServidor] || mensagens['em_preparo'];
+
+    return `
+        <div class="card tela-centro">
+            <div class="dica">Pedido #${pedido.numero} — ${escapeHtml(pedido.nome)}</div>
+            <div class="progresso">${bolinhas}</div>
+            <div class="mensagem-status">${msg[0]}</div>
+            <div class="submensagem-status">${msg[1]}</div>
+
+            <div class="link-discreto" onclick="novoPedido()">Fazer novo pedido</div>
+
+            ${renderAjuda()}
+        </div>
+    `;
+}
+
+function render() {
+    const app = document.getElementById('app');
+    if (view === 'carregando') app.innerHTML = '<div class="loading-spinner">Carregando opções do dia...</div>';
+    else if (view === 'confirmacao') app.innerHTML = renderConfirmacao();
+    else if (view === 'status') app.innerHTML = renderStatus();
+    else if (view === 'fechado') app.innerHTML = renderFechado();
+    else app.innerHTML = renderFormulario();
+
+    if (state.rolarParaPedidoAoRenderizar) {
+        state.rolarParaPedidoAoRenderizar = false;
+        const el = document.getElementById('cardPedido');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    if (state.rolarParaConfiguradorAoRenderizar) {
+        state.rolarParaConfiguradorAoRenderizar = false;
+        const el = document.getElementById('cardConfigurador');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+// Extrai a letra do tamanho a partir do nome do cardápio ("Marmita G" -> "G").
+// Frágil se a convenção de nomenclatura mudar, mas é o único dado disponível hoje —
+// não há campo de tamanho separado no modelo de dados do cardápio.
+function _letraTamanho(nomeMarmita) {
+    const partes = String(nomeMarmita).trim().split(/\s+/);
+    return partes[partes.length - 1].toUpperCase();
+}
+
+async function inicializar() {
+    try {
+        const opcoes = await apiGet('getOpcoesPedidoOnline');
+        if (!opcoes || opcoes.erro) throw new Error((opcoes && opcoes.erro) || 'Falha ao carregar opções');
+
+        TAMANHOS = {};
+        (opcoes.marmitas || []).forEach(m => {
+            const letra = _letraTamanho(m.nome);
+            TAMANHOS[letra] = {
+                label: letra,
+                preco: m.preco,
+                codigo: m.codigo,
+                maxCarnes: MAX_CARNES_POR_LETRA[letra] || 2
+            };
+        });
+        CARNES_DO_DIA = opcoes.carnes || [];
+        // Bebida sem preço cadastrado não pode quebrar o cálculo do total — oculta da lista online.
+        BEBIDAS_CARDAPIO = (opcoes.bebidas || []).filter(b => b.preco > 0);
+    } catch (e) {
+        TAMANHOS = {}; CARNES_DO_DIA = []; BEBIDAS_CARDAPIO = [];
+    }
+
+    const sessaoAtiva = lerSessaoAtiva();
+    if (sessaoAtiva && sessaoAtiva.comandaId) {
+        pedidoAtual = sessaoAtiva;
+        view = 'status';
+        render();
+        iniciarPolling();
+        return;
+    }
+
+    const clienteSalvo = lerClienteSalvo();
+    state.nome = clienteSalvo.nome || '';
+    state.whatsapp = clienteSalvo.whatsapp || '';
+
+    view = estaDentroDoHorario() ? 'form' : 'fechado';
+    render();
+}
+
+inicializar();
+</script>
+</body>
+</html>
