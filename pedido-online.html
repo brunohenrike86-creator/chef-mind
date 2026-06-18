@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Pedido Online — Chef Mind</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8D%BD%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23D4724F'/%3E%3Ctext x='50' y='62' font-size='55' text-anchor='middle'%3E%F0%9F%8D%BD%EF%B8%8F%3C/text%3E%3C/svg%3E">
 <style>
     * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
     :root {
@@ -200,7 +202,7 @@
 </head>
 <body>
 <header class="marca">
-    <div class="nome">🍱 Michelin Restaurante</div>
+    <div class="nome">🍽️ Michelin Restaurante</div>
     <div class="sub">Pedido online · Retire e pague no caixa</div>
 </header>
 <div id="app"><div class="loading-spinner">Carregando opções do dia...</div></div>
@@ -224,6 +226,10 @@ const WHATSAPP_AJUDA = '5541997829474';      // 41 99782-9474, com DDI 55
 const TELEFONE_AJUDA = '+5541997829474';
 
 function estaDentroDoHorario() {
+    // 🚧 TRAVA DESLIGADA TEMPORARIAMENTE PRA TESTE — reverter (remover o "return true;" abaixo)
+    // antes de voltar pra produção. Debitado como pendência pra não esquecer.
+    return true;
+
     const agora = new Date();
     if (agora.getDay() === 0) return false; // domingo não atende
     const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
@@ -501,6 +507,18 @@ function novoPedido() {
     render();
 }
 
+// Abre o formulário de novo pedido numa aba nova, deixando a aba atual intacta —
+// assim o cliente não perde o acompanhamento do pedido que já está em andamento
+// (decisão do usuário: "abrir nova aba" em vez de avisar/perder a sessão atual).
+// Usa location.pathname (sem query string) pra garantir que a nova aba carrega
+// limpa, sem nenhum parâmetro que possa interferir na leitura da sessão dela.
+function novoPedidoEmNovaAba() {
+    // ?novo=1 sinaliza pra essa nova aba ignorar a sessão ativa do localStorage (que é
+    // compartilhada entre abas da mesma origem) e abrir direto no formulário — sem isso
+    // a nova aba reconheceria a mesma sessão e cairia de volta na tela de acompanhamento.
+    window.open(location.pathname + '?novo=1', '_blank');
+}
+
 // Polling do status real — a cada 3s, conforme o plano (QA exige refletir em até ~3s).
 // Só fica ativo enquanto a tela de status está visível.
 function iniciarPolling() {
@@ -707,7 +725,6 @@ function renderFechado() {
             <div class="horario-funcionamento">Horário de atendimento: 11h00 às 14h30</div>
             <div class="dica">De segunda a sábado · fechado aos domingos</div>
             <div class="dica">Volte dentro desse horário pra fazer seu pedido</div>
-            ${renderAjuda()}
         </div>
     `;
 }
@@ -716,17 +733,21 @@ function renderStatus() {
     const pedido = pedidoAtual;
     if (!pedido) { view = 'form'; return renderFormulario(); }
 
-    // 'aguardando' é só o estado inicial otimista enquanto o 1º polling não voltou ainda
-    const statusServidor = pedido.status || 'em_preparo';
-    const etapas = ['em_preparo', 'pronto'];
-    const labels = { 'em_preparo': 'Em preparo', 'pronto': 'Pronto' };
-    const idxAtual = statusServidor === 'pronto' || statusServidor === 'concluido' ? 1 : 0;
+    // 3 etapas (igual ao protótipo testado). O GAS deriva isso olhando os itens da
+    // comanda: 'aguardando' = preparo ainda não iniciado, 'em_preparo' = operador já
+    // clicou INICIAR em algum item, 'pronto'/'concluido' = todos os itens concluídos/pago.
+    const statusServidor = pedido.status || 'aguardando';
+    const etapas = ['aguardando', 'em_preparo', 'pronto'];
+    const labels = { 'aguardando': 'Aguardando', 'em_preparo': 'Em preparo', 'pronto': 'Pronto' };
+    const idxPorStatus = { 'aguardando': 0, 'em_preparo': 1, 'pronto': 2, 'concluido': 2 };
+    const idxAtual = idxPorStatus[statusServidor] ?? 0;
 
+    const icones = ['⏳', '🔥', '✓'];
     const bolinhas = etapas.map((e, i) => {
         let classe = 'futura';
         let icone = '○';
         if (i < idxAtual) { classe = 'feita'; icone = '✓'; }
-        else if (i === idxAtual) { classe = 'atual'; icone = i === 0 ? '🔥' : '✓'; }
+        else if (i === idxAtual) { classe = 'atual'; icone = icones[i]; }
         return `
             ${i > 0 ? `<div class="linha-progresso ${i <= idxAtual ? 'feita' : 'futura'}"></div>` : ''}
             <div class="etapa">
@@ -737,11 +758,12 @@ function renderStatus() {
     }).join('');
 
     const mensagens = {
+        'aguardando': ['Recebemos seu pedido!', 'Vamos começar o preparo em breve'],
         'em_preparo': ['Sua marmita está sendo preparada', 'Pode vir buscar em poucos minutos'],
         'pronto': ['Sua marmita está pronta!', 'Pode vir buscar e pagar no caixa'],
         'concluido': ['Pedido finalizado', 'Obrigado pela visita!']
     };
-    const msg = mensagens[statusServidor] || mensagens['em_preparo'];
+    const msg = mensagens[statusServidor] || mensagens['aguardando'];
 
     return `
         <div class="card tela-centro">
@@ -750,7 +772,7 @@ function renderStatus() {
             <div class="mensagem-status">${msg[0]}</div>
             <div class="submensagem-status">${msg[1]}</div>
 
-            <div class="link-discreto" onclick="novoPedido()">Fazer novo pedido</div>
+            <div class="link-discreto" onclick="novoPedidoEmNovaAba()">Fazer novo pedido</div>
 
             ${renderAjuda()}
         </div>
@@ -807,7 +829,11 @@ async function inicializar() {
         TAMANHOS = {}; CARNES_DO_DIA = []; BEBIDAS_CARDAPIO = [];
     }
 
-    const sessaoAtiva = lerSessaoAtiva();
+    // ?novo=1 = aba aberta via "Fazer novo pedido" (ver novoPedidoEmNovaAba) — ignora a
+    // sessão ativa de propósito, pra essa aba abrir no formulário mesmo com um pedido em
+    // andamento salvo no localStorage (a aba original continua acompanhando esse pedido).
+    const pularSessao = new URLSearchParams(location.search).get('novo') === '1';
+    const sessaoAtiva = pularSessao ? null : lerSessaoAtiva();
     if (sessaoAtiva && sessaoAtiva.comandaId) {
         pedidoAtual = sessaoAtiva;
         view = 'status';
