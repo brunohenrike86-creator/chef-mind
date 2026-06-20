@@ -1121,6 +1121,35 @@
         body.modo-caixa #btnConfirmarPagamento { padding: 20px !important; font-size: 16px !important; border-radius: 6px !important; margin-top: 8px !important; }
         body.modo-caixa #btnIrLancar   { padding: 16px !important; font-size: 14px !important; border-radius: 6px !important; }
 
+        /* ========== MODO MARMITA — KDS do operador, tablet Samsung A9+ paisagem ========== */
+        body.modo-marmita .header   { display: none !important; }
+        body.modo-marmita .sidebar  { display: none !important; }
+        body.modo-marmita .container-main { padding: 0 !important; height: 100dvh; box-sizing: border-box; }
+        body.modo-marmita #mainApp  { height: 100dvh; }
+        body.modo-marmita #screen-preparo { width: 100% !important; height: 100dvh !important; }
+        body.modo-marmita #mobileTopBar { display: none !important; }
+
+        /* Header fica maior e o botão de fullscreen do cliente some — o tablet já está em modo kiosk */
+        body.modo-marmita #preparoHeader { padding: 16px 20px !important; }
+        body.modo-marmita #preparoHeader > div:first-child { font-size: 20px !important; }
+        body.modo-marmita #btnFullscreenPreparo { display: none !important; }
+
+        /* Grid mais espaçoso e cards/botões maiores para toque rápido em paisagem */
+        body.modo-marmita #areaPreparando { padding: 14px !important; }
+        body.modo-marmita .kdsGrid {
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+            gap: 14px !important;
+        }
+        body.modo-marmita .kdsCard { padding: 18px !important; gap: 12px !important; }
+        body.modo-marmita .kdsBtnAcao {
+            padding: 22px !important;
+            font-size: 22px !important;
+            min-height: 72px !important;
+        }
+
+        /* Reaproveita o botão flutuante de Sair (mesmo padrão da Balança) */
+        body.modo-marmita #balancaSair { display: block; font-size: 16px; padding: 14px 24px; }
+
         /* ========== MODO MOBILE — Lançar otimizado para celular ========== */
         /* Ativado por JS quando innerWidth < 768px e perfil não é Caixa/Balança */
 
@@ -1610,9 +1639,9 @@
                                 <!-- PREPARO -->
                 <div id="screen-preparo" class="screen">
                     <!-- HEADER MINIMALISTA -->
-                    <div style="padding: 8px 12px; background: white; border-bottom: 2px solid var(--border); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center;">
+                    <div id="preparoHeader" style="padding: 8px 12px; background: white; border-bottom: 2px solid var(--border); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center;">
                         <div style="font-size: 14px; font-weight: bold; color: var(--primary);">👨‍🍳 FILA DE PREPARO</div>
-                        <button onclick="abrirFullscreen()" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold;">🖥️ FULLSCREEN</button>
+                        <button id="btnFullscreenPreparo" onclick="abrirFullscreen()" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold;">🖥️ FULLSCREEN</button>
                     </div>
 
                     <!-- GRID RESPONSIVO - SEM SCROLL -->
@@ -1950,6 +1979,7 @@
                             <button onclick="filtrarUsuariosPorPerfil('Caixa')" class="filtro-perfil-btn" data-filtro="Caixa" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">💳 Caixa</button>
                             <button onclick="filtrarUsuariosPorPerfil('Atendente')" class="filtro-perfil-btn" data-filtro="Atendente" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">👤 Atendente</button>
                             <button onclick="filtrarUsuariosPorPerfil('Balança')" class="filtro-perfil-btn" data-filtro="Balança" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">⚖️ Balança</button>
+                            <button onclick="filtrarUsuariosPorPerfil('Marmita')" class="filtro-perfil-btn" data-filtro="Marmita" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">🍛 Marmita</button>
                         </div>
 
                         <!-- LISTAGEM DE USUÁRIOS -->
@@ -2042,6 +2072,7 @@
                     <option value="Caixa">💳 Caixa</option>
                     <option value="Atendente">👤 Atendente</option>
                     <option value="Balança">⚖️ Balança</option>
+                    <option value="Marmita">🍛 Marmita</option>
                 </select>
             </div>
 
@@ -2672,7 +2703,7 @@
                     usuarios.forEach(u => {
                         state.usuarios[u.login] = {
                             nome: u.nome || u.login, senha: String(u.senha),
-                            perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'gerente' ? 'Gerente' : 'Atendente'
+                            perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'marmita' ? 'Marmita' : 'Atendente'
                         };
                     });
                     console.log('[Sheets] ✅ Usuários:', usuarios.length);
@@ -2859,7 +2890,7 @@
 
                 // Atualizar header
                 document.getElementById('headerUser').textContent = state.user;
-                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : '👤 Atendente';
+                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : state.perfil === 'Marmita' ? '🍛 Marmita' : '👤 Atendente';
 
                 // Mostrar app diretamente
                 document.getElementById('loginScreen').classList.add('hidden');
@@ -2878,6 +2909,9 @@
                     if (drawerPerfil) drawerPerfil.textContent = '💳 Caixa';
                     caixaSwitchTo('lançar');
                     _mostrarSplash('Caixa');
+                } else if (state.perfil === 'Marmita') {
+                    document.body.classList.add('modo-marmita');
+                    _mostrarSplash('Marmita');
                 }
 
                 atualizarVisibilidadeAbas();
@@ -2986,7 +3020,7 @@
                         usuarios.forEach(u => {
                             state.usuarios[u.login] = {
                                 nome: u.nome || u.login, senha: String(u.senha),
-                                perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'gerente' ? 'Gerente' : 'Atendente'
+                                perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'marmita' ? 'Marmita' : 'Atendente'
                             };
                         });
                     }
@@ -3030,7 +3064,7 @@
 
             // ✅ Update header com informações
             document.getElementById('headerUser').textContent = `${state.user}`;
-            document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : '👤 Atendente';
+            document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : state.perfil === 'Marmita' ? '🍛 Marmita' : '👤 Atendente';
 
             // ✅ Limpar campos de senha
             document.getElementById('loginPassword').value = '';
@@ -3062,6 +3096,12 @@
                 if (drawerPerfil) drawerPerfil.textContent = '💳 Caixa';
                 caixaSwitchTo('lançar');
                 _mostrarSplash('Caixa'); // splash captura user gesture para fullscreen
+            }
+
+            // 🍛 MODO MARMITA — KDS do operador em tablet kiosk
+            if (state.perfil === 'Marmita') {
+                document.body.classList.add('modo-marmita');
+                _mostrarSplash('Marmita'); // splash captura user gesture para fullscreen
             }
 
             // ✅ INICIAR POLLING
@@ -3141,7 +3181,8 @@
             'Caixa':    ['lançar', 'checkout', 'preparo', 'dashboard', 'areceber', 'admin'],
             'Gerente':  ['lançar', 'preparo', 'admin'],
             'Atendente':['lançar', 'preparo'],
-            'Balança':  ['lançar']
+            'Balança':  ['lançar'],
+            'Marmita':  ['preparo']
         };
 
         function atualizarVisibilidadeAbas() {
@@ -3280,6 +3321,7 @@
             // Sair dos modos especiais
             document.body.classList.remove('modo-balanca');
             document.body.classList.remove('modo-caixa');
+            document.body.classList.remove('modo-marmita');
             document.body.classList.remove('modo-mobile');
             document.body.classList.remove('mobile-lista-aberta');
             closeCaixaDrawer();
@@ -3477,8 +3519,8 @@
         window.addEventListener('resize', _atualizarDebug);
 
         function detectarModoMobile() {
-            // Não aplica para Caixa/Balança (já têm seus modos dedicados)
-            if (['Caixa', 'Balança'].includes(state.perfil)) return;
+            // Não aplica para Caixa/Balança/Marmita (já têm seus modos dedicados)
+            if (['Caixa', 'Balança', 'Marmita'].includes(state.perfil)) return;
             // Usa matchMedia para alinhar exatamente com o CSS @media (max-width: 1023px)
             const eMobile = window.matchMedia('(max-width: 1023px)').matches;
             document.body.classList.toggle('modo-mobile', eMobile);
@@ -4549,7 +4591,7 @@
 
             saveStorage();
             // ☁️ SHEETS: criar ou atualizar usuário
-            const _nivel = perfil === 'Admin' ? 'admin' : perfil === 'Balança' ? 'balanca' : perfil === 'Gerente' ? 'gerente' : 'atendente';
+            const _nivel = perfil === 'Admin' ? 'admin' : perfil === 'Balança' ? 'balanca' : perfil === 'Gerente' ? 'gerente' : perfil === 'Marmita' ? 'marmita' : 'atendente';
             if (usuarioEmEdicao) {
                 // Login mudou ou não: atualiza na mesma linha via loginAntigo
                 sheetsAPI('atualizarUsuario', { loginAntigo: usuarioEmEdicao, login, nome, senha, nivel: _nivel });
@@ -4582,7 +4624,7 @@
             container.innerHTML = '';
 
             usuarios.forEach(([login, user]) => {
-                const badge = user.perfil === 'Admin' ? '👑' : user.perfil === 'Balança' ? '⚖️' : user.perfil === 'Gerente' ? '🧑‍💼' : user.perfil === 'Caixa' ? '💳' : '👤';
+                const badge = user.perfil === 'Admin' ? '👑' : user.perfil === 'Balança' ? '⚖️' : user.perfil === 'Gerente' ? '🧑‍💼' : user.perfil === 'Caixa' ? '💳' : user.perfil === 'Marmita' ? '🍛' : '👤';
 
                 const div = document.createElement('div');
                 div.className = 'card';
@@ -4600,7 +4642,7 @@
                                     @${login}
                                 </span>
                                 <span style="background: rgba(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '39,174,96' : user.perfil === 'Gerente' ? '155,89,182' : user.perfil === 'Caixa' ? '22,160,133' : '41,128,185'}, 0.15); color: rgb(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '30,132,73' : user.perfil === 'Gerente' ? '142,68,173' : user.perfil === 'Caixa' ? '17,122,101' : '41,128,185'}); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-weight: bold;">
-                                    ${user.perfil === 'Admin' ? 'ADMIN' : user.perfil === 'Balança' ? 'BALANÇA' : user.perfil === 'Gerente' ? 'GERENTE' : user.perfil === 'Caixa' ? 'CAIXA' : 'ATENDENTE'}
+                                    ${user.perfil === 'Admin' ? 'ADMIN' : user.perfil === 'Balança' ? 'BALANÇA' : user.perfil === 'Gerente' ? 'GERENTE' : user.perfil === 'Caixa' ? 'CAIXA' : user.perfil === 'Marmita' ? 'MARMITA' : 'ATENDENTE'}
                                 </span>
                             </div>
                             <!-- SENHA MASCARADA -->
@@ -6219,6 +6261,7 @@ function carregarComanda() {
                 bloco.style.cssText = 'margin-bottom: 12px;';
                 bloco.innerHTML = `<div style="font-size:15px; font-weight:900; color:${cor}; text-transform:uppercase; letter-spacing:1.5px; padding:8px 12px; background:${cor}22; border-left:5px solid ${cor}; border-radius:4px; margin-bottom:10px;">${titulo} <span style="font-size:13px; opacity:0.8;">(${lista.length})</span></div>`;
                 const grid = document.createElement('div');
+                grid.className = 'kdsGrid';
                 grid.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:8px;';
                 lista.forEach(([key, comanda, derivado]) => {
                     const card = criarCardPreparo(key, comanda, derivado);
@@ -6311,6 +6354,7 @@ function carregarComanda() {
                 </div>
             ` : '';
 
+            card.className = 'kdsCard';
             card.style.cssText = `
                 background: ${corFundo};
                 border: 2px solid ${corBorda};
@@ -6341,9 +6385,9 @@ function carregarComanda() {
                 ${derivado.atendente ? `<div style="font-size:11px; opacity:0.6; border-top:1px solid ${divBorder}; padding-top:6px;">por ${derivado.atendente}</div>` : ''}
                 <div>
                     ${statusPreparo === 'Aguardando' ? `
-                        <button onclick="iniciarPreparo('${key}')" style="width:100%; padding:14px; background:#F39C12; color:white; border:none; border-radius:6px; cursor:pointer; font-size:16px; font-weight:bold; min-height:50px; box-shadow:0 2px 6px rgba(243,156,18,0.4);">▶ INICIAR PREPARO</button>
+                        <button class="kdsBtnAcao" onclick="iniciarPreparo('${key}')" style="width:100%; padding:14px; background:#F39C12; color:white; border:none; border-radius:6px; cursor:pointer; font-size:16px; font-weight:bold; min-height:50px; box-shadow:0 2px 6px rgba(243,156,18,0.4);">▶ INICIAR PREPARO</button>
                     ` : statusPreparo === 'Em Preparo' ? `
-                        <button onclick="concluirPreparo('${key}')" style="width:100%; padding:14px; background:#27AE60; color:white; border:none; border-radius:6px; cursor:pointer; font-size:16px; font-weight:bold; min-height:50px; box-shadow:0 2px 6px rgba(39,174,96,0.4);">✓ CONCLUÍDO</button>
+                        <button class="kdsBtnAcao" onclick="concluirPreparo('${key}')" style="width:100%; padding:14px; background:#27AE60; color:white; border:none; border-radius:6px; cursor:pointer; font-size:16px; font-weight:bold; min-height:50px; box-shadow:0 2px 6px rgba(39,174,96,0.4);">✓ CONCLUÍDO</button>
                     ` : ''}
                 </div>
             `;
@@ -9501,8 +9545,8 @@ var itens = comanda.itens || [];
 
         // ── SPLASH para Balança e Caixa: captura user gesture e aciona fullscreen ──
         async function _mostrarSplash(perfil) {
-            const icone    = { 'Balança': '⚖️', 'Caixa': '💳' };
-            const legenda  = { 'Balança': 'Sistema de Balança — Pronto', 'Caixa': 'Sistema de Caixa — Pronto' };
+            const icone    = { 'Balança': '⚖️', 'Caixa': '💳', 'Marmita': '🍛' };
+            const legenda  = { 'Balança': 'Sistema de Balança — Pronto', 'Caixa': 'Sistema de Caixa — Pronto', 'Marmita': 'Sistema de Preparo — Pronto' };
             const icon = document.getElementById('splashIcon');
             const sub  = document.getElementById('splashSubtitle');
             if (icon) icon.textContent = icone[perfil]  || '🍽️';
