@@ -2257,7 +2257,11 @@
     </div>
 
     <!-- FULLSCREEN PREPARO - PARA CLIENTE/TV -->
-    <div id="fullscreenPreparo" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #111; z-index: 9999; overflow: hidden; color: white; padding: 0; margin: 0; flex-direction: column;">
+    <!-- ✅ V2 "estilo painel de loja" (referência: painel de chamada Burger King —
+         fundo claro, tipografia grande em caps, coluna de "pronto" com bloco de cor
+         sólida pra saltar aos olhos). A versão anterior usava fundo preto + caixas
+         com borda — lia como dashboard de sistema, não como painel de loja. -->
+    <div id="fullscreenPreparo" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg-light); z-index: 9999; overflow: hidden; color: var(--text-dark); padding: 0; margin: 0; flex-direction: column;">
 
         <!-- FLASH CONCLUSÃO — cobre tudo por 3s ao concluir marmita -->
         <div id="flashConcluidoOverlay" style="display:none; position:absolute; inset:0; z-index:200; background:#071a07; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:40px;">
@@ -2267,37 +2271,49 @@
             <div id="flashConcluidoItens" style="font-size:24px; color:#888; margin-top:20px; line-height:1.6;"></div>
         </div>
 
-        <!-- HEADER -->
-        <div style="padding: 10px 20px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); border-bottom: 3px solid #F5A962; position: relative; flex-shrink: 0; display: flex; align-items: center;">
-            <div style="font-size: 28px; font-weight: bold;">👨‍🍳 FILA DE PREPARO</div>
-            <button onclick="fecharFullscreen()" style="position: absolute; top: 10px; right: 20px; padding: 6px 14px; background: rgba(255,255,255,0.2); color: white; border: 2px solid white; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold;">✕ FECHAR</button>
+        <!-- HEADER — tirei o nome do restaurante (o cliente já sabe em que loja
+             está; isso é informação de marca, não de orientação). O que importa
+             aqui é deixar claro O QUE essa tela é, então "Fila de Marmitas" ganhou
+             destaque — mais visível que antes, mas ainda abaixo dos títulos de
+             coluna (38-40px) e dos nomes, que são o que o cliente escaneia
+             repetidamente. -->
+        <div style="padding: 10px 20px; background: white; border-bottom: 2px solid #EEE; position: relative; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+            <div style="font-size: 20px; font-weight: 900; text-align:center; letter-spacing:0.5px; color: var(--primary-dark);">
+                🍛 Fila de Marmitas
+            </div>
+            <button onclick="fecharFullscreen()" style="position: absolute; top: 8px; right: 16px; padding: 4px 8px; background: transparent; color: rgba(44,24,16,0.25); border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">✕</button>
         </div>
 
-        <!-- CORPO: 3 colunas — Aguardando | Em Preparo | Prontos -->
+        <!-- CORPO: 3 colunas — Recebido | Preparando | Pronto -->
+        <!-- ✅ Correção: no BK o título da coluna é MAIOR que o nome do cliente — é
+             o título que ancora a leitura à distância ("qual coluna é essa?"), e só
+             depois o olho desce pro nome. Fui longe demais reduzindo antes. Como o
+             normal aqui é 3-5 marmitas na fila (não 10+), dá pra ter título grande
+             E nomes grandes ao mesmo tempo, sem precisar economizar espaço. -->
         <div style="flex:1; display:flex; flex-direction:row; overflow:hidden;">
 
-            <!-- COLUNA: AGUARDANDO -->
-            <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; border-right:2px solid #2a2a2a;">
-                <div style="padding:10px 12px; background:#2a0800; border-bottom:2px solid #E74C3C; text-align:center; flex-shrink:0;">
-                    <span style="font-size:13px; font-weight:bold; color:#E74C3C; letter-spacing:1px;">⏳ AGUARDANDO</span>
+            <!-- COLUNA: RECEBIDO -->
+            <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; background:white; border-right:2px solid #EEE;">
+                <div style="padding:16px 12px; border-bottom:3px solid #3498DB; text-align:center; flex-shrink:0;">
+                    <span style="font-size:38px; font-weight:900; color:#2E86C1; letter-spacing:0.5px;">RECEBIDO</span>
                 </div>
-                <div id="areaFullscreenAguardando" style="flex:1; padding:10px; display:flex; flex-direction:column; gap:10px; overflow-y:auto;"></div>
+                <div id="areaFullscreenAguardando" style="flex:1; padding:16px; display:flex; flex-direction:column; align-items:center; gap:18px; overflow-y:auto;"></div>
             </div>
 
-            <!-- COLUNA: EM PREPARO -->
-            <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; border-right:2px solid #2a2a2a;">
-                <div style="padding:10px 12px; background:#2C1800; border-bottom:2px solid #F39C12; text-align:center; flex-shrink:0;">
-                    <span style="font-size:13px; font-weight:bold; color:#F39C12; letter-spacing:1px;">👨‍🍳 EM PREPARO</span>
+            <!-- COLUNA: PREPARANDO -->
+            <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--bg-light); border-right:2px solid #EEE;">
+                <div style="padding:16px 12px; border-bottom:3px solid var(--primary); text-align:center; flex-shrink:0;">
+                    <span style="font-size:38px; font-weight:900; color:var(--primary-dark); letter-spacing:0.5px;">PREPARANDO</span>
                 </div>
-                <div id="areaFullscreenEmPreparo" style="flex:1; padding:10px; display:flex; flex-direction:column; gap:10px; overflow-y:auto;"></div>
+                <div id="areaFullscreenEmPreparo" style="flex:1; padding:16px; display:flex; flex-direction:column; align-items:center; gap:18px; overflow-y:auto;"></div>
             </div>
 
-            <!-- COLUNA: PRONTOS -->
-            <div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
-                <div style="padding:10px 12px; background:#0a1f0a; border-bottom:2px solid #27AE60; text-align:center; flex-shrink:0;">
-                    <span style="font-size:13px; font-weight:bold; color:#27AE60; letter-spacing:1px;">✓ PRONTOS</span>
+            <!-- COLUNA: PRONTO (bloco sólido — destaque máximo) -->
+            <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; background:#27AE60;">
+                <div style="padding:16px 12px; border-bottom:3px solid rgba(255,255,255,0.3); text-align:center; flex-shrink:0;">
+                    <span style="font-size:40px; font-weight:900; color:white; letter-spacing:0.5px;">PRONTO! 🎉</span>
                 </div>
-                <div id="areaFullscreenConcluidos" style="flex:1; padding:10px; display:flex; flex-direction:column; gap:10px; overflow-y:auto;"></div>
+                <div id="areaFullscreenConcluidos" style="flex:1; padding:16px; display:flex; flex-direction:column; align-items:center; gap:18px; overflow-y:auto;"></div>
             </div>
 
         </div>
@@ -5316,7 +5332,11 @@ function carregarComanda() {
                     quantidade: 1,
                     observacao: observacao,
                     icone: getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo)),
-                    preparo_ja: preparoJa
+                    preparo_ja: preparoJa,
+                    // Momento real do lançamento — usado como referência de entrada na
+                    // fila do KDS quando o item entra direto (preparo_ja/online), sem
+                    // esperar o poll do Sheets confirmar o timestamp_pedido do servidor.
+                    timestampPedido: new Date().toISOString()
                 };
                 comanda.itens.push(_itemMarmita);
                 _itemMarmita._pendingAdd = sheets_addItem(state.comandaAtual, _itemMarmita, {
@@ -6086,8 +6106,20 @@ function carregarComanda() {
 
         // Itens que passam pela esteira da cozinha (KDS). Bebidas/quilo (tipo
         // Fixo/Gramas) não têm timestamp de preparo e ficam fora dessa conta.
+        //
+        // Regra de entrada na fila (recuperada — não é só "é Marmita?"):
+        // 1. Lançada SEM marcação de "Preparo para mesa" → só entra na fila quando
+        //    a comanda é paga (comanda.paid). Ex.: balcão/quilo, paga na hora.
+        // 2. Lançada COM marcação de "Preparo para mesa" (preparo_ja=true no item)
+        //    → entra imediatamente, mesmo sem pagamento (mesa fecha a conta depois).
+        // 3. Pedido Online → mesmo comportamento do fluxo 2: entra imediatamente,
+        //    mesmo sem pagamento (por isso o canal === 'online' basta, sem
+        //    depender do preparo_ja do item).
         function itensDoPreparo(comanda) {
-            return (comanda.itens || []).filter(i => i.tipo === 'Marmita');
+            const ehPedidoOnline = comanda.canal === 'online';
+            return (comanda.itens || []).filter(i =>
+                i.tipo === 'Marmita' && (ehPedidoOnline || i.preparo_ja || comanda.paid)
+            );
         }
 
         // ===== STATUS DE PREPARO — FONTE ÚNICA DE VERDADE =====
@@ -6129,17 +6161,34 @@ function carregarComanda() {
                 return null; // expirou — sai do KDS
             }
 
+            // Referência de ENTRADA na fila — momento em que o card passou a
+            // aparecer no KDS. Esse timestamp não muda quando o status passa pra
+            // "Em Preparo" — o cronômetro do card é único, do aparecimento até a
+            // conclusão, não reinicia ao iniciar o preparo.
+            //
+            // O momento de entrada depende de COMO o item entrou na fila (mesma
+            // regra de itensDoPreparo): se entrou direto (preparo_ja/online), a
+            // referência é o timestamp_pedido do próprio item — não a criação da
+            // comanda, que pode ser muito anterior (mesa aberta há tempo, item
+            // lançado só agora). Se entrou por pagamento, a referência é o
+            // pagamento da comanda, que é o gatilho real de entrada.
+            const ehPedidoOnline = comanda.canal === 'online';
+            const entradas = itens.map(i => {
+                if (ehPedidoOnline || i.preparo_ja) return i.timestampPedido || comanda.dataCriacao;
+                return comanda.dataPagamento || comanda.dataCriacao;
+            }).filter(Boolean).sort();
+            const referenciaEntrada = entradas[0] || new Date().toISOString();
+
             const iniciados = pendentes.filter(i => i.timestampInicioPreparo);
             if (iniciados.length > 0) {
                 const inicios = iniciados.map(i => i.timestampInicioPreparo).sort();
                 const atendente = iniciados.map(i => i.usuarioPreparo).filter(Boolean)[0] || null;
-                return { status: 'Em Preparo', referencia: inicios[0], inicio: inicios[0], fim: null, atendente };
+                return { status: 'Em Preparo', referencia: referenciaEntrada, inicio: inicios[0], fim: null, atendente };
             }
 
             // Aguardando — sem timestamp de criação por item no frontend, usa a
             // referência da comanda (pagamento ou abertura) como tempo de espera.
-            const referencia = comanda.dataPagamento || comanda.dataCriacao || new Date().toISOString();
-            return { status: 'Aguardando', referencia, inicio: referencia, fim: null, atendente: null };
+            return { status: 'Aguardando', referencia: referenciaEntrada, inicio: referenciaEntrada, fim: null, atendente: null };
         }
 
         function renderizarPreapro() {
@@ -6238,6 +6287,30 @@ function carregarComanda() {
             const temPreparoJa = !ehPedidoOnline && comanda.itens.some(i => i.preparo_ja);
             const divBorder = corTexto === 'white' ? 'rgba(255,255,255,0.3)' : 'var(--border)';
 
+            // Quando NÃO é "preparo p/ mesa" (ou seja: presencial sem ser mesa, ou
+            // pedido online), o operador empacota a comanda inteira de uma vez —
+            // marmita + bebidas/outros itens saem juntas no balcão. Já na mesa, os
+            // outros itens normalmente já foram consumidos/servidos antes da marmita
+            // entrar em preparo, então não faz sentido empacotar nada — por isso só
+            // mostramos "outros itens" quando !temPreparoJa.
+            const outrosItens = comanda.itens.filter(item =>
+                item.tipo !== 'Marmita' && item.categoria !== 'Buffet' && item.categoria !== 'Marmitas'
+            );
+            const gruposOutros = {};
+            outrosItens.forEach(item => {
+                const chave = `${item.nome}||${item.observacao || ''}`;
+                if (!gruposOutros[chave]) gruposOutros[chave] = { nome: item.nome, observacao: item.observacao || '', qty: 0 };
+                gruposOutros[chave].qty++;
+            });
+            const outrosItensHTML = (!temPreparoJa && Object.keys(gruposOutros).length > 0) ? `
+                <div style="margin-top:4px; padding-top:6px; border-top:1px dashed ${divBorder};">
+                    <div style="font-size:11px; font-weight:bold; opacity:0.7; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">🥤 Empacotar junto</div>
+                    ${Object.values(gruposOutros).map(g => `
+                        <div style="font-size:14px; color:${corTexto}; opacity:0.9; line-height:1.3;">${g.qty > 1 ? `<span style="font-weight:bold;">${g.qty}x</span> ` : ''}${g.nome}${g.observacao ? ` <span style="opacity:0.7; font-style:italic;">(${g.observacao})</span>` : ''}</div>
+                    `).join('')}
+                </div>
+            ` : '';
+
             card.style.cssText = `
                 background: ${corFundo};
                 border: 2px solid ${corBorda};
@@ -6256,13 +6329,14 @@ function carregarComanda() {
                 ${temPreparoJa ? `<div style="background:#E67E22; color:white; font-size:13px; font-weight:bold; text-align:center; padding:6px 10px; border-radius:4px; letter-spacing:0.5px;">⚡ PREPARO P/ MESA</div>` : ''}
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:8px; border-bottom:2px solid ${divBorder};">
                     <div style="flex:1; min-width:0;">
-                        <div style="font-size:28px; font-weight:900; color:${corBorda}; line-height:1;">#${comanda.numero}</div>
-                        ${comanda.nomeCliente ? `<div style="font-size:18px; font-weight:bold; color:${corTexto}; margin-top:3px; line-height:1.2;">${comanda.nomeCliente}</div>` : ''}
+                        <div style="font-size:22px; font-weight:900; color:${corBorda}; line-height:1;">#${comanda.numero}</div>
+                        ${comanda.nomeCliente ? `<div style="font-size:23px; font-weight:900; color:${corTexto}; margin-top:4px; line-height:1.15;">${comanda.nomeCliente}</div>` : ''}
                     </div>
                     <div style="font-size:13px; font-weight:bold; color:${corTexto}; opacity:0.75; white-space:nowrap; padding-left:8px; padding-top:4px;">⏱ ${tempoEspera}</div>
                 </div>
                 <div style="flex:1;">
                     ${marnitasHTML || `<div style="font-size:13px; opacity:0.4;">—</div>`}
+                    ${outrosItensHTML}
                 </div>
                 ${derivado.atendente ? `<div style="font-size:11px; opacity:0.6; border-top:1px solid ${divBorder}; padding-top:6px;">por ${derivado.atendente}</div>` : ''}
                 <div>
@@ -6414,85 +6488,54 @@ function carregarComanda() {
             const emPreparo  = todasComandas.filter(([, , d]) => d.status === 'Em Preparo');
             const concluidos = todasComandas.filter(([, , d]) => d.status === 'Concluído');
 
-            const renderCol = (lista, areaId) => {
+            // ✅ Tela do cliente não precisa seguir a paleta "séria" do sistema
+            // interno (terracota usado nas telas de staff) — aqui o objetivo é
+            // chamar atenção, então cada nome vira um "chip" colorido, com fundo
+            // sólido próprio, em vez de só texto colorido sobre o fundo da coluna.
+            // Isso dá ao nome um contorno visual próprio — destaque real, não só
+            // tamanho de fonte.
+            const renderCol = (lista, areaId, chipBg, chipColor, corVazio) => {
                 const area = document.getElementById(areaId);
                 if (!area) return;
                 area.innerHTML = '';
                 if (lista.length === 0) {
-                    area.innerHTML = '<div style="text-align:center; color:rgba(255,255,255,0.2); padding:30px 0; font-size:14px;">—</div>';
+                    area.innerHTML = `<div style="text-align:center; color:${corVazio}; padding:30px 0; font-size:15px;">Nenhum pedido aqui agora</div>`;
                     return;
                 }
                 lista.forEach(([key, comanda, derivado]) => {
-                    const card = criarCardFullscreen(key, comanda, derivado);
+                    const card = criarCardFullscreen(key, comanda, derivado, chipBg, chipColor);
                     if (card) area.appendChild(card);
                 });
             };
 
-            renderCol(aguardando, 'areaFullscreenAguardando');
-            renderCol(emPreparo,  'areaFullscreenEmPreparo');
-            renderCol(concluidos, 'areaFullscreenConcluidos');
+            renderCol(aguardando, 'areaFullscreenAguardando', '#EAF4FC', '#1B6FA8', 'rgba(44,24,16,0.25)');
+            renderCol(emPreparo,  'areaFullscreenEmPreparo',  '#FFF1E0', '#E67E22', 'rgba(44,24,16,0.25)');
+            renderCol(concluidos, 'areaFullscreenConcluidos', '#FFFFFF', '#1E8449', 'rgba(255,255,255,0.6)');
         }
 
-        function criarCardFullscreen(key, comanda, derivado) {
+        // ✅ Estilo "painel de loja" (referência: painel de chamada do Burger King),
+        // mas com o nome em formato de "chip" — fundo colorido próprio, sombra leve,
+        // bem maior que o texto puro de antes. Sem timer/itens: o cliente só
+        // precisa reconhecer o próprio nome de longe. Comandas sem nome (presencial
+        // sem identificação) mostram o número, no mesmo chip.
+        function criarCardFullscreen(key, comanda, derivado, chipBg, chipColor) {
             derivado = derivado || derivarStatusPreparo(comanda);
             if (!derivado) return null;
 
-            const card = document.createElement('div');
-            const statusPreparo = derivado.status;
+            const chip = document.createElement('div');
+            const texto = comanda.nomeCliente || `Comanda #${comanda.numero}`;
+            const piscar = derivado.status === 'Concluído' ? 'animation: piscar 0.8s infinite;' : '';
 
-            let corBorda, corFundo;
-            if (statusPreparo === 'Concluído') {
-                corBorda = '#27AE60'; corFundo = '#0a1f0a';
-            } else if (statusPreparo === 'Em Preparo') {
-                corBorda = '#F39C12'; corFundo = '#1a1200';
-            } else {
-                corBorda = '#E74C3C'; corFundo = '#1a0800';
-            }
-
-            // Timer — só para Em Preparo (congela na conclusão)
-            let timerHTML = '';
-            if (statusPreparo === 'Em Preparo' || statusPreparo === 'Concluído') {
-                const dataEspera = new Date(derivado.inicio);
-                const dataFim = derivado.fim ? new Date(derivado.fim) : new Date();
-                const diff = Math.floor((dataFim - dataEspera) / 1000);
-                const min = Math.floor(diff / 60);
-                const seg = diff % 60;
-                timerHTML = `<div style="font-size:13px; color:#888; white-space:nowrap;">⏱ ${String(min).padStart(2,'0')}:${String(seg).padStart(2,'0')}</div>`;
-            }
-
-            // Itens: agrupa marmitas por nome, mostra só tamanho + qtd (sem carnes/obs)
-            const marmitas = comanda.itens.filter(i => i.tipo === 'Marmita');
-            const grupos = {};
-            marmitas.forEach(item => { grupos[item.nome] = (grupos[item.nome] || 0) + 1; });
-            const itensHTML = Object.entries(grupos)
-                .map(([nome, qty]) => `<div style="font-size:15px; color:#bbb;">${nome}${qty > 1 ? ` <strong style="color:${corBorda};">x${qty}</strong>` : ''}</div>`)
-                .join('');
-
-            card.style.cssText = `
-                background: ${corFundo};
-                border: 2px solid ${corBorda};
-                border-left: 6px solid ${corBorda};
-                border-radius: 8px;
-                padding: 14px 12px;
-                color: white;
-                ${statusPreparo === 'Concluído' ? 'animation: piscar 0.8s infinite;' : ''}
+            chip.style.cssText = `
+                font-size:34px; font-weight:900; color:${chipColor}; text-transform:uppercase;
+                letter-spacing:0.5px; line-height:1.2; text-align:center; word-break:break-word;
+                background:${chipBg}; padding:14px 32px; border-radius:999px;
+                box-shadow:0 4px 14px rgba(0,0,0,0.18); max-width:90%;
+                ${piscar}
             `;
+            chip.textContent = texto;
 
-            card.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:${itensHTML ? '8px' : '0'};">
-                    <div style="flex:1; min-width:0;">
-                        ${comanda.nomeCliente
-                            ? `<div style="font-size:26px; font-weight:900; color:${corBorda}; line-height:1.1; word-break:break-word;">${comanda.nomeCliente}</div>
-                               <div style="font-size:14px; color:#777; margin-top:2px;">#${comanda.numero}</div>`
-                            : `<div style="font-size:30px; font-weight:900; color:${corBorda}; line-height:1;">#${comanda.numero}</div>`
-                        }
-                    </div>
-                    ${timerHTML ? `<div style="padding-left:8px; padding-top:4px;">${timerHTML}</div>` : ''}
-                </div>
-                ${itensHTML ? `<div style="border-top:1px solid ${corBorda}33; padding-top:8px;">${itensHTML}</div>` : ''}
-            `;
-
-            return card;
+            return chip;
         }
 
         function mostrarFlashConcluido(key) {
@@ -6597,6 +6640,9 @@ function carregarComanda() {
                             cat === 'gramas'  ? 'Gramas' : 'Fixo',
                 observacao: i.observacao || '',
                 preparo_ja: String(i.preparo_ja).toLowerCase() === 'true',
+                // Momento em que o item foi lançado — usado como referência de
+                // entrada na fila do KDS pra itens que entram direto (preparo_ja/online).
+                timestampPedido: i.timestamp_pedido || null,
                 // Timestamps de preparo (persistidos no GAS por iniciarPreparo/concluirPreparo).
                 // São a FONTE ÚNICA DE VERDADE do status de preparo da comanda — ver
                 // derivarStatusPreparo(). Sem isso aqui, o frontend não tem como saber se um
