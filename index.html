@@ -1639,9 +1639,14 @@
                                 <!-- PREPARO -->
                 <div id="screen-preparo" class="screen">
                     <!-- HEADER MINIMALISTA -->
-                    <div id="preparoHeader" style="padding: 8px 12px; background: white; border-bottom: 2px solid var(--border); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center;">
+                    <div id="preparoHeader" style="padding: 8px 12px; background: white; border-bottom: 2px solid var(--border); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
                         <div style="font-size: 14px; font-weight: bold; color: var(--primary);">👨‍🍳 FILA DE PREPARO</div>
-                        <button id="btnFullscreenPreparo" onclick="abrirFullscreen()" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold;">🖥️ FULLSCREEN</button>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <!-- Só aparece pro perfil Marmita (ver _initImpressaoMarmita) — é uma config
+                                 do tablet físico conectado à impressora, não sincroniza entre devices. -->
+                            <button id="btnToggleImpressao" onclick="toggleImpressaoAutomatica()" style="display:none; padding: 6px 12px; background: #999; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold;">🖨️ Impressão: OFF</button>
+                            <button id="btnFullscreenPreparo" onclick="abrirFullscreen()" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold;">🖥️ FULLSCREEN</button>
+                        </div>
                     </div>
 
                     <!-- GRID RESPONSIVO - SEM SCROLL -->
@@ -2606,7 +2611,15 @@
         // ====================================================
         // ☁️ INTEGRAÇÃO GOOGLE SHEETS — chef-mind Fase 2
         // ====================================================
-        const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbwAaSxDyP5NC8HlJ9AgMVWOV0CzjFfbr1DLNwSIp3BgEymvHGaYb2VLz5gY58dgOTg98w/exec';
+        // Ambiente de homologação: ao testar localmente contra a planilha de
+        // staging, troque APENAS a linha abaixo para 'staging'. NUNCA commitar
+        // com USAR_AMBIENTE = 'staging' — produção é sempre o padrão.
+        const USAR_AMBIENTE = 'producao'; // 'producao' | 'staging'
+
+        const SHEETS_API_URL_PROD = 'https://script.google.com/macros/s/AKfycbwAaSxDyP5NC8HlJ9AgMVWOV0CzjFfbr1DLNwSIp3BgEymvHGaYb2VLz5gY58dgOTg98w/exec';
+        const SHEETS_API_URL_STAGING = 'https://script.google.com/macros/s/AKfycbyZpIviZGHdjqk-pJfCNyrfloi3SJeqAETU5ZKxLGfFpJSJVB0a8cJT2mAIeifXuZoydw/exec'; // staging
+
+        const SHEETS_API_URL = USAR_AMBIENTE === 'staging' ? SHEETS_API_URL_STAGING : SHEETS_API_URL_PROD;
 
         async function sheetsAPI(action, dados = {}, timeoutMs = 20000) {
             try {
@@ -2912,6 +2925,7 @@
                 } else if (state.perfil === 'Marmita') {
                     document.body.classList.add('modo-marmita');
                     _mostrarSplash('Marmita');
+                    _initImpressaoMarmita();
                 }
 
                 atualizarVisibilidadeAbas();
@@ -3102,6 +3116,7 @@
             if (state.perfil === 'Marmita') {
                 document.body.classList.add('modo-marmita');
                 _mostrarSplash('Marmita'); // splash captura user gesture para fullscreen
+                _initImpressaoMarmita();
             }
 
             // ✅ INICIAR POLLING
@@ -3326,6 +3341,11 @@
             document.body.classList.remove('mobile-lista-aberta');
             closeCaixaDrawer();
             _destroyWeightService();
+            // Botão de impressão é específico do perfil Marmita — _initImpressaoMarmita()
+            // só sabe mostrar, nunca esconder; sem isso ele ficaria visível pro próximo
+            // perfil logado na mesma sessão (handleLogout não recarrega a página).
+            const _btnImp = document.getElementById('btnToggleImpressao');
+            if (_btnImp) _btnImp.style.display = 'none';
             try {
                 if (document.exitFullscreen) document.exitFullscreen();
                 else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
@@ -6395,6 +6415,99 @@ function carregarComanda() {
             return card;
         }
 
+        // ========== IMPRESSÃO AUTOMÁTICA DO TICKET DE MARMITA (RawBT) ==========
+        // Config local ao DISPOSITIVO (localStorage, não state.comandas) — é o
+        // tablet fisicamente conectado à impressora que liga isso, não o perfil
+        // em si. Por isso o botão só aparece quando perfil === 'Marmita', mas o
+        // flag em si não sincroniza entre devices (Regra 16: escopo de módulo).
+        let _impressaoAutomatica = localStorage.getItem('chefmind_impressao_auto') === 'true';
+
+        function _initImpressaoMarmita() {
+            const btn = document.getElementById('btnToggleImpressao');
+            if (!btn) return;
+            btn.style.display = 'inline-block';
+            _atualizarBotaoImpressao();
+        }
+
+        function _atualizarBotaoImpressao() {
+            const btn = document.getElementById('btnToggleImpressao');
+            if (!btn) return;
+            btn.textContent = _impressaoAutomatica ? '🖨️ Impressão: ON' : '🖨️ Impressão: OFF';
+            btn.style.background = _impressaoAutomatica ? '#27AE60' : '#999';
+        }
+
+        function toggleImpressaoAutomatica() {
+            _impressaoAutomatica = !_impressaoAutomatica;
+            localStorage.setItem('chefmind_impressao_auto', String(_impressaoAutomatica));
+            _atualizarBotaoImpressao();
+            showToast(_impressaoAutomatica ? '🖨️ Impressão automática ativada' : '🖨️ Impressão automática desativada', 'info');
+        }
+
+        // RawBT espera rawbt:base64,<dados> — encode UTF-8 binary-safe (btoa puro
+        // quebra com acentuação; este é o truque padrão pra base64 de string UTF-8).
+        function _base64UTF8(str) {
+            return btoa(unescape(encodeURIComponent(str)));
+        }
+
+        // Espelha exatamente o agrupamento usado no card do KDS (criarCardPreparo):
+        // marmitas agrupadas por nome+observação, e "empacotar junto" só quando a
+        // comanda não é "preparo p/ mesa" (outros itens já foram servidos na mesa
+        // nesse caso). Sem horário — não tem valor operacional no ticket impresso.
+        function montarTextoMarmita(comanda) {
+            const linhas = [];
+            linhas.push(`COMANDA #${comanda.numero}`);
+            if (comanda.nomeCliente) linhas.push(comanda.nomeCliente.toUpperCase());
+            linhas.push('--------------------------------');
+
+            const marmitas = comanda.itens.filter(item => item.tipo === 'Marmita');
+            const gruposMarmita = {};
+            marmitas.forEach(item => {
+                const chave = `${item.nome}||${item.observacao || ''}`;
+                if (!gruposMarmita[chave]) gruposMarmita[chave] = { nome: item.nome, observacao: item.observacao || '', qty: 0 };
+                gruposMarmita[chave].qty++;
+            });
+            Object.values(gruposMarmita).forEach(g => {
+                linhas.push(`${g.qty > 1 ? g.qty + 'x ' : ''}${g.nome}`);
+                if (g.observacao) linhas.push(`  > ${g.observacao}`);
+            });
+
+            const ehPedidoOnline = comanda.canal === 'online';
+            const temPreparoJa = !ehPedidoOnline && comanda.itens.some(i => i.preparo_ja);
+            const outrosItens = comanda.itens.filter(item =>
+                item.tipo !== 'Marmita' && item.categoria !== 'Buffet' && item.categoria !== 'Marmitas'
+            );
+            const gruposOutros = {};
+            outrosItens.forEach(item => {
+                const chave = `${item.nome}||${item.observacao || ''}`;
+                if (!gruposOutros[chave]) gruposOutros[chave] = { nome: item.nome, observacao: item.observacao || '', qty: 0 };
+                gruposOutros[chave].qty++;
+            });
+            if (!temPreparoJa && Object.keys(gruposOutros).length > 0) {
+                linhas.push('--------------------------------');
+                linhas.push('EMPACOTAR JUNTO:');
+                Object.values(gruposOutros).forEach(g => {
+                    linhas.push(`${g.qty > 1 ? g.qty + 'x ' : ''}${g.nome}${g.observacao ? ' (' + g.observacao + ')' : ''}`);
+                });
+            }
+
+            linhas.push('--------------------------------');
+            linhas.push('');
+            linhas.push('');
+            return linhas.join('\n');
+        }
+
+        // Dispara o app RawBT (instalado no tablet) via esquema de URL próprio
+        // dele — ver CHEF_MIND_PROJECT_KNOWLEDGE.md Seção 11 sobre a dependência
+        // externa. RawBT já trata acentuação UTF-8 e a comunicação USB com a
+        // impressora; aqui só mandamos texto plano.
+        function imprimirViaRawBT(texto) {
+            try {
+                window.location.href = 'rawbt:base64,' + _base64UTF8(texto);
+            } catch (e) {
+                console.warn('[RawBT] Falha ao disparar impressão:', e);
+            }
+        }
+
         // Marca como iniciado todo item de marmita ainda pendente (não iniciado
         // e não concluído). Otimista: já atualiza o timestamp local pra UI
         // refletir na hora, mas o dado persistido (e a verdade pra qualquer
@@ -6416,6 +6529,14 @@ function carregarComanda() {
                 i.usuarioPreparo = usuario || 'Atendente';
                 if (i._id) sheetsAPI('iniciarPreparo', { item_id: i._id, usuario });
             });
+
+            // Impressão automática do ticket — só dispara no tablet que tem o
+            // toggle ativo (perfil Marmita + RawBT instalado). iniciarPreparo()
+            // só roda por clique manual, então não tem risco de imprimir
+            // repetido a cada ciclo de polling (3s).
+            if (state.perfil === 'Marmita' && _impressaoAutomatica) {
+                imprimirViaRawBT(montarTextoMarmita(comanda));
+            }
 
             saveStorage();
             renderizarPreapro();
@@ -6789,6 +6910,15 @@ function carregarComanda() {
                         // ── COMANDA EXISTENTE ──
                         let localMudou = false;
 
+                        // CASO 0: Nome do cliente preenchido em outro device (ex: marmita
+                        // digitou o nome depois que este device já tinha a comanda carregada).
+                        // Fica fora da condição do CASO 3 de propósito — mudar o nome não
+                        // altera total nem itens, então não dispararia o re-sync de itens.
+                        if (cmd.nome_cliente && local.nomeCliente !== cmd.nome_cliente) {
+                            local.nomeCliente = cmd.nome_cliente;
+                            localMudou = true;
+                        }
+
                         // CASO 1: Pagamento detectado em outro device
                         if (!local.paid && novoPaid) {
                             local.total          = parseFloat(cmd.total) || local.total;
@@ -6813,15 +6943,25 @@ function carregarComanda() {
                             }
                         }
 
-                        // CASO 3: Sincroniza itens se total mudou E não é a comanda ativa
+                        // CASO 3: Sincroniza itens se total mudou OU se há item ainda em
+                        // andamento no preparo (preparo_ja=true e sem timestampConcluido).
+                        // E não é a comanda ativa.
                         // (isso já traz os timestamps de preparo atualizados via mapItemSheets
                         // — é só essa sincronização de itens que o KDS de outro device precisa;
                         // não existe mais "status de preparo" pra reconciliar separadamente).
+                        //
+                        // Por que a 2ª condição existe: iniciarPreparo()/concluirPreparo() só
+                        // escrevem timestamp_inicio_preparo/timestamp_concluido no item — nunca
+                        // alteram comanda.total. Sem essa condição, um device só na tela de
+                        // Preparo nunca via as ações da cozinha feitas em outro device, porque
+                        // o total nunca mudava (bug: tela de Preparo "sem polling" aparente).
                         const totalServer = parseFloat(cmd.total) || 0;
+                        const temItemEmPreparoAtivo = (local.itens || []).some(i => i.preparo_ja && !i.timestampConcluido);
                         // Se admin editou preço manualmente há menos de 60s, bloquear re-sync
                         // para não sobrescrever com valores antigos do Sheets enquanto a API atualiza
                         const bloqueadoPorEdicao = local._editadoEm && (Date.now() - local._editadoEm) < 60000;
-                        if (!bloqueadoPorEdicao && chave !== state.comandaAtual && Math.abs(totalServer - (local.total || 0)) > 0.001) {
+                        if (!bloqueadoPorEdicao && chave !== state.comandaAtual &&
+                            (Math.abs(totalServer - (local.total || 0)) > 0.001 || temItemEmPreparoAtivo)) {
                             const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
                             if (itensCmd) {
                                 const serverItems  = itensCmd
