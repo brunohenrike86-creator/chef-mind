@@ -2299,6 +2299,15 @@
          com borda — lia como dashboard de sistema, não como painel de loja. -->
     <div id="fullscreenPreparo" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg-light); z-index: 9999; overflow: hidden; color: var(--text-dark); padding: 0; margin: 0; flex-direction: column;">
 
+        <!-- BANNER "VOLTAR TELA CHEIA" — aparece quando o Fullscreen cai (ex: RawBT
+             trazendo o app pra frente ao imprimir). Não tenta reentrar sozinho: o
+             navegador exige um gesto real do usuário pra requestFullscreen(), então
+             o re-trigger automático (testado via visibilitychange) falha silenciosamente.
+             Esse botão é o gesto — um toque aqui é suficiente. -->
+        <div id="bannerVoltarFullscreen" onclick="_voltarFullscreen()" style="display:none; position:absolute; top:0; left:0; right:0; z-index:300; background:#F39C12; color:white; text-align:center; padding:14px; font-size:16px; font-weight:bold; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+            👆 Toque aqui para voltar à tela cheia
+        </div>
+
         <!-- FLASH CONCLUSÃO — cobre tudo por 3s ao concluir marmita -->
         <div id="flashConcluidoOverlay" style="display:none; position:absolute; inset:0; z-index:200; background:#071a07; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:40px;">
             <div id="flashConcluidoIcone" style="font-size:100px; animation: celebrarPulso 0.6s ease-in-out infinite alternate;">✓</div>
@@ -6515,14 +6524,22 @@ function carregarComanda() {
 
             const corpo = _removerAcentos(linhas.join('\n'));
 
-            // Espaço vazio depois do texto — mesma medida final do topo (2 linhas).
-            // NÃO entra no array acima: linhas vazias só "empurram" o papel quando
-            // seguidas por um '\n' — a ÚLTIMA linha vazia de um array.join nunca tem
-            // esse '\n' depois dela (o documento simplesmente acaba), então ela nunca
-            // chegava a ser avançada/impressa. Por isso o rodapé "não ficou nada" no
-            // teste físico mesmo empurrando 5 linhas. Aqui anexamos '\n' literais
-            // direto na string — cada um garante o avanço da linha anterior.
-            const rodapeVazio = '\n'.repeat(2);
+            // Espaço vazio depois do texto. NÃO entra no array acima: linhas vazias só
+            // "empurram" o papel quando seguidas por um '\n' — a ÚLTIMA linha vazia de
+            // um array.join nunca tem esse '\n' depois dela (o documento simplesmente
+            // acaba), então ela nunca chegava a ser avançada/impressa. Por isso o
+            // rodapé "não ficou nada" no 1º teste físico mesmo empurrando 5 linhas.
+            // Aqui anexamos '\n' literais direto na string — cada um garante o avanço
+            // da linha anterior.
+            //
+            // Medida diferente do topo (não é mais "a mesma de cima"): no 2º teste,
+            // com 2 linhas (mesma medida do topo) o papel quase cortava o próprio
+            // texto na hora de rasgar. Isso é esperado — a barra de corte/rasgo fica
+            // fisicamente recuada da posição da cabeça de impressão, então o rodapé
+            // sempre precisa de mais avanço de papel que o topo pra dar margem segura.
+            // Calibrado mais generoso aqui; ajustar de novo se o próximo teste físico
+            // mostrar sobra/falta.
+            const rodapeVazio = '\n'.repeat(6);
 
             // Fonte com altura dobrada no corpo inteiro (pedido do usuário: texto
             // pequeno, difícil de ler). Reset ao final por boa prática, embora o
@@ -6662,22 +6679,38 @@ function carregarComanda() {
         // como "saiu do app"). Sem isso, depois da 1ª impressão o tablet do perfil
         // Marmita volta pra tela normal do navegador (barra de endereço visível),
         // quebrando o propósito do modo Fullscreen (tela exclusiva pra cozinha/cliente).
-        // Reentra automaticamente sempre que a aba volta a ficar visível enquanto a
-        // tela #fullscreenPreparo deveria estar aberta.
-        // Atenção: requestFullscreen() normalmente exige gesto do usuário recente;
-        // em alguns navegadores/Android isso pode falhar silenciosamente (.catch),
-        // já que o retorno do RawBT não conta como gesto novo — validar no teste real.
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState !== 'visible') return;
+        //
+        // Tentativa anterior (reentrar sozinho no 'visibilitychange') NÃO funcionou —
+        // confirmado em teste real: requestFullscreen() exige um gesto do usuário
+        // recente, e o retorno do RawBT não conta como gesto novo, então a chamada é
+        // rejeitada (silenciosamente, por isso parecia simplesmente "não fazer nada").
+        // Troca de abordagem: em vez de tentar reentrar via JS, mostra um banner
+        // tocável — o toque do operador É o gesto que o navegador exige.
+        document.addEventListener('fullscreenchange', () => {
             const fsElement = document.getElementById('fullscreenPreparo');
-            if (!fsElement || fsElement.style.display !== 'flex') return;
-            if (document.fullscreenElement) return;
-            if (fsElement.requestFullscreen) {
-                fsElement.requestFullscreen().catch(() => {});
-            } else if (fsElement.webkitRequestFullscreen) {
-                fsElement.webkitRequestFullscreen();
+            const banner = document.getElementById('bannerVoltarFullscreen');
+            if (!fsElement || !banner) return;
+            const deveriaEstarAberta = fsElement.style.display === 'flex';
+            if (deveriaEstarAberta && !document.fullscreenElement) {
+                banner.style.display = 'block';
+            } else {
+                banner.style.display = 'none';
             }
         });
+
+        function _voltarFullscreen() {
+            const fsElement = document.getElementById('fullscreenPreparo');
+            const banner = document.getElementById('bannerVoltarFullscreen');
+            if (!fsElement) return;
+            const reentrar = fsElement.requestFullscreen
+                ? fsElement.requestFullscreen()
+                : fsElement.webkitRequestFullscreen
+                    ? Promise.resolve(fsElement.webkitRequestFullscreen())
+                    : Promise.reject();
+            Promise.resolve(reentrar).then(() => {
+                if (banner) banner.style.display = 'none';
+            }).catch(() => {});
+        }
 
         function fecharFullscreen() {
             document.getElementById('fullscreenPreparo').style.display = 'none';
