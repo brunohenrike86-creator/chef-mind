@@ -6381,6 +6381,7 @@ function carregarComanda() {
             card.innerHTML = `
                 ${ehPedidoOnline ? `<div style="background:#27AE60; color:white; font-size:13px; font-weight:bold; text-align:center; padding:6px 10px; border-radius:4px; letter-spacing:0.5px;">🌐 PEDIDO ONLINE</div>` : ''}
                 ${temPreparoJa ? `<div style="background:#E67E22; color:white; font-size:13px; font-weight:bold; text-align:center; padding:6px 10px; border-radius:4px; letter-spacing:0.5px;">⚡ PREPARO P/ MESA</div>` : ''}
+                ${!ehPedidoOnline && !temPreparoJa ? `<div style="background:#7F8C8D; color:white; font-size:13px; font-weight:bold; text-align:center; padding:6px 10px; border-radius:4px; letter-spacing:0.5px;">🧾 PEDIDO CAIXA</div>` : ''}
                 <div style="background:${comanda.paid ? '#27AE60' : '#C0392B'}; color:white; font-size:13px; font-weight:bold; text-align:center; padding:6px 10px; border-radius:4px; letter-spacing:0.5px;">${comanda.paid ? '✓ PAGO' : '✗ NÃO PAGO'}</div>
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:8px; border-bottom:2px solid ${divBorder};">
                     <div style="flex:1; min-width:0;">
@@ -6470,16 +6471,20 @@ function carregarComanda() {
 
             // Espaço vazio antes do texto — facilita pegar e rasgar o papel na
             // impressora térmica (o ticket tem pouco conteúdo, sai um pedaço bem
-            // curto e difícil de manusear sem essa margem).
-            linhas.push('', '', '', '');
+            // curto e difícil de manusear sem essa margem). Reduzido de 4 para 2
+            // linhas (~40%) — usuário reportou espaço excessivo no teste físico.
+            linhas.push('', '');
 
             if (comanda.nomeCliente) linhas.push(comanda.nomeCliente.toUpperCase());
             linhas.push(`COMANDA #${comanda.numero}`);
 
             const ehPedidoOnline = comanda.canal === 'online';
             const temPreparoJa = !ehPedidoOnline && comanda.itens.some(i => i.preparo_ja);
+            // Caso implícito (else): nem online, nem preparo p/ mesa — é pedido
+            // presencial pago direto no caixa. Mesmo padrão visual das outras tags.
             if (ehPedidoOnline) linhas.push('>>> PEDIDO ONLINE <<<');
             else if (temPreparoJa) linhas.push('>>> PREPARO P/ MESA <<<');
+            else linhas.push('>>> PEDIDO CAIXA <<<');
             linhas.push(comanda.paid ? '*** PAGO ***' : '*** NÃO PAGO ***');
 
             linhas.push('--------------------------------');
@@ -6508,14 +6513,21 @@ function carregarComanda() {
 
             linhas.push('--------------------------------');
 
-            // Espaço vazio depois do texto — idem, margem pra rasgar.
-            linhas.push('', '', '', '', '');
-
             const corpo = _removerAcentos(linhas.join('\n'));
+
+            // Espaço vazio depois do texto — mesma medida final do topo (2 linhas).
+            // NÃO entra no array acima: linhas vazias só "empurram" o papel quando
+            // seguidas por um '\n' — a ÚLTIMA linha vazia de um array.join nunca tem
+            // esse '\n' depois dela (o documento simplesmente acaba), então ela nunca
+            // chegava a ser avançada/impressa. Por isso o rodapé "não ficou nada" no
+            // teste físico mesmo empurrando 5 linhas. Aqui anexamos '\n' literais
+            // direto na string — cada um garante o avanço da linha anterior.
+            const rodapeVazio = '\n'.repeat(2);
+
             // Fonte com altura dobrada no corpo inteiro (pedido do usuário: texto
             // pequeno, difícil de ler). Reset ao final por boa prática, embora o
             // corte do papel já encerre o documento.
-            return _ESC_ALTURA_DUPLA + corpo + _ESC_TAMANHO_NORMAL;
+            return _ESC_ALTURA_DUPLA + corpo + rodapeVazio + _ESC_TAMANHO_NORMAL;
         }
 
         // Dispara o app RawBT (instalado no tablet) via esquema de URL próprio
@@ -6643,6 +6655,29 @@ function carregarComanda() {
                 fsElement.msRequestFullscreen();
             }
         }
+
+        // Quando o RawBT abre (mesmo que feche sozinho em seguida, com impressora
+        // padrão configurada no app), o Android traz o RawBT pra frente por um
+        // instante — isso derruba o Fullscreen real do navegador (o sistema conta
+        // como "saiu do app"). Sem isso, depois da 1ª impressão o tablet do perfil
+        // Marmita volta pra tela normal do navegador (barra de endereço visível),
+        // quebrando o propósito do modo Fullscreen (tela exclusiva pra cozinha/cliente).
+        // Reentra automaticamente sempre que a aba volta a ficar visível enquanto a
+        // tela #fullscreenPreparo deveria estar aberta.
+        // Atenção: requestFullscreen() normalmente exige gesto do usuário recente;
+        // em alguns navegadores/Android isso pode falhar silenciosamente (.catch),
+        // já que o retorno do RawBT não conta como gesto novo — validar no teste real.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') return;
+            const fsElement = document.getElementById('fullscreenPreparo');
+            if (!fsElement || fsElement.style.display !== 'flex') return;
+            if (document.fullscreenElement) return;
+            if (fsElement.requestFullscreen) {
+                fsElement.requestFullscreen().catch(() => {});
+            } else if (fsElement.webkitRequestFullscreen) {
+                fsElement.webkitRequestFullscreen();
+            }
+        });
 
         function fecharFullscreen() {
             document.getElementById('fullscreenPreparo').style.display = 'none';
@@ -6977,8 +7012,18 @@ function carregarComanda() {
                         // alteram comanda.total. Sem essa condição, um device só na tela de
                         // Preparo nunca via as ações da cozinha feitas em outro device, porque
                         // o total nunca mudava (bug: tela de Preparo "sem polling" aparente).
+                        //
+                        // BUG CRÍTICO corrigido aqui: a condição só olhava i.preparo_ja, que é
+                        // true apenas para Pedido Online e Preparo p/ Mesa. Para "Pedido Caixa"
+                        // (comanda paga, sem preparo_ja — entra no preparo só via comanda.paid,
+                        // ver itensDoPreparo()), preparo_ja nunca fica true, então essa condição
+                        // nunca disparava: Iniciar Preparo no Device A nunca chegava nos outros
+                        // devices, porque nem total mudava nem temItemEmPreparoAtivo via true.
+                        // Acrescenta o caso local.paid + Marmita + não concluído.
                         const totalServer = parseFloat(cmd.total) || 0;
-                        const temItemEmPreparoAtivo = (local.itens || []).some(i => i.preparo_ja && !i.timestampConcluido);
+                        const temItemEmPreparoAtivo = (local.itens || []).some(i =>
+                            !i.timestampConcluido && (i.preparo_ja || (local.paid && i.tipo === 'Marmita'))
+                        );
                         // Se admin editou preço manualmente há menos de 60s, bloquear re-sync
                         // para não sobrescrever com valores antigos do Sheets enquanto a API atualiza
                         const bloqueadoPorEdicao = local._editadoEm && (Date.now() - local._editadoEm) < 60000;
