@@ -6328,21 +6328,6 @@ function carregarComanda() {
             const segundos = diff % 60;
             const tempoEspera = `${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
 
-            // Marmitas — agrupadas por nome+obs (economiza espaço, mostra qty)
-            const marmitas = comanda.itens.filter(item => item.tipo === 'Marmita');
-            const gruposMarmita = {};
-            marmitas.forEach(item => {
-                const chave = `${item.nome}||${item.observacao || ''}`;
-                if (!gruposMarmita[chave]) gruposMarmita[chave] = { nome: item.nome, observacao: item.observacao || '', qty: 0 };
-                gruposMarmita[chave].qty++;
-            });
-            const marnitasHTML = Object.values(gruposMarmita).map(g => `
-                <div style="margin: 6px 0; padding: 6px 8px; background: rgba(0,0,0,0.05); border-radius: 4px; border-left: 3px solid ${corBorda};">
-                    <div style="font-size:17px; font-weight:bold; color:${corTexto}; line-height:1.2;">${g.qty > 1 ? `<span style="background:${corBorda}; color:white; border-radius:3px; padding:1px 6px; font-size:15px; margin-right:4px;">x${g.qty}</span>` : '🍱'} ${g.nome}</div>
-                    ${g.observacao ? `<div style="font-size:14px; color:${corTexto}; opacity:0.85; margin-top:3px; font-style:italic;">↳ ${g.observacao}</div>` : ''}
-                </div>
-            `).join('');
-
             // Pedido online também nasce com preparo_ja=true em todos os itens (pula a etapa
             // 'aberta'), então sem excluir canal online aqui essa condição mostraria a tag
             // de "PREPARO P/ MESA" em todo pedido online também — por isso o canal !== 'online'.
@@ -6350,29 +6335,34 @@ function carregarComanda() {
             const temPreparoJa = !ehPedidoOnline && comanda.itens.some(i => i.preparo_ja);
             const divBorder = corTexto === 'white' ? 'rgba(255,255,255,0.3)' : 'var(--border)';
 
-            // Quando NÃO é "preparo p/ mesa" (ou seja: presencial sem ser mesa, ou
-            // pedido online), o operador empacota a comanda inteira de uma vez —
-            // marmita + bebidas/outros itens saem juntas no balcão. Já na mesa, os
-            // outros itens normalmente já foram consumidos/servidos antes da marmita
-            // entrar em preparo, então não faz sentido empacotar nada — por isso só
-            // mostramos "outros itens" quando !temPreparoJa.
-            const outrosItens = comanda.itens.filter(item =>
-                item.tipo !== 'Marmita' && item.categoria !== 'Buffet' && item.categoria !== 'Marmitas'
-            );
-            const gruposOutros = {};
-            outrosItens.forEach(item => {
-                const chave = `${item.nome}||${item.observacao || ''}`;
-                if (!gruposOutros[chave]) gruposOutros[chave] = { nome: item.nome, observacao: item.observacao || '', qty: 0 };
-                gruposOutros[chave].qty++;
+            // Pedido único: marmitas + demais itens (bebidas etc.) juntos, ordenados pelo
+            // código de cadastro — não mais separados em seções com linha pontilhada e
+            // rótulo "Empacotar junto". "Outros itens" só entra quando NÃO é "preparo p/
+            // mesa": nesse caso eles já foram servidos na mesa antes da marmita entrar em
+            // preparo, não tem o que empacotar.
+            const gruposPedido = {};
+            comanda.itens.filter(item => item.tipo === 'Marmita').forEach(item => {
+                const chave = `${item.codigo}||${item.nome}||${item.observacao || ''}`;
+                if (!gruposPedido[chave]) gruposPedido[chave] = { codigo: item.codigo, nome: item.nome, observacao: item.observacao || '', qty: 0 };
+                gruposPedido[chave].qty++;
             });
-            const outrosItensHTML = (!temPreparoJa && Object.keys(gruposOutros).length > 0) ? `
-                <div style="margin-top:4px; padding-top:6px; border-top:1px dashed ${divBorder};">
-                    <div style="font-size:11px; font-weight:bold; opacity:0.7; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">🥤 Empacotar junto</div>
-                    ${Object.values(gruposOutros).map(g => `
-                        <div style="font-size:14px; color:${corTexto}; opacity:0.9; line-height:1.3;">${g.qty > 1 ? `<span style="font-weight:bold;">${g.qty}x</span> ` : ''}${g.nome}${g.observacao ? ` <span style="opacity:0.7; font-style:italic;">(${g.observacao})</span>` : ''}</div>
-                    `).join('')}
-                </div>
-            ` : '';
+            if (!temPreparoJa) {
+                comanda.itens.filter(item =>
+                    item.tipo !== 'Marmita' && item.categoria !== 'Buffet' && item.categoria !== 'Marmitas'
+                ).forEach(item => {
+                    const chave = `${item.codigo}||${item.nome}||${item.observacao || ''}`;
+                    if (!gruposPedido[chave]) gruposPedido[chave] = { codigo: item.codigo, nome: item.nome, observacao: item.observacao || '', qty: 0 };
+                    gruposPedido[chave].qty++;
+                });
+            }
+            const itensPedidoHTML = Object.values(gruposPedido)
+                .sort((a, b) => parseInt(a.codigo, 10) - parseInt(b.codigo, 10))
+                .map(g => `
+                    <div style="margin: 6px 0; padding: 6px 8px; background: rgba(0,0,0,0.05); border-radius: 4px; border-left: 3px solid ${corBorda};">
+                        <div style="font-size:17px; font-weight:bold; color:${corTexto}; line-height:1.2;"><span style="background:${corBorda}; color:white; border-radius:3px; padding:1px 6px; font-size:13px; margin-right:4px;">Qtd ${g.qty}</span>${g.nome}</div>
+                        ${g.observacao ? `<div style="font-size:14px; color:${corTexto}; opacity:0.85; margin-top:3px; font-style:italic;">↳ ${g.observacao}</div>` : ''}
+                    </div>
+                `).join('');
 
             card.className = 'kdsCard';
             card.style.cssText = `
@@ -6391,16 +6381,16 @@ function carregarComanda() {
             card.innerHTML = `
                 ${ehPedidoOnline ? `<div style="background:#27AE60; color:white; font-size:13px; font-weight:bold; text-align:center; padding:6px 10px; border-radius:4px; letter-spacing:0.5px;">🌐 PEDIDO ONLINE</div>` : ''}
                 ${temPreparoJa ? `<div style="background:#E67E22; color:white; font-size:13px; font-weight:bold; text-align:center; padding:6px 10px; border-radius:4px; letter-spacing:0.5px;">⚡ PREPARO P/ MESA</div>` : ''}
+                <div style="background:${comanda.paid ? '#27AE60' : '#C0392B'}; color:white; font-size:13px; font-weight:bold; text-align:center; padding:6px 10px; border-radius:4px; letter-spacing:0.5px;">${comanda.paid ? '✓ PAGO' : '✗ NÃO PAGO'}</div>
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:8px; border-bottom:2px solid ${divBorder};">
                     <div style="flex:1; min-width:0;">
-                        <div style="font-size:22px; font-weight:900; color:${corBorda}; line-height:1;">#${comanda.numero}</div>
-                        ${comanda.nomeCliente ? `<div style="font-size:23px; font-weight:900; color:${corTexto}; margin-top:4px; line-height:1.15;">${comanda.nomeCliente}</div>` : ''}
+                        ${comanda.nomeCliente ? `<div style="font-size:23px; font-weight:900; color:${corTexto}; line-height:1.15;">${comanda.nomeCliente}</div>` : ''}
+                        <div style="font-size:22px; font-weight:900; color:${corBorda}; line-height:1; margin-top:${comanda.nomeCliente ? '4px' : '0'};">#${comanda.numero}</div>
                     </div>
                     <div style="font-size:13px; font-weight:bold; color:${corTexto}; opacity:0.75; white-space:nowrap; padding-left:8px; padding-top:4px;">⏱ ${tempoEspera}</div>
                 </div>
                 <div style="flex:1;">
-                    ${marnitasHTML || `<div style="font-size:13px; opacity:0.4;">—</div>`}
-                    ${outrosItensHTML}
+                    ${itensPedidoHTML || `<div style="font-size:13px; opacity:0.4;">—</div>`}
                 </div>
                 ${derivado.atendente ? `<div style="font-size:11px; opacity:0.6; border-top:1px solid ${divBorder}; padding-top:6px;">por ${derivado.atendente}</div>` : ''}
                 <div>
@@ -6445,55 +6435,87 @@ function carregarComanda() {
 
         // RawBT espera rawbt:base64,<dados> — encode UTF-8 binary-safe (btoa puro
         // quebra com acentuação; este é o truque padrão pra base64 de string UTF-8).
+        // O mesmo truque (encodeURIComponent + unescape) preserva qualquer byte
+        // 0-255 intacto, o que também deixa passar os comandos ESC/POS crus que
+        // usamos abaixo para aumentar a fonte (GS !) — rawbt:base64 entrega esses
+        // bytes ao driver da impressora sem distorção.
         function _base64UTF8(str) {
             return btoa(unescape(encodeURIComponent(str)));
         }
 
+        // rawbt:base64 manda os bytes crus pra impressora, sem reencodar — ela usa
+        // o codepage padrão de fábrica (ex: PC850/CP860), que não é UTF-8. Por isso
+        // "í" (2 bytes em UTF-8) imprime como dois caracteres quebrados (ex: símbolo
+        // + um caractere rebaixado — exatamente o bug do "Suíno"). Mais simples e
+        // confiável que configurar o codepage da impressora: remover o acento antes
+        // de imprimir (NFD separa a letra da marca de acento, daí descartamos a marca).
+        function _removerAcentos(str) {
+            return String(str || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+        }
+
+        // Comando ESC/POS "GS !" (seleção de tamanho de caractere): bits 0-3 =
+        // multiplicador de largura, bits 4-7 = multiplicador de altura. 0x01 dobra
+        // só a altura (mantém a largura normal, então não quebra a largura de 32
+        // colunas da impressora térmica nem o alinhamento dos textos).
+        const _ESC_ALTURA_DUPLA = '\x1D\x21\x01';
+        const _ESC_TAMANHO_NORMAL = '\x1D\x21\x00';
+
         // Espelha exatamente o agrupamento usado no card do KDS (criarCardPreparo):
-        // marmitas agrupadas por nome+observação, e "empacotar junto" só quando a
-        // comanda não é "preparo p/ mesa" (outros itens já foram servidos na mesa
-        // nesse caso). Sem horário — não tem valor operacional no ticket impresso.
+        // marmitas + demais itens (bebidas etc.) num pedido único, ordenado pelo
+        // código de cadastro — "outros itens" só entra quando a comanda não é
+        // "preparo p/ mesa" (nesse caso já foram servidos na mesa). Sem horário —
+        // não tem valor operacional no ticket impresso.
         function montarTextoMarmita(comanda) {
             const linhas = [];
-            linhas.push(`COMANDA #${comanda.numero}`);
-            if (comanda.nomeCliente) linhas.push(comanda.nomeCliente.toUpperCase());
-            linhas.push('--------------------------------');
 
-            const marmitas = comanda.itens.filter(item => item.tipo === 'Marmita');
-            const gruposMarmita = {};
-            marmitas.forEach(item => {
-                const chave = `${item.nome}||${item.observacao || ''}`;
-                if (!gruposMarmita[chave]) gruposMarmita[chave] = { nome: item.nome, observacao: item.observacao || '', qty: 0 };
-                gruposMarmita[chave].qty++;
-            });
-            Object.values(gruposMarmita).forEach(g => {
-                linhas.push(`${g.qty > 1 ? g.qty + 'x ' : ''}${g.nome}`);
-                if (g.observacao) linhas.push(`  > ${g.observacao}`);
-            });
+            // Espaço vazio antes do texto — facilita pegar e rasgar o papel na
+            // impressora térmica (o ticket tem pouco conteúdo, sai um pedaço bem
+            // curto e difícil de manusear sem essa margem).
+            linhas.push('', '', '', '');
+
+            if (comanda.nomeCliente) linhas.push(comanda.nomeCliente.toUpperCase());
+            linhas.push(`COMANDA #${comanda.numero}`);
 
             const ehPedidoOnline = comanda.canal === 'online';
             const temPreparoJa = !ehPedidoOnline && comanda.itens.some(i => i.preparo_ja);
-            const outrosItens = comanda.itens.filter(item =>
-                item.tipo !== 'Marmita' && item.categoria !== 'Buffet' && item.categoria !== 'Marmitas'
-            );
-            const gruposOutros = {};
-            outrosItens.forEach(item => {
-                const chave = `${item.nome}||${item.observacao || ''}`;
-                if (!gruposOutros[chave]) gruposOutros[chave] = { nome: item.nome, observacao: item.observacao || '', qty: 0 };
-                gruposOutros[chave].qty++;
-            });
-            if (!temPreparoJa && Object.keys(gruposOutros).length > 0) {
-                linhas.push('--------------------------------');
-                linhas.push('EMPACOTAR JUNTO:');
-                Object.values(gruposOutros).forEach(g => {
-                    linhas.push(`${g.qty > 1 ? g.qty + 'x ' : ''}${g.nome}${g.observacao ? ' (' + g.observacao + ')' : ''}`);
-                });
-            }
+            if (ehPedidoOnline) linhas.push('>>> PEDIDO ONLINE <<<');
+            else if (temPreparoJa) linhas.push('>>> PREPARO P/ MESA <<<');
+            linhas.push(comanda.paid ? '*** PAGO ***' : '*** NÃO PAGO ***');
 
             linhas.push('--------------------------------');
-            linhas.push('');
-            linhas.push('');
-            return linhas.join('\n');
+
+            const gruposPedido = {};
+            comanda.itens.filter(item => item.tipo === 'Marmita').forEach(item => {
+                const chave = `${item.codigo}||${item.nome}||${item.observacao || ''}`;
+                if (!gruposPedido[chave]) gruposPedido[chave] = { codigo: item.codigo, nome: item.nome, observacao: item.observacao || '', qty: 0 };
+                gruposPedido[chave].qty++;
+            });
+            if (!temPreparoJa) {
+                comanda.itens.filter(item =>
+                    item.tipo !== 'Marmita' && item.categoria !== 'Buffet' && item.categoria !== 'Marmitas'
+                ).forEach(item => {
+                    const chave = `${item.codigo}||${item.nome}||${item.observacao || ''}`;
+                    if (!gruposPedido[chave]) gruposPedido[chave] = { codigo: item.codigo, nome: item.nome, observacao: item.observacao || '', qty: 0 };
+                    gruposPedido[chave].qty++;
+                });
+            }
+            Object.values(gruposPedido)
+                .sort((a, b) => parseInt(a.codigo, 10) - parseInt(b.codigo, 10))
+                .forEach(g => {
+                    linhas.push(`Qtd ${g.qty} - ${g.nome}`);
+                    if (g.observacao) linhas.push(`      > ${g.observacao}`);
+                });
+
+            linhas.push('--------------------------------');
+
+            // Espaço vazio depois do texto — idem, margem pra rasgar.
+            linhas.push('', '', '', '', '');
+
+            const corpo = _removerAcentos(linhas.join('\n'));
+            // Fonte com altura dobrada no corpo inteiro (pedido do usuário: texto
+            // pequeno, difícil de ler). Reset ao final por boa prática, embora o
+            // corte do papel já encerre o documento.
+            return _ESC_ALTURA_DUPLA + corpo + _ESC_TAMANHO_NORMAL;
         }
 
         // Dispara o app RawBT (instalado no tablet) via esquema de URL próprio
