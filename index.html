@@ -6349,11 +6349,17 @@ function carregarComanda() {
             // rótulo "Empacotar junto". "Outros itens" só entra quando NÃO é "preparo p/
             // mesa": nesse caso eles já foram servidos na mesa antes da marmita entrar em
             // preparo, não tem o que empacotar.
+            // BUG CORRIGIDO: agrupava somando "+1 por linha de item" (qty++), o que só está
+            // correto pra itens lançados pelo atendente (1 linha = 1 unidade, ver fluxo de
+            // marmita em "Lançar N itens"). Pedido Online grava UMA linha só por item com o
+            // campo quantidade=N (novoPedidoOnline no GAS) — então qty++ sempre dava 1,
+            // mesmo com a planilha mostrando quantidade=3 corretamente. Fix: somar
+            // item.quantidade em vez de contar ocorrências.
             const gruposPedido = {};
             comanda.itens.filter(item => item.tipo === 'Marmita').forEach(item => {
                 const chave = `${item.codigo}||${item.nome}||${item.observacao || ''}`;
                 if (!gruposPedido[chave]) gruposPedido[chave] = { codigo: item.codigo, nome: item.nome, observacao: item.observacao || '', qty: 0 };
-                gruposPedido[chave].qty++;
+                gruposPedido[chave].qty += item.quantidade || 1;
             });
             if (!temPreparoJa) {
                 comanda.itens.filter(item =>
@@ -6361,7 +6367,7 @@ function carregarComanda() {
                 ).forEach(item => {
                     const chave = `${item.codigo}||${item.nome}||${item.observacao || ''}`;
                     if (!gruposPedido[chave]) gruposPedido[chave] = { codigo: item.codigo, nome: item.nome, observacao: item.observacao || '', qty: 0 };
-                    gruposPedido[chave].qty++;
+                    gruposPedido[chave].qty += item.quantidade || 1;
                 });
             }
             const itensPedidoHTML = Object.values(gruposPedido)
@@ -6499,11 +6505,13 @@ function carregarComanda() {
 
             linhas.push('--------------------------------');
 
+            // Mesmo fix do bug de quantidade aplicado em criarCardPreparo: soma
+            // item.quantidade em vez de contar 1 por linha (ver comentário lá).
             const gruposPedido = {};
             comanda.itens.filter(item => item.tipo === 'Marmita').forEach(item => {
                 const chave = `${item.codigo}||${item.nome}||${item.observacao || ''}`;
                 if (!gruposPedido[chave]) gruposPedido[chave] = { codigo: item.codigo, nome: item.nome, observacao: item.observacao || '', qty: 0 };
-                gruposPedido[chave].qty++;
+                gruposPedido[chave].qty += item.quantidade || 1;
             });
             if (!temPreparoJa) {
                 comanda.itens.filter(item =>
@@ -6511,7 +6519,7 @@ function carregarComanda() {
                 ).forEach(item => {
                     const chave = `${item.codigo}||${item.nome}||${item.observacao || ''}`;
                     if (!gruposPedido[chave]) gruposPedido[chave] = { codigo: item.codigo, nome: item.nome, observacao: item.observacao || '', qty: 0 };
-                    gruposPedido[chave].qty++;
+                    gruposPedido[chave].qty += item.quantidade || 1;
                 });
             }
             Object.values(gruposPedido)
@@ -7101,6 +7109,10 @@ function carregarComanda() {
                         if (!bloqueadoPorEdicao && chave !== state.comandaAtual &&
                             (Math.abs(totalServer - (local.total || 0)) > 0.001 || temItemEmPreparoAtivo) &&
                             fetchPromises[chave]) {
+                            // Status ANTES do re-sync — usado abaixo pra detectar a transição
+                            // pra "Concluído" causada por outro device (ver comentário após o
+                            // fetch).
+                            const statusAntes = (derivarStatusPreparo(local) || {}).status || null;
                             const itensCmd = await fetchPromises[chave];
                             if (itensCmd) {
                                 const serverItems  = itensCmd
@@ -7127,6 +7139,21 @@ function carregarComanda() {
                                     local.status = 'Em Preparo';
                                 }
                                 localMudou = true;
+
+                                // FLASH DE CONCLUSÃO REMOTA: concluirPreparo() já dispara
+                                // mostrarFlashConcluido() na hora, mas só no device onde o
+                                // operador clicou "Concluir" — o tablet do fullscreen/KDS nunca
+                                // chama concluirPreparo(), só lê via polling, então o flash nunca
+                                // acontecia nele. Comparando o status derivado ANTES/DEPOIS do
+                                // re-sync de itens, pegamos exatamente o momento em que ESTE
+                                // device descobre que a comanda ficou pronta (em outro device) e
+                                // disparamos o mesmo flash de 3s aqui. mostrarFlashConcluido() já
+                                // tem seu próprio guard pra não fazer nada se o fullscreen não
+                                // estiver aberto neste device.
+                                const statusDepois = (derivarStatusPreparo(local) || {}).status || null;
+                                if (statusAntes !== 'Concluído' && statusDepois === 'Concluído') {
+                                    mostrarFlashConcluido(chave);
+                                }
                             }
                         }
                         if (localMudou) mudou = true;
