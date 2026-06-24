@@ -6480,9 +6480,10 @@ function carregarComanda() {
 
             // Espaço vazio antes do texto — facilita pegar e rasgar o papel na
             // impressora térmica (o ticket tem pouco conteúdo, sai um pedaço bem
-            // curto e difícil de manusear sem essa margem). Reduzido de 4 para 2
-            // linhas (~40%) — usuário reportou espaço excessivo no teste físico.
-            linhas.push('', '');
+            // curto e difícil de manusear sem essa margem). Reduzido de 4 → 2 → 1
+            // linha — usuário reportou no 3º teste que ainda dava pra cortar mais
+            // em cima.
+            linhas.push('');
 
             if (comanda.nomeCliente) linhas.push(comanda.nomeCliente.toUpperCase());
             linhas.push(`COMANDA #${comanda.numero}`);
@@ -6537,9 +6538,9 @@ function carregarComanda() {
             // texto na hora de rasgar. Isso é esperado — a barra de corte/rasgo fica
             // fisicamente recuada da posição da cabeça de impressão, então o rodapé
             // sempre precisa de mais avanço de papel que o topo pra dar margem segura.
-            // Calibrado mais generoso aqui; ajustar de novo se o próximo teste físico
-            // mostrar sobra/falta.
-            const rodapeVazio = '\n'.repeat(6);
+            // Calibrado mais generoso aqui; aumentado de 6 → 8 linhas no 3º teste
+            // físico (usuário ainda pediu mais espaço embaixo).
+            const rodapeVazio = '\n'.repeat(8);
 
             // Fonte com altura dobrada no corpo inteiro (pedido do usuário: texto
             // pequeno, difícil de ler). Reset ao final por boa prática, embora o
@@ -6955,13 +6956,50 @@ function carregarComanda() {
                 }
 
                 // 2. Atualiza existentes / adiciona novas do servidor
+                //
+                // PERF: antes, cada comanda que precisava re-sincronizar itens disparava
+                // um `await sheetsAPI('getItensDaComanda', ...)` sequencial DENTRO do loop —
+                // com N comandas precisando de fetch no mesmo ciclo, os tempos de rede somam
+                // (N requisições em série), e o _pollingAtivo trava o próximo ciclo de 3s até
+                // o atual terminar inteiro. Isso explica relatos de ~40s pra um card de
+                // preparo aparecer em outro device: não era 1 request lento, eram várias
+                // somadas. Fix: 1ª passada (síncrona) decide QUAIS comandas precisam de fetch
+                // e já DISPARA todos os sheetsAPI('getItensDaComanda', ...) em paralelo (sem
+                // await ainda); 2ª passada aplica a lógica de cada comanda awaitando a
+                // promise que já está em voo — o tempo total passa a ser ~o maior tempo de
+                // resposta individual, não a soma de todos.
+                const fetchPromises = {};
+                for (const [chave, cmd] of Object.entries(serverMap)) {
+                    const local = state.comandas[chave];
+                    const novoPaid = !!(cmd.timestamp_pagamento);
+                    let precisaFetch;
+
+                    if (!local) {
+                        precisaFetch = true;
+                    } else if (!local.paid && novoPaid && (!local.itens || local.itens.length === 0)) {
+                        precisaFetch = true;
+                    } else {
+                        const totalServer = parseFloat(cmd.total) || 0;
+                        const temItemEmPreparoAtivo = (local.itens || []).some(i =>
+                            !i.timestampConcluido && (i.preparo_ja || (local.paid && i.tipo === 'Marmita'))
+                        );
+                        const bloqueadoPorEdicao = local._editadoEm && (Date.now() - local._editadoEm) < 60000;
+                        precisaFetch = !bloqueadoPorEdicao && chave !== state.comandaAtual &&
+                            (Math.abs(totalServer - (local.total || 0)) > 0.001 || temItemEmPreparoAtivo);
+                    }
+
+                    if (precisaFetch) {
+                        fetchPromises[chave] = sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
+                    }
+                }
+
                 for (const [chave, cmd] of Object.entries(serverMap)) {
                     const local = state.comandas[chave];
                     const novoPaid = !!(cmd.timestamp_pagamento);
 
                     if (!local) {
                         // ── COMANDA NOVA (aberta em outro device) ──
-                        const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
+                        const itensCmd = await fetchPromises[chave];
                         const data = cmd.timestamp_abertura ? cmd.timestamp_abertura.split('T')[0] : dataAtual;
                         const itens = (itensCmd || [])
                             .filter(i => String(i.removido).toLowerCase() !== 'true')
@@ -7017,7 +7055,7 @@ function carregarComanda() {
                             local.dataPagamento  = cmd.timestamp_pagamento || local.dataPagamento;
                             // Jornada de preparo: verifica marmitas antes de fechar
                             if (!local.itens || local.itens.length === 0) {
-                                const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
+                                const itensCmd = await fetchPromises[chave];
                                 if (itensCmd) local.itens = itensCmd.filter(i => String(i.removido).toLowerCase() !== 'true').map(mapItemSheets);
                             }
                             const temMarmita = (local.itens || []).some(i => i.tipo === 'Marmita');
@@ -7061,8 +7099,9 @@ function carregarComanda() {
                         // para não sobrescrever com valores antigos do Sheets enquanto a API atualiza
                         const bloqueadoPorEdicao = local._editadoEm && (Date.now() - local._editadoEm) < 60000;
                         if (!bloqueadoPorEdicao && chave !== state.comandaAtual &&
-                            (Math.abs(totalServer - (local.total || 0)) > 0.001 || temItemEmPreparoAtivo)) {
-                            const itensCmd = await sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
+                            (Math.abs(totalServer - (local.total || 0)) > 0.001 || temItemEmPreparoAtivo) &&
+                            fetchPromises[chave]) {
+                            const itensCmd = await fetchPromises[chave];
                             if (itensCmd) {
                                 const serverItems  = itensCmd
                                     .filter(i => String(i.removido).toLowerCase() !== 'true')
