@@ -2308,6 +2308,21 @@
             👆 Toque aqui para voltar à tela cheia
         </div>
 
+        <!-- VÍDEO DE OCIOSIDADE — cobre tudo quando a fila fica vazia por 3min seguidos.
+             z-index abaixo do flashConcluidoOverlay de propósito: se uma comanda for
+             concluída bem na hora em que o vídeo está tocando, o flash de "pronto" tem
+             que aparecer por cima do vídeo, não o contrário. Sem backdrop-filter (Regra 15
+             do projeto — blur + pointer-events:none já causou bug nesse tipo de overlay).
+             Fundo var(--bg-light) (não preto) — revisão cm-ux-ops: tela preta no
+             carregamento do iframe lia como "TV travou" pro cliente no salão; com a
+             cor do próprio kiosk, o instante de carregamento fica visualmente dentro
+             da identidade da tela, não um vazio preto. Fade-in de 5s só na ENTRADA
+             (opacity, via transition) — a SAÍDA continua instantânea (display:none
+             direto em _esconderIdleVideo), preservando a regra de interrupção imediata. -->
+        <div id="idleVideoOverlay" style="display:none; position:absolute; inset:0; z-index:150; background:var(--bg-light); opacity:0; transition:opacity 5s ease-in;">
+            <iframe id="idleVideoFrame" style="width:100%; height:100%; border:0;" allow="autoplay; encrypted-media" frameborder="0" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+        </div>
+
         <!-- FLASH CONCLUSÃO — cobre tudo por 3s ao concluir marmita -->
         <div id="flashConcluidoOverlay" style="display:none; position:absolute; inset:0; z-index:200; background:#071a07; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:40px;">
             <div id="flashConcluidoIcone" style="font-size:100px; animation: celebrarPulso 0.6s ease-in-out infinite alternate;">✓</div>
@@ -2683,6 +2698,10 @@
                         if (config[`carnes_${sigla}`])
                             state.marnitasDia[idx] = config[`carnes_${sigla}`].split(',').map(c=>c.trim()).filter(Boolean);
                     });
+                    // Vídeo de ociosidade do Fullscreen Cliente — chave genérica na aba
+                    // config (idle_video_url), sem precisar de mudança no GAS (getConfig
+                    // já é chave|valor livre). Trocar o vídeo = só editar essa célula.
+                    state.idleVideoUrl = config['idle_video_url'] || '';
                     console.log('[Sheets] ✅ Config carregada');
                 }
 
@@ -6658,6 +6677,14 @@ function carregarComanda() {
         // ========== FULLSCREEN PREPARO ==========
         let timerFullscreenInterval = null;
 
+        // Vídeo de ociosidade: controle precisa ficar no escopo do módulo (Regra 16),
+        // não dentro de renderizarFullscreen(), porque essa função é chamada a cada 1s
+        // pelo iniciarTimerFullscreen() — uma variável local seria recriada/perdida a
+        // cada chamada e o cronômetro de "3 min vazio" nunca avançaria.
+        let _idleDesde = null;       // timestamp de quando a fila ficou vazia, ou null
+        let _idleVideoTocando = false; // evita re-montar o iframe repetidamente enquanto já está tocando
+        const IDLE_VIDEO_TIMEOUT_MS = 20 * 1000; // ⚠️ TESTE: 20s (valor final é 3 * 60 * 1000 = 3min)
+
         function abrirFullscreen() {
             const fsElement = document.getElementById('fullscreenPreparo');
             fsElement.style.display = 'flex';
@@ -6724,7 +6751,12 @@ function carregarComanda() {
         function fecharFullscreen() {
             document.getElementById('fullscreenPreparo').style.display = 'none';
             pararTimerFullscreen();
-            
+            // Resetar o vídeo de ociosidade ao fechar — senão, ao reabrir o fullscreen,
+            // _idleVideoTocando ficaria true sem o iframe de fato tocando (já que
+            // _esconderIdleVideo nunca foi chamado), travando o estado.
+            _esconderIdleVideo();
+            _idleDesde = null;
+
             // ✅ SAIR DO FULLSCREEN REAL
             if (document.fullscreenElement) {
                 document.exitFullscreen().catch(err => {
@@ -6739,6 +6771,41 @@ function carregarComanda() {
             }
         }
 
+        // Extrai o ID de vídeo do YouTube tanto de youtu.be/<id> quanto de
+        // youtube.com/watch?v=<id> (e variantes com parâmetros extras tipo &t=10s).
+        function _extrairYoutubeId(url) {
+            if (!url) return null;
+            const m = url.match(/(?:youtu\.be\/|v=|\/embed\/)([a-zA-Z0-9_-]{11})/);
+            return m ? m[1] : null;
+        }
+
+        // Mostra o vídeo de ociosidade por cima da tela padrão do kiosk.
+        function _mostrarIdleVideo() {
+            const videoId = _extrairYoutubeId(state.idleVideoUrl);
+            if (!videoId) return; // sem URL configurada na aba config — não faz nada
+            const overlay = document.getElementById('idleVideoOverlay');
+            const frame = document.getElementById('idleVideoFrame');
+            if (!overlay || !frame) return;
+            frame.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}&controls=0&rel=0`;
+            overlay.style.display = 'block';
+            // display precisa "assentar" antes da mudança de opacity, senão o browser
+            // não anima a transição (parte de display:none direto pra opacity:1).
+            requestAnimationFrame(() => { overlay.style.opacity = '1'; });
+            _idleVideoTocando = true;
+        }
+
+        // Interrompe o vídeo IMEDIATAMENTE — remover o src (não só escondar via CSS) é
+        // o que garante que o player pare de fato; só dar display:none deixaria o vídeo
+        // tocando escondido. opacity volta pra 0 na hora (sem transição na saída) pra
+        // garantir que o próximo ciclo de ociosidade comece o fade do zero.
+        function _esconderIdleVideo() {
+            const overlay = document.getElementById('idleVideoOverlay');
+            const frame = document.getElementById('idleVideoFrame');
+            if (overlay) { overlay.style.display = 'none'; overlay.style.opacity = '0'; }
+            if (frame) frame.src = '';
+            _idleVideoTocando = false;
+        }
+
         function renderizarFullscreen() {
             const dataAtual = new Date().toISOString().split('T')[0];
 
@@ -6751,6 +6818,19 @@ function carregarComanda() {
             const aguardando = todasComandas.filter(([, , d]) => d.status === 'Aguardando');
             const emPreparo  = todasComandas.filter(([, , d]) => d.status === 'Em Preparo');
             const concluidos = todasComandas.filter(([, , d]) => d.status === 'Concluído');
+
+            // VÍDEO DE OCIOSIDADE: se as 3 colunas estiverem vazias, conta 3 min;
+            // se qualquer comanda aparecer, interrompe na hora (Rule do pedido do
+            // usuário: "no momento que pingar uma comanda interrompe imediatamente").
+            if (todasComandas.length === 0) {
+                if (_idleDesde === null) _idleDesde = Date.now();
+                if (!_idleVideoTocando && (Date.now() - _idleDesde) >= IDLE_VIDEO_TIMEOUT_MS) {
+                    _mostrarIdleVideo();
+                }
+            } else {
+                _idleDesde = null;
+                if (_idleVideoTocando) _esconderIdleVideo();
+            }
 
             // ✅ Tela do cliente não precisa seguir a paleta "séria" do sistema
             // interno (terracota usado nas telas de staff) — aqui o objetivo é
