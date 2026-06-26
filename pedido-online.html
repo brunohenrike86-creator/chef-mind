@@ -226,10 +226,6 @@ const WHATSAPP_AJUDA = '5541997829474';      // 41 99782-9474, com DDI 55
 const TELEFONE_AJUDA = '+5541997829474';
 
 function estaDentroDoHorario() {
-    // 🚧 TRAVA DESLIGADA TEMPORARIAMENTE PRA TESTE — reverter (remover o "return true;" abaixo)
-    // antes de voltar pra produção. Debitado como pendência pra não esquecer.
-    return true;
-
     const agora = new Date();
     if (agora.getDay() === 0) return false; // domingo não atende
     const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
