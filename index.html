@@ -39,49 +39,70 @@
             overflow: hidden;
         }
 
-        /* ========== LOGIN ========== */
+        /* ========== LOGIN ==========
+           Redesign (cm-ux-ops): tela acessada 1x por turno em tablet/desktop, sem pressa
+           de rush — aqui dá pra investir em acabamento "premium" sem custar tap algum.
+           Mantém os MESMOS ids/estrutura funcional (loginUser, loginPassword, btnLogin,
+           btnTogglePassword, loginErro) — só evolução visual, zero risco de quebrar JS. */
         #loginScreen {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: var(--bg-light);
+            background:
+                radial-gradient(circle at 18% 12%, rgba(245,169,98,0.30), transparent 55%),
+                radial-gradient(circle at 85% 90%, rgba(212,114,79,0.16), transparent 50%),
+                linear-gradient(160deg, #FBF8F4 0%, #F3ECE3 55%, #EFE0CC 100%);
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 1000;
+            padding: 20px;
         }
 
         #loginScreen.hidden {
             display: none;
         }
 
-        .login-box {
-            background: white;
-            padding: 28px 20px;
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-            width: 100%;
-            max-width: 300px;
-            border-top: 5px solid var(--primary);
+        @keyframes loginFadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
 
-        .login-logo {
-            font-size: 44px;
-            text-align: center;
-            margin-bottom: 12px;
+        .login-box {
+            background: white;
+            padding: 36px 30px 30px;
+            border-radius: 22px;
+            box-shadow: 0 24px 60px rgba(44,24,16,0.14), 0 4px 14px rgba(44,24,16,0.06);
+            width: 100%;
+            max-width: 340px;
+            border: 1px solid rgba(212,165,116,0.22);
+            animation: loginFadeIn 0.45s ease both;
         }
 
         .login-title {
-            font-size: 18px;
-            font-weight: bold;
+            font-size: 26px;
+            font-weight: 800;
             text-align: center;
-            margin-bottom: 24px;
+            letter-spacing: -0.3px;
+            color: var(--text-dark);
+            margin-bottom: 4px;
+            margin-top: 4px;
+        }
+
+        .login-subtitle {
+            font-size: 11.5px;
+            font-weight: 700;
+            text-align: center;
+            color: var(--gray);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 26px;
         }
 
         .form-group {
-            margin-bottom: 14px;
+            margin-bottom: 16px;
         }
 
         .form-group label {
@@ -89,21 +110,39 @@
             margin-bottom: 6px;
             font-weight: 600;
             font-size: 13px;
+            color: var(--text-dark);
+        }
+
+        .input-wrap {
+            position: relative;
+        }
+
+        .input-wrap .input-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 15px;
+            opacity: 0.5;
+            pointer-events: none;
         }
 
         .form-group input {
             width: 100%;
-            padding: 12px;
+            padding: 13px 14px 13px 40px;
             font-size: 16px;
-            border: 2px solid var(--border);
-            border-radius: 6px;
+            border: 1.5px solid #ECE0D2;
+            background: #FAF7F2;
+            border-radius: 10px;
             -webkit-appearance: none;
+            transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
         }
 
         .form-group input:focus {
             outline: none;
+            background: white;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(212, 114, 79, 0.2);
+            box-shadow: 0 0 0 4px rgba(212, 114, 79, 0.14);
         }
 
         .password-wrapper {
@@ -112,31 +151,40 @@
 
         .btn-toggle-password {
             position: absolute;
-            right: 10px;
+            right: 8px;
             top: 50%;
             transform: translateY(-50%);
             background: none;
             border: none;
             cursor: pointer;
             font-size: 16px;
+            padding: 8px;
+            border-radius: 8px;
+        }
+
+        .btn-toggle-password:active {
+            background: rgba(0,0,0,0.05);
         }
 
         .btn-login {
             width: 100%;
-            padding: 14px;
+            padding: 15px;
             font-size: 15px;
-            font-weight: bold;
+            font-weight: 700;
+            letter-spacing: 0.2px;
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 10px;
             cursor: pointer;
-            margin-top: 14px;
-            transition: all 0.3s;
+            margin-top: 16px;
+            box-shadow: 0 6px 16px rgba(212,114,79,0.3);
+            transition: transform 0.12s, box-shadow 0.2s;
         }
 
         .btn-login:active {
             transform: scale(0.98);
+            box-shadow: 0 3px 10px rgba(212,114,79,0.3);
         }
 
         /* ========== MAIN APP ========== */
@@ -155,7 +203,7 @@
 
         /* ========== HEADER ========== */
         .header {
-            background: linear-gradient(135deg, #704D34 0%, #8B6F47 100%);
+            background: linear-gradient(135deg, var(--wood-dark) 0%, var(--primary-dark) 100%);
             color: var(--text-light);
             padding: 8px 10px;
             display: flex;
@@ -1338,17 +1386,21 @@
     <!-- LOGIN SCREEN -->
     <div id="loginScreen">
         <div class="login-box">
-            <div class="login-logo">🍽️</div>
-            <div class="login-title">Restaurante Michelin</div>
-            
+            <div class="login-title">Michelin Restaurante</div>
+            <div class="login-subtitle">Sistema de Gestão</div>
+
             <div class="form-group">
                 <label>Usuário</label>
-                <input type="text" id="loginUser" placeholder="Digite seu usuário" autofocus>
+                <div class="input-wrap">
+                    <span class="input-icon">👤</span>
+                    <input type="text" id="loginUser" placeholder="Digite seu usuário" autofocus>
+                </div>
             </div>
 
             <div class="form-group">
                 <label>Senha</label>
-                <div class="password-wrapper">
+                <div class="password-wrapper input-wrap">
+                    <span class="input-icon">🔒</span>
                     <input type="password" id="loginPassword" placeholder="Digite sua senha">
                     <button class="btn-toggle-password" id="btnTogglePassword">👁️</button>
                 </div>
@@ -1533,7 +1585,7 @@
                         <!-- LISTA (flex: 1 para crescer, padding mínimo) -->
                         <div id="listaItensLançados" style="flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 6px;"></div>
                         <!-- TOTAL -->
-                        <div id="lancar-total-bar" onclick="toggleListaMobile(event)" style="padding: 10px 6px; background: linear-gradient(135deg, #704D34 0%, #8B6F47 100%); color: white; border-top: 1px solid var(--border); flex-shrink: 0;">
+                        <div id="lancar-total-bar" onclick="toggleListaMobile(event)" style="padding: 10px 6px; background: linear-gradient(135deg, var(--wood-dark) 0%, var(--primary-dark) 100%); color: white; border-top: 1px solid var(--border); flex-shrink: 0;">
                             <div style="font-size: 9px; opacity: 0.9; margin-bottom: 2px;">TOTAL</div>
                             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                                 <div id="totalComanda" style="font-size: 26px; font-weight: bold; flex:1;">R$ 0,00</div>
@@ -1597,7 +1649,7 @@
                                 <div style="text-align:right;">TOTAL</div>
                             </div>
                             <div id="listaCheckoutItens" style="flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;" onscroll="event.stopPropagation()"></div>
-                            <div id="totalCheckout" style="padding: 6px 8px; background: linear-gradient(135deg, #704D34 0%, #8B6F47 100%); color: white; text-align: center; font-weight: bold; border-top: 1px solid var(--border); flex-shrink: 0;">
+                            <div id="totalCheckout" style="padding: 6px 8px; background: linear-gradient(135deg, var(--wood-dark) 0%, var(--primary-dark) 100%); color: white; text-align: center; font-weight: bold; border-top: 1px solid var(--border); flex-shrink: 0;">
                                 <div style="font-size: 9px; opacity: 0.8; letter-spacing: 1px;">TOTAL</div>
                                 <div style="font-size: 22px; line-height: 1.15;">R$ 0,00</div>
                             </div>
@@ -1615,12 +1667,12 @@
                         <div id="areaPagamento" style="display: none; flex-shrink: 0; background: white; border: 1px solid var(--border); border-radius: 2px; padding: 4px;">
                             <div style="font-size: 8px; font-weight: bold; color: var(--primary); margin-bottom: 3px;">💳 FORMA DE PAGAMENTO</div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap: 2px;">
-                                <button type="button" onclick="escolherPagamento('pix')" class="btnPagamento" id="pagPix" style="padding: 7px 4px; background: white; border: 2px solid var(--border); border-radius: 2px; cursor: pointer; font-size: 9px; font-weight: bold; color: var(--text-dark);">📱<br>PIX</button>
-                                <button type="button" onclick="escolherPagamento('dinheiro')" class="btnPagamento" id="pagDinheiro" style="padding: 7px 4px; background: white; border: 2px solid var(--border); border-radius: 2px; cursor: pointer; font-size: 9px; font-weight: bold; color: var(--text-dark);">💵<br>$</button>
-                                <button type="button" onclick="escolherPagamento('credito')" class="btnPagamento" id="pagCredito" style="padding: 7px 4px; background: white; border: 2px solid var(--border); border-radius: 2px; cursor: pointer; font-size: 9px; font-weight: bold; color: var(--text-dark);">💳<br>CC</button>
-                                <button type="button" onclick="escolherPagamento('debito')" class="btnPagamento" id="pagDebito" style="padding: 7px 4px; background: white; border: 2px solid var(--border); border-radius: 2px; cursor: pointer; font-size: 9px; font-weight: bold; color: var(--text-dark);">🏧<br>DB</button>
-                                <button type="button" onclick="escolherPagamento('voucher')" class="btnPagamento" id="pagVoucher" style="padding: 7px 4px; background: white; border: 2px solid var(--border); border-radius: 2px; cursor: pointer; font-size: 9px; font-weight: bold; color: var(--text-dark);">🎫<br>VC</button>
-                                <button type="button" onclick="escolherPagamento('a_receber')" class="btnPagamento" id="pagAReceber" style="padding: 7px 4px; background: white; border: 2px solid var(--border); border-radius: 2px; cursor: pointer; font-size: 9px; font-weight: bold; color: var(--text-dark);">📋<br>A REC.</button>
+                                <button type="button" onclick="escolherPagamento('pix')" class="btnPagamento" id="pagPix" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);">📱<br>PIX</button>
+                                <button type="button" onclick="escolherPagamento('dinheiro')" class="btnPagamento" id="pagDinheiro" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);">💵<br>$</button>
+                                <button type="button" onclick="escolherPagamento('credito')" class="btnPagamento" id="pagCredito" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);">💳<br>CC</button>
+                                <button type="button" onclick="escolherPagamento('debito')" class="btnPagamento" id="pagDebito" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);">🏧<br>DB</button>
+                                <button type="button" onclick="escolherPagamento('voucher')" class="btnPagamento" id="pagVoucher" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);">🎫<br>VC</button>
+                                <button type="button" onclick="escolherPagamento('a_receber')" class="btnPagamento" id="pagAReceber" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);">📋<br>A REC.</button>
                             </div>
                         </div>
 
@@ -2928,6 +2980,7 @@
             updateDate();
             setupEvents();
             setupAdminTabs();
+
             // barcode listener inicializado dentro de setupTelaLançar()
 
             // Renderizar listas admin
@@ -4752,14 +4805,21 @@
             showToast(`✅ Senha de @${login} resetada`, 'success');
         }
 
-        function deleteUsuario(login) {
+        async function deleteUsuario(login) {
             // ✅ PROTEÇÃO: Não permitir deletar bruno
             if (login === 'bruno') {
                 showToast('❌ Não é permitido deletar o usuário padrão "bruno"', 'error');
                 return;
             }
 
-            if (confirm(`⚠️ Tem certeza que deseja deletar @${login}?\n\nEsta ação não pode ser desfeita.`)) {
+            const ok = await confirmarAcao({
+                titulo: 'Deletar usuário',
+                mensagem: `Tem certeza que deseja deletar @${login}?\n\nEsta ação não pode ser desfeita.`,
+                textoConfirmar: 'Deletar',
+                icone: '🗑️',
+                corPerigo: true
+            });
+            if (ok) {
                 delete state.usuarios[login];
                 saveStorage();
                 sheetsAPI('deletarUsuario', { login }); // ☁️ SHEETS
@@ -4777,6 +4837,71 @@
             toast.textContent = msg;
             toast.className = `toast show ${type}`;
             setTimeout(() => toast.classList.remove('show'), type === 'success' ? 1500 : 2000);
+        }
+
+        // ========== MODAL DE CONFIRMAÇÃO (substitui confirm() nativo) ==========
+        // cm-ux-ops: confirm() nativo não é estilizável, quebra a identidade visual no
+        // meio do fluxo, renderiza \n como texto puro (sem formatação) e — pior — em ações
+        // irreversíveis (reset total, fechar caixa/expediente) tem só um botão "OK"
+        // pequeno e genérico, fácil de confirmar por reflexo num rush. Este modal
+        // padroniza a experiência e permite exigir digitar uma palavra-chave (requerTexto)
+        // antes de habilitar o botão de confirmar nas ações mais graves.
+        // Uso: const ok = await confirmarAcao({ titulo, mensagem, textoConfirmar, corPerigo, requerTexto, icone });
+        let _mcResolve = null;
+        let _mcRequerTexto = null;
+
+        function confirmarAcao(opts) {
+            opts = opts || {};
+            return new Promise(resolve => {
+                _mcResolve = resolve;
+                _mcRequerTexto = opts.requerTexto || null;
+
+                document.getElementById('mcIcone').textContent = opts.icone || (opts.corPerigo ? '⚠️' : '❓');
+                document.getElementById('mcTitulo').textContent = opts.titulo || 'Confirmar ação';
+                document.getElementById('mcMensagem').innerHTML = String(opts.mensagem || '').replace(/\n/g, '<br>');
+
+                const btn = document.getElementById('mcBtnConfirmar');
+                btn.textContent = opts.textoConfirmar || 'Confirmar';
+                btn.style.background = opts.corPerigo ? 'var(--danger)' : 'var(--primary)';
+
+                const wrap = document.getElementById('mcWrapTexto');
+                const input = document.getElementById('mcInputTexto');
+                input.value = '';
+                if (_mcRequerTexto) {
+                    wrap.style.display = 'block';
+                    document.getElementById('mcLabelTexto').textContent = `Digite "${_mcRequerTexto}" para confirmar`;
+                    btn.disabled = true;
+                    btn.style.opacity = '0.5';
+                    btn.style.cursor = 'not-allowed';
+                } else {
+                    wrap.style.display = 'none';
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.style.cursor = 'pointer';
+                }
+
+                document.getElementById('modalConfirmacao').style.display = 'flex';
+                if (_mcRequerTexto) setTimeout(() => input.focus(), 50);
+            });
+        }
+
+        function _mcValidarTexto() {
+            const btn = document.getElementById('mcBtnConfirmar');
+            const input = document.getElementById('mcInputTexto');
+            const ok = !_mcRequerTexto || input.value.trim().toUpperCase() === _mcRequerTexto.toUpperCase();
+            btn.disabled = !ok;
+            btn.style.opacity = ok ? '1' : '0.5';
+            btn.style.cursor = ok ? 'pointer' : 'not-allowed';
+        }
+
+        function _mcFechar(resultado) {
+            if (resultado && _mcRequerTexto) {
+                const input = document.getElementById('mcInputTexto');
+                if (input.value.trim().toUpperCase() !== _mcRequerTexto.toUpperCase()) return; // guarda extra
+            }
+            document.getElementById('modalConfirmacao').style.display = 'none';
+            if (_mcResolve) { _mcResolve(resultado); _mcResolve = null; }
+            _mcRequerTexto = null;
         }
 
         // ========== ABRIR COMANDA ==========
@@ -6064,7 +6189,12 @@ function carregarComanda() {
             });
             
             // Selecionar clicado
-            const btnSelecionado = document.getElementById('pag' + tipo.charAt(0).toUpperCase() + tipo.slice(1));
+            // ⚠️ Tipos com underscore (ex.: 'a_receber') viram PascalCase pra casar com o
+            // id do botão (id="pagAReceber"). Antes só capitalizava a 1ª letra do tipo
+            // inteiro, gerando 'pagA_receber' — nunca batia com o id real, então o botão
+            // "A Receber" nunca ficava marrom/ativo ao ser selecionado.
+            const idPagamento = 'pag' + tipo.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('');
+            const btnSelecionado = document.getElementById(idPagamento);
             if (btnSelecionado) {
                 btnSelecionado.style.background = 'var(--primary)';
                 btnSelecionado.style.borderColor = 'var(--primary)';
@@ -7492,7 +7622,14 @@ function carregarComanda() {
                 return;
             }
 
-            if (!confirm(`⚠️ RESET TOTAL\n\nIsso vai encerrar TODAS as ${abertas.length} comanda(s) do dia (abertas e pagas).\nOs dados ficam no histórico mas saem da tela.\n\nTodos os devices serão atualizados em até 3 segundos.\n\nContinuar?`)) return;
+            const okReset = await confirmarAcao({
+                titulo: 'Reset total do dia',
+                mensagem: `Isso vai encerrar TODAS as ${abertas.length} comanda(s) do dia (abertas e pagas).\nOs dados ficam no histórico mas saem da tela.\n\nTodos os devices serão atualizados em até 3 segundos.`,
+                textoConfirmar: 'Resetar tudo',
+                corPerigo: true,
+                requerTexto: 'RESETAR'
+            });
+            if (!okReset) return;
 
             showToast('⏳ Executando reset...', 'info');
             try {
@@ -7566,7 +7703,13 @@ function carregarComanda() {
             const trocoEl = document.getElementById('inputTrocoAbertura');
             const troco   = parseFloat(trocoEl.value) || 0;
 
-            if (!confirm(`Abrir o caixa com troco de R$ ${troco.toFixed(2)}?\n\nAs comandas abertas serão resetadas automaticamente.`)) return;
+            const okAbrir = await confirmarAcao({
+                titulo: 'Abrir caixa',
+                mensagem: `Abrir o caixa com troco de R$ ${troco.toFixed(2)}?\n\nAs comandas abertas serão resetadas automaticamente.`,
+                textoConfirmar: 'Abrir caixa',
+                icone: '💰'
+            });
+            if (!okAbrir) return;
 
             showToast('⏳ Abrindo caixa...', 'info');
             try {
@@ -7845,7 +7988,14 @@ function carregarComanda() {
             const troco      = state.caixa.troco || 0;
             const diff       = (vendaTotal + troco) - (maquinas + sangria + residual + aReceber);
 
-            if (!confirm(`Confirmar fechamento do caixa?\n\nVendas: R$ ${vendaTotal.toFixed(2)}\nDiferença: R$ ${diff.toFixed(2)}`)) return;
+            const okFechar = await confirmarAcao({
+                titulo: 'Fechar caixa',
+                mensagem: `Vendas: R$ ${vendaTotal.toFixed(2)}\nDiferença: R$ ${diff.toFixed(2)}`,
+                textoConfirmar: 'Fechar caixa',
+                icone: '🔒',
+                corPerigo: Math.abs(diff) > 0.01
+            });
+            if (!okFechar) return;
 
             showToast('⏳ Fechando caixa...', 'info');
             try {
@@ -7898,8 +8048,7 @@ function carregarComanda() {
             );
             const totalVendido = pagas.reduce((s, c) => s + (c.total || 0), 0);
 
-            let msg = `🔒 FECHAR EXPEDIENTE\n\n`;
-            msg += `📊 Resumo do dia:\n`;
+            let msg = `📊 Resumo do dia:\n`;
             msg += `  • Comandas pagas: ${pagas.length}\n`;
             msg += `  • Total vendido: R$ ${totalVendido.toFixed(2)}\n`;
             if (abertas.length > 0) {
@@ -7909,9 +8058,15 @@ function carregarComanda() {
             } else {
                 msg += `\n✅ Todas as comandas foram pagas.`;
             }
-            msg += `\n\nConfirmar fechamento do expediente?`;
 
-            if (!confirm(msg)) return;
+            const okExp = await confirmarAcao({
+                titulo: 'Fechar expediente',
+                mensagem: msg,
+                textoConfirmar: 'Fechar expediente',
+                icone: '🔒',
+                corPerigo: abertas.length > 0
+            });
+            if (!okExp) return;
 
             showToast('⏳ Fechando expediente...', 'info');
             try {
@@ -10502,6 +10657,25 @@ var itens = comanda.itens || [];
             <div class="mar-btns">
                 <button class="mar-btn-cancelar" onclick="fecharModalAReceber()">Cancelar</button>
                 <button class="mar-btn-confirmar" onclick="confirmarModalAReceber()">✓ Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CONFIRMAÇÃO GENÉRICO — ver confirmarAcao() no JS. Substitui confirm()
+         nativo nas ações críticas (deletar usuário, reset total, abrir/fechar caixa,
+         fechar expediente) por algo estilizado e, nas mais graves, com palavra-chave. -->
+    <div id="modalConfirmacao" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:10000; justify-content:center; align-items:center;">
+        <div style="background:white; border-radius:14px; width:92%; max-width:380px; padding:26px 22px; box-shadow:0 16px 50px rgba(0,0,0,0.4); text-align:center;">
+            <div id="mcIcone" style="font-size:34px; margin-bottom:8px;">⚠️</div>
+            <div id="mcTitulo" style="font-size:17px; font-weight:bold; color:var(--text-dark); margin-bottom:10px;"></div>
+            <div id="mcMensagem" style="font-size:13px; color:var(--gray); line-height:1.5; margin-bottom:18px; text-align:left;"></div>
+            <div id="mcWrapTexto" style="display:none; margin-bottom:18px; text-align:left;">
+                <label id="mcLabelTexto" style="display:block; font-size:11px; font-weight:bold; color:var(--gray); margin-bottom:6px; text-transform:uppercase;"></label>
+                <input id="mcInputTexto" type="text" oninput="_mcValidarTexto()" onkeydown="if(event.key==='Enter') _mcFechar(true); if(event.key==='Escape') _mcFechar(false);" style="width:100%; padding:11px; font-size:15px; border:2px solid var(--border); border-radius:8px; text-align:center; font-weight:bold; letter-spacing:1px; box-sizing:border-box;">
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <button onclick="_mcFechar(false)" style="padding:13px; background:#eee; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:13px; color:#333;">Cancelar</button>
+                <button id="mcBtnConfirmar" onclick="_mcFechar(true)" style="padding:13px; background:var(--primary); color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:13px;">Confirmar</button>
             </div>
         </div>
     </div>
