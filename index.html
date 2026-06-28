@@ -5034,6 +5034,13 @@ function carregarComanda() {
                     ehOnlineLancar ? '🌐 Pedido online - continue lançando' : '⚡ Comanda com Preparo p/ mesa - continue lançando',
                     'info'
                 );
+
+                // ⚖️ MODO BALANÇA: abre modal de peso também ao carregar comanda em preparo
+                // (mesma regra de criarComandaInline — Buffet p/ Quilo item 002)
+                if (state.perfil === 'Balança') {
+                    const item002 = state.itens['002'];
+                    if (item002) setTimeout(() => abrirModalBuffetQuilo('002', item002), 200);
+                }
                 return;
             }
 
@@ -5069,6 +5076,13 @@ function carregarComanda() {
 
             // Focus no código (ignorado em modo-mobile)
             setTimeout(_focusCodigoItem, 100);
+
+            // ⚖️ MODO BALANÇA: abre modal de peso também ao carregar comanda já aberta
+            // (mesma regra de criarComandaInline — Buffet p/ Quilo item 002)
+            if (state.perfil === 'Balança') {
+                const item002 = state.itens['002'];
+                if (item002) setTimeout(() => abrirModalBuffetQuilo('002', item002), 200);
+            }
         }
 
         function limparTelaLançar() {
@@ -5919,7 +5933,13 @@ function carregarComanda() {
                     if (!marmitas[item.codigo]) {
                         marmitas[item.codigo] = { ...item, quantidade: 0, observacoes: [] };
                     }
-                    marmitas[item.codigo].quantidade += 1;
+                    // Soma item.quantidade (não +=1) — marmitas do Pedido Online podem
+                    // vir como 1 linha com quantidade > 1. Mesmo bug já corrigido em
+                    // renderizarListaLançada; esta função (selecionarComandaCheckout) é a
+                    // que de fato renderiza a lista de itens do Checkout — a outra função
+                    // chamada renderizarCheckoutItens() existe no arquivo mas não é chamada
+                    // em lugar nenhum (código morto), então corrigi-la antes não tinha efeito.
+                    marmitas[item.codigo].quantidade += (item.quantidade || 1);
                     if (item.observacao) marmitas[item.codigo].observacoes.push(item.observacao);
                 }
             });
@@ -8135,7 +8155,11 @@ function carregarComanda() {
                             isMarmita: item.tipo === 'Marmita'
                         };
                     }
-                    agrupados[item.codigo].quantidade += 1;
+                    // Soma item.quantidade (não +=1): itens do Pedido Online podem vir como
+                    // 1 linha com quantidade > 1 (ex: "2x Refrigerante"). Lançamentos do
+                    // atendente sempre vêm com quantidade:1 por linha, então a soma também
+                    // funciona normalmente para eles (1+1+1... = N linhas).
+                    agrupados[item.codigo].quantidade += (item.quantidade || 1);
                     if (item.tipo === 'Marmita') {
                         agrupados[item.codigo].observacoes.push(item.observacao || '-');
                     }
@@ -8926,6 +8950,14 @@ function carregarComanda() {
 
             comandasAbertas.forEach(([key, comanda]) => {
                 const total = comanda.itens.reduce((acc, item) => acc + (item.quantidade * item.preco), 0);
+                // ✅ Contagem de itens do card: soma item.quantidade (não comanda.itens.length).
+                // Itens do Pedido Online podem chegar como 1 linha com quantidade > 1 (ex:
+                // "2x Refrigerante" numa única linha), então itens.length subcontava. Itens
+                // por peso (Quilo/Gramas) contam como 1 "item" cada, não pela quantidade em kg.
+                const qtdItensCard = comanda.itens.reduce((acc, item) => {
+                    const isPeso = item.tipo === 'Gramas' || (item.nome && item.nome.toLowerCase().includes('quilo'));
+                    return acc + (isPeso ? 1 : (item.quantidade || 1));
+                }, 0);
                 const btn = document.createElement('button');
                 
                 // ✅ DESTACAR COMANDAS COM PREPARO JÁ
@@ -8970,7 +9002,7 @@ function carregarComanda() {
                 btn.innerHTML = `
                     <div class="ck-num">#${comanda.numero}</div>
                     <div class="ck-val">R$ ${total.toFixed(2)}</div>
-                    <div class="ck-itens">${comanda.itens.length} itens</div>
+                    <div class="ck-itens">${qtdItensCard} itens</div>
                     ${badge}
                 `;
                 btn.onmouseover = () => btn.style.background = 'var(--bg-light)';
@@ -9026,7 +9058,10 @@ function carregarComanda() {
                     if (!marmitas[item.codigo]) {
                         marmitas[item.codigo] = { ...item, quantidade: 0, observacoes: [], indices: [] };
                     }
-                    marmitas[item.codigo].quantidade += 1;
+                    // Soma item.quantidade (não +=1) — mesmo bug já corrigido em
+                    // renderizarListaLançada: marmitas do Pedido Online podem vir como
+                    // 1 linha com quantidade > 1.
+                    marmitas[item.codigo].quantidade += (item.quantidade || 1);
                     marmitas[item.codigo].observacoes.push(item.observacao || '-');
                     marmitas[item.codigo].indices.push(idx);
                 }
