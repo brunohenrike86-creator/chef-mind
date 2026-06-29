@@ -1500,11 +1500,7 @@
         <div class="container-main">
             <!-- SIDEBAR -->
             <div class="sidebar">
-                <button class="menu-btn active" data-menu="abrir">
-                    <div class="menu-icon">🎟️</div>
-                    <div style="font-size: 10px;">Abrir</div>
-                </button>
-                <button class="menu-btn" data-menu="lançar">
+                <button class="menu-btn active" data-menu="lançar">
                     <div class="menu-icon">📋</div>
                     <div style="font-size: 10px;">Lançar</div>
                 </button>
@@ -1543,18 +1539,8 @@
                     </div>
                 </div>
 
-                <!-- ABRIR COMANDA -->
-                <div id="screen-abrir" class="screen active" style="justify-content: flex-start; padding-top: 8px; background: linear-gradient(135deg, rgba(212,114,79,0.05), rgba(245,169,98,0.05));">
-                    <div style="width: 100%; padding: 0 4px;">
-                        <div style="text-align: center; margin-bottom: 4px;">
-                            <div style="font-size: 11px; font-weight: bold; color: var(--primary); text-transform: uppercase; letter-spacing: 1px;">Comanda</div>
-                        </div>
-                        <input type="number" id="abrirNum" placeholder="0" autofocus style="font-size: 40px; padding: 12px 8px; border: 3px solid var(--primary); text-align: center; font-weight: bold; letter-spacing: 4px; width: 100%; background: white;">
-                    </div>
-                </div>
-
                 <!-- LANÇAR -->
-                <div id="screen-lançar" class="screen" style="overflow-y: auto; -webkit-overflow-scrolling: touch;">
+                <div id="screen-lançar" class="screen active" style="overflow-y: auto; -webkit-overflow-scrolling: touch;">
 
                 <!-- PAINEL ESQUERDO: comanda + código + lista (em telas grandes vira coluna) -->
                 <div id="lancar-panel-left" style="display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;">
@@ -3065,14 +3051,6 @@
                 btn.addEventListener('click', () => switchScreen(btn.dataset.menu, btn));
             });
 
-            // Abrir Comanda - Enter e botão
-            document.getElementById('abrirNum').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    abrirComanda();
-                }
-            });
-
             // Setup Tela Lançar
             setupTelaLançar();
         }
@@ -3377,7 +3355,6 @@
             }
             
             // ✅ LIMPAR OUTRAS TELAS (mas manter lançar se voltar)
-            limparTelaAbrir();
             limparCheckout();
             
             // Remover ativa de TODAS as telas
@@ -3479,27 +3456,17 @@
         function switchScreen(screenName, btn) {
 
             // ✅ LIMPAR CHECKOUT quando ENTRA em Lançar (vindo de Checkout)
-            // MAS manter comanda se vier de ABRIR
             const telaAnterior = document.querySelector('.screen.active')?.id.replace('screen-', '');
-            
+
             if (screenName === 'lançar' && telaAnterior === 'checkout') {
                 // Vindo de Checkout: limpar tudo
                 limparCheckout();
-                limparTelaAbrir();
                 limparTelaLançar();
-            } else if (screenName === 'lançar' && telaAnterior === 'abrir') {
-                // Vindo de Abrir: NÃO limpar (comanda foi aberta!)
-                // Apenas limpar Checkout e Abrir
-                limparCheckout();
-                limparTelaAbrir();
             }
-            
+
             // ✅ LIMPAR LANÇAR quando SAIR dela (para outro lugar)
             if (screenName !== 'lançar') {
                 limparTelaLançar();
-            }
-            if (screenName !== 'abrir') {
-                limparTelaAbrir();
             }
             if (screenName !== 'checkout') {
                 limparCheckout();
@@ -3574,12 +3541,7 @@
             }
 
             // Auto-focus no input apropriado
-            if (screenName === 'abrir') {
-                setTimeout(() => {
-                    const input = document.getElementById('abrirNum');
-                    if (input) input.focus();
-                }, 100);
-            } else if (screenName === 'lançar' && !state.comandaAtual) {
+            if (screenName === 'lançar' && !state.comandaAtual) {
                 setTimeout(() => {
                     const input = document.getElementById('lançarComandaNum');
                     if (input) input.focus();
@@ -4953,106 +4915,6 @@
             return (maiorNumero + 1).toString();
         }
 
-        function abrirComanda() {
-            const numeroInput = document.getElementById('abrirNum');
-            const numero = numeroInput.value.trim();
-
-            // Validação: campo vazio
-            if (!numero) {
-                showToast('Informe número', 'error');
-                numeroInput.focus();
-                return;
-            }
-
-            // Validação: apenas números
-            if (!/^\d+$/.test(numero)) {
-                showToast('Número inválido', 'error');
-                numeroInput.value = '';
-                numeroInput.focus();
-                return;
-            }
-
-            // Normalizar número: remover zeros à esquerda (1 = 01 = 001)
-            const numeroNorm = String(parseInt(numero, 10));
-
-            // Validação: comanda já utilizada no dia
-            const dataAtual = new Date().toISOString().split('T')[0];
-            const chave = `${numeroNorm}-${dataAtual}`;
-            
-            if (state.comandas[chave]) {
-                // Permite reabrir se a comanda anterior foi encerrada (reset/fechamento)
-                if (state.comandas[chave].encerramento) {
-                    delete state.comandas[chave]; // Remove a encerrada para criar nova
-                } else {
-                    showToast('Comanda já aberta hoje', 'error');
-                    numeroInput.value = '';
-                    numeroInput.focus();
-                    return;
-                }
-            }
-
-            // ✅ CRIAR COMANDA NOVA
-            state.comandas[chave] = {
-                id: chave,
-                numero: numeroNorm,
-                data: dataAtual,
-                status: 'Aberta',
-                itens: [],
-                total: 0,
-                dataCriacao: new Date().toISOString(),
-                operador: state.user,
-                paid: false,
-                _createdAt: Date.now()
-            };
-
-            // ✅ SALVAR
-            saveStorage();
-            state.comandas[chave]._pendingNovaComanda = sheets_novaComanda(chave, numeroNorm); // ☁️ SHEETS
-
-            // ❌ REMOVER: Feedback positivo (operação silenciosa)
-            // showToast(`#${numero} aberta`, 'success');
-
-            // ✅ DEFINIR COMO ATIVA
-            state.comandaAtual = chave;
-            state.itemEmEdicao = 'fromAbrir';
-
-            // ✅ LIMPAR E NAVEGAR
-            numeroInput.value = '';
-
-            // ✅ NAVEGAR PARA LANÇAR
-            setTimeout(() => {
-                const btnLançar = document.querySelector('[data-menu="lançar"]');
-                if (btnLançar) {
-                    btnLançar.click();
-                    
-                    // ✅ CARREGAR A COMANDA NA TELA LANÇAR
-                    setTimeout(() => {
-                        document.getElementById('lançarComandaNum').value = numero;
-                        
-                        // Renderizar a tela lançar com a comanda
-                        const statusEl = document.getElementById('statusComanda');
-                        statusEl.style.background = '#2980B9';
-                        statusEl.style.color = 'white';
-                        statusEl.textContent = `✅ Comanda #${numero} carregada`;
-                        statusEl.style.display = 'block';
-
-                        document.getElementById('lançarCodigoItem').disabled = false;
-
-                        renderizarItensDisponiveis();
-                        resetIdleTimer();
-
-                        // ✅ MOSTRAR BOTÃO ATALHO (comanda nova aberta)
-                        atualizarVisibilidadeBotaoAtalho();
-
-                        // Focus no código (ignorado em modo-mobile)
-                        setTimeout(_focusCodigoItem, 100);
-
-                        state.itemEmEdicao = null;
-                    }, 100);
-                }
-            }, 100);
-        }
-
         // ========== TELA LANÇAR ==========
         async function removerItemComanda(indice) {
             // BLOQUEAR SE ESTIVER EM MODO LEITURA
@@ -5339,19 +5201,6 @@ function carregarComanda() {
             if (el) el.focus();
         }
 
-
-        // ✅ LIMPAR TELA ABRIR
-        function limparTelaAbrir() {
-            // Limpar inputs
-            const inputNumero = document.getElementById('abrirNumeroComanda');
-            const inputCliente = document.getElementById('abrirNomeCliente');
-            if (inputNumero) inputNumero.value = '';
-            if (inputCliente) inputCliente.value = '';
-
-            // Limpar lista
-            const listaAberta = document.getElementById('listaComandaAbertas');
-            if (listaAberta) listaAberta.innerHTML = '';
-        }
 
         // ✅ LIMPAR TELA CHECKOUT
         function limparCheckout() {
