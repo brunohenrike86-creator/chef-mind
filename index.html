@@ -384,6 +384,12 @@
             50% { opacity: 0.6; }
         }
 
+        /* Alerta Aguardando — card pisca vermelho, sincronizado entre múltiplos cards */
+        @keyframes piscarCard {
+            0%, 100% { background-color: #ffffff; }
+            50%       { background-color: #c0392b; }
+        }
+
         @keyframes celebrarPulso {
             0%   { transform: scale(1);    text-shadow: 0 0 0px #27AE60; }
             100% { transform: scale(1.06); text-shadow: 0 0 40px #27AE60, 0 0 80px #27AE6088; }
@@ -6477,8 +6483,14 @@ function carregarComanda() {
                 display: flex;
                 flex-direction: column;
                 gap: 8px;
-                ${statusPreparo === 'Concluído' ? 'animation: piscar 0.5s infinite;' : ''}
+                ${statusPreparo === 'Concluído' ? 'animation: piscar 0.5s infinite;' : statusPreparo === 'Aguardando' ? 'animation: piscarCard 1s ease-in-out infinite;' : ''}
             `;
+            // Sincroniza o ciclo de animação entre todos os cards Aguardando:
+            // animationDelay negativo = "já estava X ms dentro do ciclo quando foi criado"
+            // → todos os cards exibem a mesma fase da animação ao mesmo tempo
+            if (statusPreparo === 'Aguardando') {
+                card.style.animationDelay = `-${Date.now() % 1000}ms`;
+            }
 
             card.innerHTML = `
                 ${ehPedidoOnline ? `<div style="background:#27AE60; color:white; font-size:13px; font-weight:bold; text-align:center; padding:6px 10px; border-radius:4px; letter-spacing:0.5px;">🌐 PEDIDO ONLINE</div>` : ''}
@@ -6488,7 +6500,7 @@ function carregarComanda() {
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:8px; border-bottom:2px solid ${divBorder};">
                     <div style="flex:1; min-width:0;">
                         ${comanda.nomeCliente ? `<div style="font-size:23px; font-weight:900; color:${corTexto}; line-height:1.15;">${comanda.nomeCliente}</div>` : ''}
-                        <div style="font-size:22px; font-weight:900; color:${corBorda}; line-height:1; margin-top:${comanda.nomeCliente ? '4px' : '0'};">#${comanda.numero}</div>
+                        <div style="font-size:22px; font-weight:900; color:${statusPreparo === 'Concluído' ? corTexto : corBorda}; line-height:1; margin-top:${comanda.nomeCliente ? '4px' : '0'};">#${comanda.numero}</div>
                     </div>
                     <div style="font-size:13px; font-weight:bold; color:${corTexto}; opacity:0.75; white-space:nowrap; padding-left:8px; padding-top:4px;">⏱ ${tempoEspera}</div>
                 </div>
@@ -8519,7 +8531,47 @@ function carregarComanda() {
             }
 
             // ── EAN de item ──
-            if (!emLancar) { showToast('⚠️ Abra a tela Lançar para bipar itens', 'warning'); return; }
+
+            // ── Checkout: adicionar item à comanda selecionada ──
+            if (emCheckout) {
+                if (!comandaCheckoutAtual) {
+                    showToast('Selecione uma comanda primeiro', 'warning');
+                    return;
+                }
+                const entryChk = Object.entries(state.itens).find(
+                    ([, it]) => it.codigo_barras && String(it.codigo_barras).trim() === code.trim()
+                );
+                if (!entryChk) {
+                    showToast('❌ EAN não cadastrado: ' + code, 'error');
+                    return;
+                }
+                const [codigoChk, itemChk] = entryChk;
+                // Marmita e itens por peso precisam de seleção manual — bloquear no checkout
+                if (itemChk.tipo === 'Marmita' || itemChk.tipo === 'Gramas' || (itemChk.nome && itemChk.nome.toLowerCase().includes('quilo'))) {
+                    showToast('⚠️ Este tipo de item deve ser lançado manualmente', 'warning');
+                    return;
+                }
+                // Item Fixo — adicionar à comanda selecionada
+                const chaveChk = comandaCheckoutAtual;
+                const comandaChk = state.comandas[chaveChk];
+                const _itemChk = {
+                    codigo: codigoChk, nome: itemChk.nome, tipo: itemChk.tipo,
+                    preco: itemChk.preco, quantidade: 1, observacao: '',
+                    icone: getIconeCategoria(itemChk.categoria || categorizarItem(itemChk.nome, itemChk.tipo))
+                };
+                comandaChk.itens.push(_itemChk);
+                _itemChk._pendingAdd = sheets_addItem(chaveChk, _itemChk, {
+                    codigo: codigoChk, nome: itemChk.nome, quantidade: 1,
+                    preco: itemChk.preco, observacao: '', preparo_ja: false
+                }).then(() => delete _itemChk._pendingAdd);
+                atualizarTotalComanda(chaveChk);
+                saveStorage();
+                selecionarComandaCheckout(chaveChk, state.comandas[chaveChk]);
+                showToast(`✅ ${itemChk.nome} adicionado à comanda #${comandaChk.numero}`, 'success');
+                return;
+            }
+
+            if (!emLancar) { showToast('⚠️ Abra a tela Lançar ou Checkout para bipar itens', 'warning'); return; }
             if (!state.comandaAtual) { showToast('Carregue uma comanda antes de bipar itens', 'warning'); return; }
 
             // Limpa chars que o scanner jogou no input ativo
