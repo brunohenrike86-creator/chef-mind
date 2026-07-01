@@ -2793,7 +2793,7 @@
                     usuarios.forEach(u => {
                         state.usuarios[u.login] = {
                             nome: u.nome || u.login, senha: String(u.senha),
-                            perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'marmita' ? 'Marmita' : 'Atendente'
+                            perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : 'Atendente'
                         };
                     });
                     console.log('[Sheets] ✅ Usuários:', usuarios.length);
@@ -3103,7 +3103,7 @@
                         usuarios.forEach(u => {
                             state.usuarios[u.login] = {
                                 nome: u.nome || u.login, senha: String(u.senha),
-                                perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'marmita' ? 'Marmita' : 'Atendente'
+                                perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : 'Atendente'
                             };
                         });
                     }
@@ -4660,7 +4660,7 @@
 
             saveStorage();
             // ☁️ SHEETS: criar ou atualizar usuário
-            const _nivel = perfil === 'Admin' ? 'admin' : perfil === 'Balança' ? 'balanca' : perfil === 'Gerente' ? 'gerente' : perfil === 'Marmita' ? 'marmita' : 'atendente';
+            const _nivel = perfil === 'Admin' ? 'admin' : perfil === 'Balança' ? 'balanca' : perfil === 'Gerente' ? 'gerente' : perfil === 'Caixa' ? 'caixa' : perfil === 'Marmita' ? 'marmita' : 'atendente';
             if (usuarioEmEdicao) {
                 // Login mudou ou não: atualiza na mesma linha via loginAntigo
                 sheetsAPI('atualizarUsuario', { loginAntigo: usuarioEmEdicao, login, nome, senha, nivel: _nivel });
@@ -5922,7 +5922,7 @@ function carregarComanda() {
             const marmitas = {};
             let total = 0;
 
-            comanda.itens.forEach((item, idx) => {
+            (comanda.itens || []).forEach((item, idx) => {
                 // Mesmas 4 heurísticas usadas em renderizarCheckoutItens e na tela Lançar
                 const isQuiloItem = item.tipo === 'Gramas'
                     || (item.nome && item.nome.toLowerCase().includes('quilo'))
@@ -8500,7 +8500,12 @@ function carregarComanda() {
                     document.getElementById('lançarComandaNum').value = numero;
                     carregarComanda();
                 } else if (emCheckout) {
-                    const chave = Object.keys(state.comandas).find(k => String(state.comandas[k].numero) === numero);
+                    // Busca restrita ao dia atual — comanda de outro dia não deve ser selecionável
+                    const dataAtual = new Date().toISOString().split('T')[0];
+                    const chave = Object.keys(state.comandas).find(k => {
+                        const cmd = state.comandas[k];
+                        return String(cmd.numero) === numero && cmd.data === dataAtual;
+                    });
                     if (!chave) { showToast('Comanda #' + numero + ' não encontrada', 'error'); return; }
                     const comanda = state.comandas[chave];
                     if (comanda.status === 'Fechada/Paga' || comanda.paid || comanda.encerramento) {
@@ -8773,7 +8778,7 @@ function carregarComanda() {
             document.getElementById('modalPreco').value = '';
             document.getElementById('modalCategoria').innerHTML = '—';
             document.getElementById('modalCodigoBarras').value = '';
-            document.getElementById('modalDisponivelOnline').checked = true; // novo item nasce visível online por padrão
+            document.getElementById('modalDisponivelOnline').checked = false; // novo item nasce inativo no pedido online por padrão
             selecionarTipo('Fixo');
             _resetFotoUI();
             document.getElementById('modalItem').classList.add('active');
@@ -8848,6 +8853,18 @@ function carregarComanda() {
             if (!nome || !tipo || !preco || isNaN(preco)) {
                 showToast('Preencha todos os campos', 'error');
                 return;
+            }
+
+            // Bug 4 — EAN não pode repetir entre itens
+            // String() necessário: Sheets pode retornar codigo_barras como número
+            if (codigoBarras) {
+                const eanDuplicado = Object.entries(state.itens).find(([cod, it]) =>
+                    it.codigo_barras && String(it.codigo_barras).trim() === codigoBarras && cod !== itemEmEdicao
+                );
+                if (eanDuplicado) {
+                    showToast(`EAN já cadastrado no item #${eanDuplicado[0]} — ${eanDuplicado[1].nome}`, 'error');
+                    return;
+                }
             }
 
             const categoria = categorizarItem(nome, tipo);
@@ -8968,10 +8985,13 @@ function carregarComanda() {
             document.getElementById('countComandas').textContent = comandasAbertas.length;
 
             // Se a comanda selecionada no painel direito foi paga/encerrada em outro device,
-            // limpa o painel direito para evitar exibir comanda que já não está na lista
+            // limpa o painel. Checa direto em state.comandas (não no filtro visual) para não
+            // limpar por lag de data — comanda scaneada pode não aparecer em comandasAbertas
+            // se cmd.data difere de dataAtual por fuso horário ou formato.
             if (comandaCheckoutAtual) {
-                const aindaVisivel = comandasAbertas.some(([key]) => key === comandaCheckoutAtual);
-                if (!aindaVisivel) {
+                const cmdAtual = state.comandas[comandaCheckoutAtual];
+                const foiEncerrada = !cmdAtual || cmdAtual.paid || cmdAtual.encerramento;
+                if (foiEncerrada) {
                     comandaCheckoutAtual = null;
                     formaPagamentoSelecionada = null;
                     document.getElementById('areaDetalhes').style.display = 'none';
