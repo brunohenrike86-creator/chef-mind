@@ -452,6 +452,11 @@
             background: #FFFAF7;
         }
 
+        select.modal-input {
+            -webkit-appearance: menulist;
+            appearance: auto;
+            color: var(--text-dark);
+        }
         .modal-input:disabled {
             background: var(--bg-light);
             color: var(--gray);
@@ -2469,8 +2474,17 @@
                 </div>
             </div>
 
-            <div class="info-box">
-                📁 <strong>Categoria:</strong> <span id="modalCategoria" style="font-weight: bold; color: var(--primary);">—</span>
+            <div class="modal-field">
+                <div class="modal-label">Categoria <span style="font-size:10px; color:var(--gray); font-weight:normal;">(auto · altere se desejar)</span></div>
+                <select id="modalCategoria" class="modal-input" style="background: var(--bg-light); -webkit-appearance: auto; appearance: auto; color: var(--text-dark);">
+                    <option value="Bebidas">🧃 Bebidas</option>
+                    <option value="Bomboniere">🍬 Bomboniere</option>
+                    <option value="Buffet">🍽️ Buffet</option>
+                    <option value="Marmitas">📦 Marmitas</option>
+                    <option value="Outros">📋 Outros</option>
+                    <option value="Sobremesa">🍰 Sobremesa</option>
+                    <option value="Sorvetes">🍦 Sorvetes</option>
+                </select>
             </div>
 
             <!-- FOTO DO ITEM -->
@@ -2492,7 +2506,11 @@
 
             <div class="modal-field">
                 <div class="modal-label">Cód. de barras <span style="font-size:10px; color:var(--gray); font-weight:normal;">(opcional — EAN ou código interno)</span></div>
-                <input type="text" id="modalCodigoBarras" class="modal-input" placeholder="Ex: 7891991010083">
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <input type="text" id="modalCodigoBarras" class="modal-input" placeholder="Ex: 7891991010083" style="flex:1; min-width:0;">
+                    <button type="button" onclick="gerarEANInterno()" style="padding:8px 10px; background:var(--bg-light); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:11px; font-weight:bold; color:var(--primary); white-space:nowrap; flex-shrink:0;">⚡ Gerar EAN</button>
+                    <button type="button" onclick="imprimirEtiquetaEAN()" style="padding:8px 10px; background:var(--bg-light); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:11px; font-weight:bold; color:var(--primary); white-space:nowrap; flex-shrink:0;">🖨️ Etiqueta</button>
+                </div>
             </div>
 
             <div class="modal-field">
@@ -3744,9 +3762,8 @@
                     const nome = inputNome.value;
                     const tipo = document.getElementById('modalTipo').value;
                     if (nome) {
-                        const cat = categorizarItem(nome, tipo);
-                        const icone = getIconeCategoria(cat);
-                        document.getElementById('modalCategoria').innerHTML = `<span style="font-size: 14px; margin-right: 4px;">${icone}</span> ${cat}`;
+                        const cat = _normCat(categorizarItem(nome, tipo));
+                        document.getElementById('modalCategoria').value = cat;
                     }
                 });
             }
@@ -8728,6 +8745,100 @@ function carregarComanda() {
             return 'Outros';
         }
 
+        // Mapeia qualquer categoria legada/interna para os valores válidos do dropdown
+        const _CATS_DROPDOWN = ['Bebidas','Bomboniere','Buffet','Marmitas','Outros','Sobremesa','Sorvetes'];
+        const _MAP_CAT = {
+            'Sobremesas':'Sobremesa', 'Carnes':'Buffet', 'Carne':'Buffet',
+            'Lanches':'Outros', 'Lanche':'Outros',
+            'Acompanhamentos':'Buffet', 'Acompanhamento':'Buffet',
+            'Cafés':'Bebidas', 'Cafes':'Bebidas', 'Café':'Bebidas', 'Cafe':'Bebidas',
+            'Marmita':'Marmitas', 'Bebida':'Bebidas',
+        };
+        function _normCat(cat) {
+            if (!cat) return 'Outros';
+            return _MAP_CAT[cat] || (_CATS_DROPDOWN.includes(cat) ? cat : 'Outros');
+        }
+
+        // Gera EAN-13 de uso interno (prefixo 200 + 9 dígitos aleatórios + check digit)
+        // Garante unicidade contra os EANs já cadastrados
+        function gerarEANInterno() {
+            const campo = document.getElementById('modalCodigoBarras');
+            const eanUsados = new Set(
+                Object.values(state.itens)
+                    .map(it => it.codigo_barras ? String(it.codigo_barras).trim() : '')
+                    .filter(Boolean)
+            );
+            let ean;
+            let tentativas = 0;
+            do {
+                const base = '200' + String(Math.floor(Math.random() * 1_000_000_000)).padStart(9, '0');
+                // Calcula check digit EAN-13
+                let soma = 0;
+                for (let i = 0; i < 12; i++) {
+                    soma += parseInt(base[i]) * (i % 2 === 0 ? 1 : 3);
+                }
+                const check = (10 - (soma % 10)) % 10;
+                ean = base + check;
+                tentativas++;
+            } while (eanUsados.has(ean) && tentativas < 50);
+            campo.value = ean;
+            campo.focus();
+        }
+
+        // Carrega JsBarcode dinamicamente e chama o callback
+        function _loadJsBarcode(cb) {
+            if (window.JsBarcode) { cb(); return; }
+            const s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js';
+            s.onload = cb;
+            s.onerror = () => showToast('Erro ao carregar biblioteca de barcode (verifique conexão)', 'error');
+            document.head.appendChild(s);
+        }
+
+        // Gera etiqueta EAN em janela de impressão
+        function imprimirEtiquetaEAN() {
+            const ean = document.getElementById('modalCodigoBarras').value.trim();
+            const nome = document.getElementById('modalNome').value.trim() || '';
+            if (!ean) { showToast('Preencha ou gere um EAN primeiro', 'warning'); return; }
+
+            _loadJsBarcode(() => {
+                // Gera SVG no contexto da página principal
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                try {
+                    JsBarcode(svg, ean, {
+                        format: 'EAN13', displayValue: true,
+                        fontSize: 14, height: 70, width: 2,
+                        margin: 10, background: '#ffffff', lineColor: '#000000'
+                    });
+                } catch(e) {
+                    showToast('EAN inválido para geração de barcode', 'error');
+                    return;
+                }
+                const svgStr = new XMLSerializer().serializeToString(svg);
+
+                const win = window.open('', '_blank', 'width=420,height=320');
+                if (!win) { showToast('Popup bloqueado — libere popups para este site', 'warning'); return; }
+                win.document.write(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Etiqueta ${ean}</title>
+<style>
+  body { font-family: Arial, sans-serif; text-align: center; padding: 24px; background: #fff; }
+  h3   { margin: 0 0 12px; font-size: 15px; font-weight: bold; }
+  svg  { max-width: 100%; }
+  button { margin-top: 20px; padding: 10px 24px; font-size: 14px; font-weight: bold;
+           background: #d4724f; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+  @media print { button { display: none; } }
+</style></head>
+<body>
+  ${nome ? `<h3>${nome}</h3>` : ''}
+  ${svgStr}
+  <br>
+  <button onclick="window.print()">🖨️ Imprimir</button>
+</body></html>`);
+                win.document.close();
+                win.focus();
+            });
+        }
+
         // Mapear ícones de categorias
         function getIconeCategoria(categoria) {
             const icones = {
@@ -8828,7 +8939,7 @@ function carregarComanda() {
             document.getElementById('modalNome').value = '';
             document.getElementById('modalTipo').value = 'Fixo';
             document.getElementById('modalPreco').value = '';
-            document.getElementById('modalCategoria').innerHTML = '—';
+            document.getElementById('modalCategoria').value = 'Outros';
             document.getElementById('modalCodigoBarras').value = '';
             document.getElementById('modalDisponivelOnline').checked = false; // novo item nasce inativo no pedido online por padrão
             selecionarTipo('Fixo');
@@ -8850,8 +8961,8 @@ function carregarComanda() {
             // Itens antigos não têm o campo ainda — tratamos undefined como "disponível" (default)
             document.getElementById('modalDisponivelOnline').checked = item.disponivelOnline !== false;
 
-            const categoria = categorizarItem(item.nome, item.tipo);
-            document.getElementById('modalCategoria').textContent = categoria;
+            const categoria = _normCat(item.categoria || categorizarItem(item.nome, item.tipo));
+            document.getElementById('modalCategoria').value = categoria;
 
             selecionarTipo(item.tipo);
 
@@ -8876,12 +8987,11 @@ function carregarComanda() {
             const precoUnit = document.getElementById('modalPrecoUnit');
             precoUnit.textContent = tipo === 'Gramas' ? '/kg' : 'un.';
             
-            // Atualizar categoria com ícone
+            // Atualizar categoria automaticamente (sem sobrescrever se usuário já escolheu)
             const nome = document.getElementById('modalNome').value;
             if (nome) {
-                const cat = categorizarItem(nome, tipo);
-                const icone = getIconeCategoria(cat);
-                document.getElementById('modalCategoria').innerHTML = `<span style="font-size: 14px; margin-right: 4px;">${icone}</span> ${cat}`;
+                const cat = _normCat(categorizarItem(nome, tipo));
+                document.getElementById('modalCategoria').value = cat;
             }
         }
 
@@ -8919,7 +9029,7 @@ function carregarComanda() {
                 }
             }
 
-            const categoria = categorizarItem(nome, tipo);
+            const categoria = document.getElementById('modalCategoria').value || _normCat(categorizarItem(nome, tipo));
 
             // Desabilita botão salvar para evitar duplo clique durante upload
             const btnSalvar = document.getElementById('btnSalvarItem');
