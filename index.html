@@ -2809,6 +2809,11 @@
                         Object.keys(state.itens).forEach(k => delete state.itens[k]);
                         Object.assign(state.itens, novoItens);
                         console.log('[Sheets] ✅ Cardápio:', Object.keys(novoItens).length, 'itens');
+                        // Re-renderizar Admin > Itens se estiver visível (evita tela stale do localStorage)
+                        if (document.getElementById('adminItensList')) {
+                            gerarFiltrosCategorias();
+                            renderAdminItensComFiltro();
+                        }
                     }
                 }
 
