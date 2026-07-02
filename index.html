@@ -3009,6 +3009,7 @@
                 // Mostrar app diretamente
                 document.getElementById('loginScreen').classList.add('hidden');
                 document.getElementById('mainApp').classList.remove('hidden');
+                _initBarcodeListener(); // Ativar leitor de código de barras
 
                 // Reativar modos especiais (balança/caixa) ao restaurar sessão
                 if (state.perfil === 'Balança') {
@@ -3165,9 +3166,10 @@
 
             // Esconder login
             document.getElementById('loginScreen').classList.add('hidden');
-            
+
             // Mostrar app
             document.getElementById('mainApp').classList.remove('hidden');
+            _initBarcodeListener(); // Ativar leitor de código de barras
 
             // ✅ Update header com informações
             document.getElementById('headerUser').textContent = `${state.user}`;
@@ -8479,41 +8481,7 @@ function carregarComanda() {
                 });
             }
 
-            // ── Barcode scan via capture phase ──
-            // Captura Enter do scanner independente do foco — desde que não estejamos no formulário de login.
-            // SÓ chama preventDefault quando detecta velocidade de scanner (>=5 chars em <200ms),
-            // então digitação humana lenta nunca é interceptada.
-            let _bcBuf = '', _bcT0 = 0, _bcTim = null;
-            document.addEventListener('keydown', (e) => {
-                // Nunca interceptar se o foco está no formulário de login
-                const focusedId = document.activeElement && document.activeElement.id;
-                if (focusedId === 'loginUser' || focusedId === 'loginPassword' || focusedId === 'btnLogin') return;
-
-                if (e.ctrlKey || e.altKey || e.metaKey) return;
-                if (e.key.length !== 1 && e.key !== 'Enter') return;
-
-                if (e.key === 'Enter') {
-                    const elapsed = Date.now() - _bcT0;
-                    if (_bcBuf.length >= 5 && elapsed < 200) {
-                        // Velocidade de scanner — interceptar
-                        e.preventDefault();
-                        e.stopPropagation();
-                        clearTimeout(_bcTim);
-                        const code = _bcBuf;
-                        _bcBuf = '';
-                        _processarCodigoScanner(code);
-                    } else {
-                        _bcBuf = '';
-                        clearTimeout(_bcTim);
-                    }
-                    return;
-                }
-
-                if (_bcBuf.length === 0) _bcT0 = Date.now();
-                _bcBuf += e.key;
-                clearTimeout(_bcTim);
-                _bcTim = setTimeout(() => { _bcBuf = ''; }, 80);
-            }, true); // capture phase
+            // Listener de barcode removido daqui — centralizado em _initBarcodeListener()
         }
 
         function _processarCodigoScanner(code) {
@@ -10562,9 +10530,9 @@ var itens = comanda.itens || [];
         }
 
         // ── LEITOR DE CÓDIGO DE BARRAS ───────────────────────────────────────
-        // Prefixo fixo nas comandas: CMD-{numero} (hardcoded — impresso nas comandas físicas).
+        // Prefixo fixo nas comandas: CMD;{numero} (hardcoded — impresso nas comandas físicas).
         // Se mudar, requer reimpressão das comandas. Configurabilidade aqui seria uma armadilha.
-        const COMANDA_BARCODE_PREFIX = 'CMD-';
+        const COMANDA_BARCODE_PREFIX = 'CMD;';
 
         let _bcBuffer = '';
         let _bcTimer  = null;
@@ -10586,8 +10554,9 @@ var itens = comanda.itens || [];
 
                 if (e.key === 'Enter') {
                     const elapsed = Date.now() - _bcStartTime;
-                    // >= 5 chars montados em < 200ms → velocidade de scanner, não de humano
-                    if (_bcBuffer.length >= 5 && elapsed < 200) {
+                    // >= 1 char em < 100ms → velocidade de scanner (humano leva > 150ms entre teclas)
+                    // Threshold baixo permite detectar comandas com número curto (ex: "1", "2")
+                    if (_bcBuffer.length >= 1 && elapsed < 100) {
                         e.preventDefault();
                         e.stopPropagation();
                         clearTimeout(_bcTimer);
@@ -10619,12 +10588,20 @@ var itens = comanda.itens || [];
 
         function _processBarcode(code) {
             console.log('[Barcode] Lido:', code);
+            // CMD-N (plaquinhas físicas com prefixo explícito)
             if (code.startsWith(COMANDA_BARCODE_PREFIX)) {
                 const numero = parseInt(code.replace(COMANDA_BARCODE_PREFIX, ''), 10);
-                if (!isNaN(numero) && numero > 0) _onComandaScanned(numero);
-            } else {
-                _onItemScanned(code);
+                if (!isNaN(numero) && numero > 0) { _onComandaScanned(numero); return; }
             }
+            // Número puro (1–5 dígitos, com ou sem zeros à esquerda) → número de comanda
+            // Cobre plaquinhas físicas com número simples (ex: "1", "00001")
+            // EANs de produto têm 8 ou 13 dígitos — sem ambiguidade
+            if (/^\d{1,5}$/.test(code)) {
+                const numero = parseInt(code, 10);
+                if (numero > 0) { _onComandaScanned(numero); return; }
+            }
+            // Caso contrário: EAN de item (produto)
+            _onItemScanned(code);
         }
 
         function _onComandaScanned(numero) {
@@ -10642,13 +10619,13 @@ var itens = comanda.itens || [];
                 const key = `${numero}-${dataAtual}`;
                 const comanda = state.comandas[key];
                 if (!comanda) {
-                    mostrarToast(`Comanda #${numero} não encontrada`);
+                    showToast(`Comanda #${numero} não encontrada`, 'warning');
                     return;
                 }
-                // Mesma regra do filtro da lista — comanda paga/encerrada não aparece nos cards
-                // e também não deve ser selecionável via scanner
-                if (comanda.status === 'Fechada/Paga' || comanda.paid || comanda.encerramento) {
-                    mostrarToast(`⚠️ Comanda #${numero} já encerrada`);
+                // Comanda paga ou encerrada por fechamento de expediente — não selecionar
+                // 'reset' não conta: indica que o caixa foi aberto em novo dia (comanda reaproveitada)
+                if (comanda.status === 'Fechada/Paga' || comanda.paid || comanda.encerramento === 'fechamento') {
+                    showToast(`⚠️ Comanda #${numero} já encerrada`, 'warning');
                     return;
                 }
                 selecionarComandaCheckout(key, comanda);
@@ -10660,7 +10637,47 @@ var itens = comanda.itens || [];
 
         function _onItemScanned(codigoBarras) {
             const telaAtiva = document.querySelector('.screen.active')?.id?.replace('screen-', '');
-            if (telaAtiva !== 'lançar') return; // scan de item só faz sentido na tela Lançar
+
+            // ── CHECKOUT: adicionar item à comanda selecionada ──
+            if (telaAtiva === 'checkout') {
+                if (!comandaCheckoutAtual) {
+                    showToast('Selecione uma comanda antes de bipar um item', 'warning');
+                    return;
+                }
+                const entryChk = Object.entries(state.itens).find(
+                    ([, it]) => it.codigo_barras && String(it.codigo_barras).trim() === codigoBarras.trim()
+                );
+                if (!entryChk) {
+                    showToast('❌ EAN não cadastrado: ' + codigoBarras, 'error');
+                    return;
+                }
+                const [codigoChk, itemChk] = entryChk;
+                if (itemChk.tipo === 'Marmita' || itemChk.tipo === 'Gramas' ||
+                    (itemChk.nome && itemChk.nome.toLowerCase().includes('quilo'))) {
+                    showToast('⚠️ Este tipo de item deve ser lançado manualmente', 'warning');
+                    return;
+                }
+                const chaveChk = comandaCheckoutAtual;
+                const comandaChk = state.comandas[chaveChk];
+                const _itemChk = {
+                    codigo: codigoChk, nome: itemChk.nome, tipo: itemChk.tipo,
+                    preco: itemChk.preco, quantidade: 1, observacao: '',
+                    icone: getIconeCategoria(itemChk.categoria || categorizarItem(itemChk.nome, itemChk.tipo))
+                };
+                comandaChk.itens.push(_itemChk);
+                _itemChk._pendingAdd = sheets_addItem(chaveChk, _itemChk, {
+                    codigo: codigoChk, nome: itemChk.nome, quantidade: 1,
+                    preco: itemChk.preco, observacao: '', preparo_ja: false
+                }).then(() => delete _itemChk._pendingAdd);
+                atualizarTotalComanda(chaveChk);
+                saveStorage();
+                selecionarComandaCheckout(chaveChk, state.comandas[chaveChk]);
+                showToast(`✅ ${itemChk.nome} adicionado à comanda #${comandaChk.numero}`, 'success');
+                return;
+            }
+
+            // ── LANÇAR: adicionar item à comanda aberta ──
+            if (telaAtiva !== 'lançar') return;
 
             if (!state.comandaAtual) {
                 mostrarToast('Selecione uma comanda antes de bipar um item');
@@ -10671,8 +10688,8 @@ var itens = comanda.itens || [];
                 return;
             }
 
-            // Busca no cardápio por codigo_barras (match exato, case-insensitive não necessário — EAN é numérico)
-            // String() protege contra Sheets retornar codigo_barras como number (EAN numérico)
+            // Busca no cardápio por codigo_barras
+            // String() protege contra Sheets retornar codigo_barras como number
             const itemEntry = Object.entries(state.itens).find(
                 ([, item]) => item.codigo_barras && String(item.codigo_barras).trim() === codigoBarras.trim()
             );
@@ -10686,7 +10703,6 @@ var itens = comanda.itens || [];
             const comanda = state.comandas[state.comandaAtual];
 
             if (item.nome.toLowerCase().includes('quilo') || item.tipo === 'Gramas') {
-                // Item por peso — abre o modal (requer peso da balança)
                 abrirModalBuffetQuilo(codigo, item);
                 return;
             }
@@ -10710,7 +10726,7 @@ var itens = comanda.itens || [];
             } else {
                 // Marmita — abre o modal para seleção de carnes
                 document.getElementById('lançarCodigoItem').value = codigo;
-                lancarItem();
+                lançarItem();
             }
         }
 
