@@ -270,12 +270,22 @@ function salvarClienteLembrado(nome, whatsapp) {
 }
 
 function lerSessaoAtiva() {
-    try { return JSON.parse(localStorage.getItem(CHAVE_SESSAO) || 'null'); }
+    try {
+        const s = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || 'null');
+        if (!s) return null;
+        // Sessão com mais de 12 horas é descartada automaticamente
+        const DOZE_HORAS = 12 * 60 * 60 * 1000;
+        if (s._ts && (Date.now() - s._ts) > DOZE_HORAS) {
+            localStorage.removeItem(CHAVE_SESSAO);
+            return null;
+        }
+        return s;
+    }
     catch (e) { return null; }
 }
 
 function salvarSessaoAtiva(dados) {
-    localStorage.setItem(CHAVE_SESSAO, JSON.stringify(dados));
+    localStorage.setItem(CHAVE_SESSAO, JSON.stringify({ ...dados, _ts: Date.now() }));
 }
 
 function limparSessaoAtiva() {
@@ -535,6 +545,11 @@ async function consultarStatus() {
             pedidoAtual.status = resultado.status;
             pedidoAtual.total = resultado.total;
             render();
+            // Pedido concluído: para de fazer polling (não precisa mais consultar)
+            // A sessão expira naturalmente em 12h — cliente ainda pode ver o status se voltar no mesmo dia
+            if (resultado.status === 'concluido') {
+                pararPolling();
+            }
         }
     } catch (e) {
         // Falha de rede pontual no polling não deve travar a tela — só tenta de novo no próximo ciclo.
