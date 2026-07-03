@@ -1586,7 +1586,7 @@
                     <div id="lancar-secao-comanda" style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); flex-shrink: 0;">
                         <div id="lancar-label-comanda" style="color: white; font-size: 10px; font-weight: bold; margin-bottom: 6px; opacity: 0.9;">📋 SELECIONE A COMANDA</div>
                         <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 6px;">
-                            <input type="number" id="lançarComandaNum" placeholder="NÚMERO DA COMANDA" style="font-size: 18px; font-weight: bold; padding: 12px; border: 3px solid white; background: white; color: var(--primary); text-align: center; border-radius: 4px;">
+                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="lançarComandaNum" placeholder="NÚMERO DA COMANDA" style="font-size: 18px; font-weight: bold; padding: 12px; border: 3px solid white; background: white; color: var(--primary); text-align: center; border-radius: 4px;">
                             <button id="btnLimparComanda" onclick="limparComanda()" style="padding: 12px 16px; background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.6); border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; min-width: 70px;">✕ Limpar [F4]</button>
                             <!-- nav mobile — mesmo grid row, sem altura extra; visível só no Lançar mobile -->
                             <button id="btnMobileMenuLancar" onclick="toggleMobileMenu()" style="display:none; padding:12px 10px; background:rgba(255,255,255,0.15); color:white; border:2px solid rgba(255,255,255,0.5); border-radius:4px; font-size:13px; font-weight:bold; cursor:pointer; white-space:nowrap;">≡ Menu</button>
@@ -5594,11 +5594,13 @@ function carregarComanda() {
                 return;
             }
 
-            const codigo = document.getElementById('lançarCodigoItem').value.trim();
-            if (!codigo) {
+            const _codigoRaw = document.getElementById('lançarCodigoItem').value.trim();
+            if (!_codigoRaw) {
                 showToast('Digite o código do item', 'error');
                 return;
             }
+            // Aceita "3" ou "003" — normaliza para o formato com zeros à esquerda usado no cardápio
+            const codigo = isNaN(_codigoRaw) ? _codigoRaw : String(parseInt(_codigoRaw, 10)).padStart(3, '0');
 
             if (!state.itens[codigo]) {
                 showToast('Item não encontrado', 'error');
@@ -8500,6 +8502,10 @@ function carregarComanda() {
             const inputCodigo = document.getElementById('lançarCodigoItem');
 
             if (inputComanda) {
+                // Aceita "003" ou "3" — filtra não-numéricos, preserva zeros à esquerda
+                inputComanda.addEventListener('input', () => {
+                    inputComanda.value = inputComanda.value.replace(/[^0-9]/g, '');
+                });
                 inputComanda.addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
