@@ -1174,11 +1174,22 @@
             max-height: 200px !important;
             gap: 4px !important;
         }
-        body.modo-caixa #totalCheckout > div:last-child { font-size: 32px !important; }
-        body.modo-caixa #areaPagamento > div { grid-template-columns: repeat(3, 1fr) !important; gap: 6px !important; }
-        body.modo-caixa .btnPagamento  { padding: 16px 8px !important; font-size: 13px !important; border-radius: 6px !important; }
+        body.modo-caixa .co-hdr-abertas { font-size: 14px !important; padding: 4px 6px !important; margin-bottom: 6px !important; }
+        body.modo-caixa .co-hdr-detalhe { font-size: 18px !important; padding: 8px 10px !important; }
+        body.modo-caixa .co-hdr-itens   { font-size: 12px !important; padding: 6px 8px !important; grid-template-columns: 1fr 56px 76px 76px !important; }
+        body.modo-caixa .co-row         { font-size: 16px !important; padding: 12px 8px !important; grid-template-columns: 1fr 56px 76px 76px !important; }
+        body.modo-caixa #totalCheckout > div:first-child { font-size: 13px !important; letter-spacing: 2px !important; opacity: 1 !important; }
+        body.modo-caixa #totalCheckout > div:last-child  { font-size: 32px !important; }
+        body.modo-caixa #areaPagamento > div:first-child { font-size: 13px !important; margin-bottom: 6px !important; }
+        body.modo-caixa #areaPagamento { padding: 8px !important; }
+        body.modo-caixa #areaPagamento > div { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
+        body.modo-caixa .btnPagamento  { padding: 14px 6px !important; font-size: 16px !important; font-weight: bold !important; border-radius: 6px !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; gap: 4px !important; min-height: 80px !important; }
+        body.modo-caixa .btnPagamento .pg-icon  { font-size: 22px !important; line-height: 1 !important; }
+        body.modo-caixa .btnPagamento .pg-nome  { font-size: 15px !important; font-weight: bold !important; }
+        body.modo-caixa .btnPagamento .pg-key   { font-size: 14px !important; font-weight: bold !important; opacity: 0.7 !important; color: var(--primary) !important; }
         body.modo-caixa #btnConfirmarPagamento { padding: 20px !important; font-size: 16px !important; border-radius: 6px !important; margin-top: 8px !important; }
         body.modo-caixa #btnIrLancar   { padding: 16px !important; font-size: 14px !important; border-radius: 6px !important; }
+        /* Hint panel de atalhos removido — atalhos exibidos inline nos próprios botões */
 
         /* ========== MODO MARMITA — KDS do operador, tablet Samsung A9+ paisagem ========== */
         body.modo-marmita .header   { display: none !important; }
@@ -1451,11 +1462,11 @@
         <div style="flex:1; display:flex; height:100%; border-left:1px solid rgba(255,255,255,0.2);">
             <button id="caixaTabLancar" onclick="caixaSwitchTo('lançar')"
                 style="flex:1; background:rgba(255,255,255,0.18); color:white; border:none; border-bottom:4px solid white; font-size:16px; font-weight:bold; cursor:pointer; letter-spacing:1px; transition:all 0.15s;">
-                📝 LANÇAR
+                📝 LANÇAR <span style="font-size:13px; opacity:0.75; font-weight:normal;">[F1]</span>
             </button>
             <button id="caixaTabCheckout" onclick="caixaSwitchTo('checkout')"
                 style="flex:1; background:none; color:rgba(255,255,255,0.65); border:none; border-bottom:4px solid transparent; font-size:16px; font-weight:bold; cursor:pointer; letter-spacing:1px; transition:all 0.15s;">
-                💳 CHECKOUT
+                💳 CHECKOUT <span style="font-size:13px; opacity:0.75; font-weight:normal;">[F2]</span>
             </button>
         </div>
     </div>
@@ -1560,7 +1571,7 @@
                         <div id="lancar-label-comanda" style="color: white; font-size: 10px; font-weight: bold; margin-bottom: 6px; opacity: 0.9;">📋 SELECIONE A COMANDA</div>
                         <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 6px;">
                             <input type="number" id="lançarComandaNum" placeholder="NÚMERO DA COMANDA" style="font-size: 18px; font-weight: bold; padding: 12px; border: 3px solid white; background: white; color: var(--primary); text-align: center; border-radius: 4px;">
-                            <button id="btnLimparComanda" onclick="limparComanda()" style="padding: 12px 16px; background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.6); border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; min-width: 70px;">✕ Limpar</button>
+                            <button id="btnLimparComanda" onclick="limparComanda()" style="padding: 12px 16px; background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.6); border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; min-width: 70px;">✕ Limpar [F4]</button>
                             <!-- nav mobile — mesmo grid row, sem altura extra; visível só no Lançar mobile -->
                             <button id="btnMobileMenuLancar" onclick="toggleMobileMenu()" style="display:none; padding:12px 10px; background:rgba(255,255,255,0.15); color:white; border:2px solid rgba(255,255,255,0.5); border-radius:4px; font-size:13px; font-weight:bold; cursor:pointer; white-space:nowrap;">≡ Menu</button>
                         </div>
@@ -1590,7 +1601,7 @@
                             </div>
 
                             <!-- ✅ BOTÃO ATALHO CHECKOUT (ADMIN + CAIXA) -->
-                            <button id="btnAtalhoCheckout" onclick="irParaCheckout()" style="display: none; width: 100%; padding: 10px; background: linear-gradient(135deg, #3498DB 0%, #2980B9 100%); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; box-shadow: 0 2px 6px rgba(52, 152, 219, 0.3); transition: all 0.2s; background-image: linear-gradient(135deg, #3498DB 0%, #2980B9 100%); background-color: #3498DB !important;">💳 IR PARA CHECKOUT</button>
+                            <button id="btnAtalhoCheckout" onclick="irParaCheckout()" style="display: none; width: 100%; padding: 10px; background: linear-gradient(135deg, #3498DB 0%, #2980B9 100%); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; box-shadow: 0 2px 6px rgba(52, 152, 219, 0.3); transition: all 0.2s; background-image: linear-gradient(135deg, #3498DB 0%, #2980B9 100%); background-color: #3498DB !important;">💳 IR PARA CHECKOUT [F2]</button>
                         </div>
                     </div>
 
@@ -1664,17 +1675,17 @@
                         <div id="areaPagamento" style="display: none; flex-shrink: 0; background: white; border: 1px solid var(--border); border-radius: 2px; padding: 4px;">
                             <div style="font-size: 8px; font-weight: bold; color: var(--primary); margin-bottom: 3px;">💳 FORMA DE PAGAMENTO</div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap: 2px;">
-                                <button type="button" onclick="escolherPagamento('pix')" class="btnPagamento" id="pagPix" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);">📱<br>PIX</button>
-                                <button type="button" onclick="escolherPagamento('dinheiro')" class="btnPagamento" id="pagDinheiro" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);">💵<br>$</button>
-                                <button type="button" onclick="escolherPagamento('credito')" class="btnPagamento" id="pagCredito" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);">💳<br>CC</button>
-                                <button type="button" onclick="escolherPagamento('debito')" class="btnPagamento" id="pagDebito" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);">🏧<br>DB</button>
-                                <button type="button" onclick="escolherPagamento('voucher')" class="btnPagamento" id="pagVoucher" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);">🎫<br>VC</button>
-                                <button type="button" onclick="escolherPagamento('a_receber')" class="btnPagamento" id="pagAReceber" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);">📋<br>A REC.</button>
+                                <button type="button" onclick="escolherPagamento('pix')" class="btnPagamento" id="pagPix" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);"><span class="pg-icon">📱</span><span class="pg-nome">PIX</span><span class="pg-key">[1]</span></button>
+                                <button type="button" onclick="escolherPagamento('dinheiro')" class="btnPagamento" id="pagDinheiro" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);"><span class="pg-icon">💵</span><span class="pg-nome">Dinheiro</span><span class="pg-key">[2]</span></button>
+                                <button type="button" onclick="escolherPagamento('credito')" class="btnPagamento" id="pagCredito" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);"><span class="pg-icon">💳</span><span class="pg-nome">Crédito</span><span class="pg-key">[3]</span></button>
+                                <button type="button" onclick="escolherPagamento('debito')" class="btnPagamento" id="pagDebito" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);"><span class="pg-icon">🏧</span><span class="pg-nome">Débito</span><span class="pg-key">[4]</span></button>
+                                <button type="button" onclick="escolherPagamento('voucher')" class="btnPagamento" id="pagVoucher" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);"><span class="pg-icon">🎫</span><span class="pg-nome">Voucher</span><span class="pg-key">[5]</span></button>
+                                <button type="button" onclick="escolherPagamento('a_receber')" class="btnPagamento" id="pagAReceber" style="padding: 9px 4px; min-height: 44px; background: white; border: 2px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; color: var(--text-dark);"><span class="pg-icon">📋</span><span class="pg-nome">A Receber</span><span class="pg-key">[6]</span></button>
                             </div>
                         </div>
 
                         <!-- BOTÃO CONFIRMAR PAGAMENTO -->
-                        <button type="button" id="btnConfirmarPagamento" onclick="confirmarPagamentoFinal()" style="width: 100%; padding: 11px; background: linear-gradient(135deg, #27AE60 0%, #1E8449 100%); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3); margin-top: 3px; opacity: 0.5; pointer-events: none; letter-spacing: 0.5px;">✓ CONFIRMAR PAGAMENTO</button>
+                        <button type="button" id="btnConfirmarPagamento" onclick="confirmarPagamentoFinal()" style="width: 100%; padding: 11px; background: linear-gradient(135deg, #27AE60 0%, #1E8449 100%); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3); margin-top: 3px; opacity: 0.5; pointer-events: none; letter-spacing: 0.5px;">✓ CONFIRMAR PAGAMENTO [Enter]</button>
                     </div><!-- /checkout-panel-right -->
 
                     </div><!-- /checkout-main-body -->
@@ -3014,7 +3025,8 @@
                 // Mostrar app diretamente
                 document.getElementById('loginScreen').classList.add('hidden');
                 document.getElementById('mainApp').classList.remove('hidden');
-                _initBarcodeListener(); // Ativar leitor de código de barras
+                _initBarcodeListener();   // Ativar leitor de código de barras
+                _initCaixaShortcuts();    // Ativar atalhos de teclado do Caixa
 
                 // Reativar modos especiais (balança/caixa) ao restaurar sessão
                 if (state.perfil === 'Balança') {
@@ -3174,7 +3186,8 @@
 
             // Mostrar app
             document.getElementById('mainApp').classList.remove('hidden');
-            _initBarcodeListener(); // Ativar leitor de código de barras
+            _initBarcodeListener();   // Ativar leitor de código de barras
+            _initCaixaShortcuts();    // Ativar atalhos de teclado do Caixa
 
             // ✅ Update header com informações
             document.getElementById('headerUser').textContent = `${state.user}`;
@@ -10733,6 +10746,89 @@ var itens = comanda.itens || [];
                 document.getElementById('lançarCodigoItem').value = codigo;
                 lançarItem();
             }
+        }
+
+        // ── ATALHOS DE TECLADO — Perfil Caixa ────────────────────────────────────────
+        // Centralizado aqui junto com _initBarcodeListener() para que todos os listeners
+        // de teclado do Caixa fiquem no mesmo lugar.
+        // Usa bubble phase (padrão) — sem conflito com o scanner (capture phase, Enter
+        // só chega aqui quando _bcBuffer está vazio, ou seja, Enter humano isolado).
+        //
+        // Nota: Esc NÃO é usado — o browser intercepta Esc para sair do fullscreen antes
+        // do nosso listener, impossível de prevenir. F4 é o substituto para "Limpar".
+        let _caixaEnterBloqueado = false; // debounce do Enter — previne key-repeat do OS
+        function _initCaixaShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                if (state.perfil !== 'Caixa') return;
+                if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+                const tag = document.activeElement?.tagName?.toLowerCase();
+                const isInput = tag === 'input' || tag === 'textarea' || tag === 'select';
+                const telaAtiva = document.querySelector('.screen.active')?.id?.replace('screen-', '');
+
+                // F1 — sempre vai para Lançar (troca de aba simples)
+                if (e.key === 'F1') {
+                    e.preventDefault();
+                    caixaSwitchTo('lançar');
+                    return;
+                }
+
+                // F2 — context-aware:
+                //   Lançar + comanda carregada → irParaCheckout() (leva a comanda junto)
+                //   Lançar + sem comanda       → troca de aba simples
+                //   Checkout                   → ignora (já está lá)
+                if (e.key === 'F2') {
+                    e.preventDefault();
+                    if (telaAtiva === 'lançar') {
+                        state.comandaAtual ? irParaCheckout() : caixaSwitchTo('checkout');
+                    }
+                    return;
+                }
+
+                // F4 — limpar: fecha modal A Receber se aberto; senão limpa estado da tela
+                // (Esc não pode ser usado: browser intercepta para sair do fullscreen)
+                if (e.key === 'F4') {
+                    e.preventDefault();
+                    const modalAR = document.getElementById('modalAReceber');
+                    if (modalAR && modalAR.style.display === 'flex') {
+                        fecharModalAReceber();
+                        return;
+                    }
+                    if (telaAtiva === 'lançar' && state.comandaAtual) {
+                        limparTelaLançar();
+                        return;
+                    }
+                    if (telaAtiva === 'checkout' && comandaCheckoutAtual) {
+                        limparCheckout();
+                        return;
+                    }
+                    return;
+                }
+
+                // 1–6 — selecionar forma de pagamento
+                // Guard: sem input focado + no Checkout + comanda selecionada
+                if (!isInput && telaAtiva === 'checkout' && comandaCheckoutAtual && /^[1-6]$/.test(e.key)) {
+                    e.preventDefault();
+                    const formas = ['pix', 'dinheiro', 'credito', 'debito', 'voucher', 'a_receber'];
+                    escolherPagamento(formas[parseInt(e.key) - 1]);
+                    return;
+                }
+
+                // Enter — confirmar pagamento
+                // Guard: sem input focado + no Checkout + método selecionado + debounce
+                // _caixaEnterBloqueado evita key-repeat do OS disparar múltiplos pagamentos.
+                // Não conflita com scanner: Enter do scanner chega via capture phase com
+                // chars precedentes no buffer — nosso listener só vê Enter humano isolado.
+                if (e.key === 'Enter' && !isInput && telaAtiva === 'checkout' && formaPagamentoSelecionada) {
+                    if (_caixaEnterBloqueado) return;
+                    _caixaEnterBloqueado = true;
+                    setTimeout(() => { _caixaEnterBloqueado = false; }, 2000);
+                    e.preventDefault();
+                    confirmarPagamentoFinal();
+                    return;
+                }
+            });
+            console.log('[Caixa] Atalhos ativos: F1 Lançar · F2 Checkout · F4 Limpar · 1-6 Pgto · Enter Confirmar');
         }
 
         </script>
