@@ -1169,11 +1169,27 @@
         body.modo-caixa #abaCategorias button { font-size: 13px !important; padding: 10px 16px !important; }
 
         /* Checkout overrides no modo Caixa */
+        /* Estado expandido: nenhuma comanda selecionada — cards grandes, fácil de escanear */
         body.modo-caixa #listaComandas {
+            grid-template-columns: repeat(3, 1fr) !important;
+            max-height: 300px !important;
+            gap: 6px !important;
+            transition: max-height 0.18s ease !important;
+        }
+        body.modo-caixa #listaComandas button { height: 88px !important; transition: height 0.18s ease !important; }
+        body.modo-caixa .ck-num   { font-size: 20px !important; }
+        body.modo-caixa .ck-val   { font-size: 16px !important; }
+        body.modo-caixa .ck-itens { font-size: 12px !important; }
+        /* Estado compacto: comanda selecionada — lista recua, foco no detalhe/pagamento */
+        body.modo-caixa #checkout-panel-left.comanda-ativa #listaComandas {
             grid-template-columns: repeat(4, 1fr) !important;
-            max-height: 200px !important;
+            max-height: 110px !important;
             gap: 4px !important;
         }
+        body.modo-caixa #checkout-panel-left.comanda-ativa #listaComandas button { height: 52px !important; }
+        body.modo-caixa #checkout-panel-left.comanda-ativa .ck-num   { font-size: 13px !important; }
+        body.modo-caixa #checkout-panel-left.comanda-ativa .ck-val   { font-size: 11px !important; }
+        body.modo-caixa #checkout-panel-left.comanda-ativa .ck-itens { display: none !important; }
         body.modo-caixa .co-hdr-abertas { font-size: 14px !important; padding: 4px 6px !important; margin-bottom: 6px !important; }
         body.modo-caixa .co-hdr-detalhe { font-size: 18px !important; padding: 8px 10px !important; }
         body.modo-caixa .co-hdr-itens   { font-size: 12px !important; padding: 6px 8px !important; grid-template-columns: 1fr 56px 76px 76px !important; }
@@ -5249,7 +5265,8 @@ function carregarComanda() {
         function limparCheckout() {
             comandaCheckoutAtual = null;
             formaPagamentoSelecionada = null;
-            
+            document.getElementById('checkout-panel-left').classList.remove('comanda-ativa');
+
             // Limpar seleção de comanda
             const areaVazia = document.getElementById('areaVazia');
             const areaDetalhes = document.getElementById('areaDetalhes');
@@ -5940,7 +5957,8 @@ function carregarComanda() {
         
         function selecionarComandaCheckout(key, comanda) {
             comandaCheckoutAtual = key;
-            
+            document.getElementById('checkout-panel-left').classList.add('comanda-ativa');
+
             // ✅ RESETAR FORMA DE PAGAMENTO
             formaPagamentoSelecionada = null;
             document.querySelectorAll('.btnPagamento').forEach(btn => {
@@ -6181,7 +6199,8 @@ function carregarComanda() {
             setTimeout(() => {
                 comandaCheckoutAtual = null;
                 formaPagamentoSelecionada = null;
-                
+                document.getElementById('checkout-panel-left').classList.remove('comanda-ativa');
+
                 document.getElementById('areaDetalhes').style.display = 'none';
                 document.getElementById('areaPagamento').style.display = 'none';
                 document.getElementById('areaVazia').style.display = 'flex';
@@ -9142,6 +9161,7 @@ function carregarComanda() {
                 if (foiEncerrada) {
                     comandaCheckoutAtual = null;
                     formaPagamentoSelecionada = null;
+                    document.getElementById('checkout-panel-left').classList.remove('comanda-ativa');
                     document.getElementById('areaDetalhes').style.display = 'none';
                     document.getElementById('areaPagamento').style.display = 'none';
                     document.getElementById('areaVazia').style.display = 'flex';
