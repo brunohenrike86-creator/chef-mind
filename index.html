@@ -6744,6 +6744,7 @@ function carregarComanda() {
             pendentes.forEach(i => {
                 i.timestampInicioPreparo = agora;
                 i.usuarioPreparo = usuario || 'Atendente';
+                i._writeAttemptedAt = Date.now(); // TTL para anti-flicker: se servidor não confirmar em 15s, reverte
                 if (i._id) sheetsAPI('iniciarPreparo', { item_id: i._id, usuario });
             });
 
@@ -7502,6 +7503,35 @@ function carregarComanda() {
                                 const serverItems  = itensCmd
                                     .filter(i => String(i.removido).toLowerCase() !== 'true')
                                     .map(mapItemSheets);
+
+                                // ANTI-FLICKER: preserva timestamps definidos localmente quando
+                                // o servidor ainda retorna null — o GAS pode levar 1-5s para
+                                // confirmar a escrita após iniciarPreparo/concluirPreparo. Sem
+                                // isso, o polling sobrescreve o estado local otimista antes do
+                                // servidor confirmar, fazendo o card piscar de "Em Preparo" para
+                                // "Aguardando" e voltar. O servidor sempre ganha quando TEM o dado.
+                                // TTL: após 15s sem confirmação, desiste e avisa o usuário — a write
+                                // falhou silenciosamente e ele precisa clicar de novo.
+                                const WRITE_TTL_MS = 15000;
+                                const localMap = {};
+                                (local.itens || []).forEach(i => { if (i._id) localMap[String(i._id)] = i; });
+                                serverItems.forEach(si => {
+                                    const li = localMap[String(si._id)];
+                                    if (li) {
+                                        if (!si.timestampInicioPreparo && li.timestampInicioPreparo) {
+                                            const elapsed = li._writeAttemptedAt ? (Date.now() - li._writeAttemptedAt) : 0;
+                                            if (elapsed < WRITE_TTL_MS) {
+                                                si.timestampInicioPreparo = li.timestampInicioPreparo; // preserva enquanto aguarda
+                                            } else {
+                                                // Servidor não confirmou em 15s — write falhou
+                                                // Não preserva: server truth vence (card volta pra Aguardando)
+                                                showToast('⚠️ Erro ao salvar "Iniciar Preparo". Toque novamente no card.', 'error');
+                                            }
+                                        }
+                                        if (!si.timestampConcluido && li.timestampConcluido) si.timestampConcluido = li.timestampConcluido;
+                                    }
+                                });
+
                                 const pendingItems = local.itens.filter(i => !i._id);
                                 const serverIds    = new Set(serverItems.map(i => i._id));
                                 local.itens  = [...serverItems, ...pendingItems.filter(p => !serverIds.has(p._id))];
