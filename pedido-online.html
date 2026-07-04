@@ -273,9 +273,10 @@ function lerSessaoAtiva() {
     try {
         const s = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || 'null');
         if (!s) return null;
-        // Sessão com mais de 12 horas é descartada automaticamente
+        // Sessão sem _ts foi salva antes do fix de expiração — descartar
+        // Sessão com mais de 12 horas também é descartada
         const DOZE_HORAS = 12 * 60 * 60 * 1000;
-        if (s._ts && (Date.now() - s._ts) > DOZE_HORAS) {
+        if (!s._ts || (Date.now() - s._ts) > DOZE_HORAS) {
             localStorage.removeItem(CHAVE_SESSAO);
             return null;
         }
