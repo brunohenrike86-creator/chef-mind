@@ -4933,6 +4933,7 @@
 
                 document.getElementById('modalConfirmacao').style.display = 'flex';
                 if (_mcRequerTexto) setTimeout(() => input.focus(), 50);
+                else setTimeout(() => btn.focus(), 50); // Enter nativo confirma quando não há campo de texto
             });
         }
 
@@ -8723,7 +8724,7 @@ function carregarComanda() {
             if (sessao) {
                 try {
                     const s = JSON.parse(sessao);
-                    const TTL_MS = 4 * 60 * 60 * 1000; // 4 horas
+                    const TTL_MS = 6 * 60 * 60 * 1000; // 6 horas
                     const valida = s.loginAt && (Date.now() - s.loginAt) < TTL_MS;
                     if (valida) {
                         state.user       = s.user       || null;
