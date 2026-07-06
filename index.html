@@ -2803,13 +2803,13 @@
                         state.idlePlaylist = [];
                     }
                     // Injetar slides de clima e dica entre as telas informativas e os vídeos.
-                    // Feito uma única vez (flag evita reinjeção a cada ciclo de polling).
-                    if (!state._idlePlaylistEnriquecida && state.idlePlaylist.length > 0) {
+                    // Verificado por CONTEÚDO (não por flag) porque o config é relido a cada poll
+                    // e reconstruiria a playlist sem os slides injetados se usássemos uma flag.
+                    if (state.idlePlaylist.length > 0 && !state.idlePlaylist.some(s => s.tipo === 'clima')) {
                         const _plScreens = state.idlePlaylist.filter(s => s.tipo === 'screen');
                         const _plVideos  = state.idlePlaylist.filter(s => s.tipo === 'video');
                         const _plOthers  = state.idlePlaylist.filter(s => s.tipo !== 'screen' && s.tipo !== 'video');
                         state.idlePlaylist = [..._plScreens, {tipo:'clima'}, {tipo:'dica'}, ..._plVideos, ..._plOthers];
-                        state._idlePlaylistEnriquecida = true;
                     }
                     console.log('[Sheets] ✅ Config carregada');
                 }
@@ -7052,6 +7052,8 @@ function carregarComanda() {
             if (_idleRodizioAtivo) return; // já está rodando, não reinicia do zero
             _idleRodizioAtivo = true;
             _idleSlideIndex = 0;
+            // Pré-carrega dicas de saúde para que o slide "dica" não seja pulado na primeira exibição
+            _fetchConteudoTela();
             const overlay = document.getElementById('idleVideoOverlay');
             if (overlay) {
                 overlay.style.display = 'block';
