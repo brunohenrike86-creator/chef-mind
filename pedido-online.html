@@ -198,6 +198,61 @@
     .loading-spinner {
         text-align:center; padding: 40px 16px; color: var(--gray); font-size: 14px;
     }
+    /* Snackbar — fixo no rodapé, visível em qualquer posição de scroll */
+    #snackbar {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%) translateY(16px);
+        background: var(--danger);
+        color: #fff;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: bold;
+        max-width: 340px;
+        width: calc(100% - 40px);
+        text-align: center;
+        opacity: 0;
+        transition: opacity 0.2s, transform 0.2s;
+        z-index: 9999;
+        pointer-events: none;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    }
+    #snackbar.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    /* +/- mini no carrinho — padrão iFood */
+    .qtd-mini { display:flex; align-items:center; gap:6px; }
+    .qtd-mini-btn {
+        width: 30px; height: 30px;
+        border-radius: 6px;
+        border: 2px solid var(--border);
+        background: var(--bg-white);
+        display:flex; align-items:center; justify-content:center;
+        font-size: 18px; font-weight:bold; color: var(--primary);
+        cursor: pointer; user-select:none;
+    }
+    .qtd-mini-btn:active { background: var(--bg-light); }
+    .qtd-mini-val { font-size: 14px; font-weight:bold; min-width: 18px; text-align:center; }
+    /* Loading de envio — tela amigável enquanto o POST processa */
+    .tela-enviando { padding: 40px 16px; }
+    .enviando-icone { font-size: 56px; display:block; margin-bottom:16px;
+        animation: balanco 0.9s ease-in-out infinite alternate; }
+    @keyframes balanco {
+        from { transform: rotate(-8deg) scale(1); }
+        to   { transform: rotate(8deg) scale(1.08); }
+    }
+    .enviando-dots { display:flex; justify-content:center; gap:10px; margin-top:22px; }
+    .enviando-dots span {
+        width:10px; height:10px; border-radius:50%;
+        background: var(--primary);
+        animation: piscar 1.1s ease infinite;
+    }
+    .enviando-dots span:nth-child(2) { animation-delay: 0.18s; }
+    .enviando-dots span:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes piscar {
+        0%,80%,100% { transform:scale(0.55); opacity:0.35; }
+        40%          { transform:scale(1.1);  opacity:1;    }
+    }
 </style>
 </head>
 <body>
@@ -206,6 +261,7 @@
     <div class="sub">Pedido online · Retire e pague no caixa</div>
 </header>
 <div id="app"><div class="loading-spinner">Carregando opções do dia...</div></div>
+<div id="snackbar"></div>
 
 <script>
 // ===== Config do backend (mesma URL usada pelo app principal) =====
@@ -238,7 +294,7 @@ function estaDentroDoHorario() {
 async function apiGet(action, params) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20000);
-    const qs = new URLSearchParams(Object.assign({ action }, params || {})).toString();
+    const qs = new URLSearchParams(Object.assign({ action, _t: Date.now() }, params || {})).toString();
     try {
         const resp = await fetch(`${SHEETS_API_URL}?${qs}`, { signal: controller.signal, cache: 'no-store' });
         return await resp.json();
@@ -327,9 +383,12 @@ let intervaloPolling = null;
 let pedidoAtual = null; // { comandaId, numero, nome, itens, bebidas, total } — sessão ativa em memória
 
 function erro(msg) {
-    state.erro = msg;
-    render();
-    setTimeout(() => { state.erro = ''; render(); }, 3500);
+    const el = document.getElementById('snackbar');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(erro._t);
+    erro._t = setTimeout(() => el.classList.remove('show'), 3500);
 }
 
 function mascararWhatsapp(valor) {
@@ -430,6 +489,21 @@ function removerBebida(codigo) {
     render();
 }
 
+function alterarQtdCarrinho(i, delta) {
+    const novaQtd = state.carrinho[i].qtd + delta;
+    if (novaQtd <= 0) state.carrinho.splice(i, 1);
+    else state.carrinho[i].qtd = novaQtd;
+    render();
+}
+
+function alterarQtdBebida(codigo, delta) {
+    const b = state.bebidas.find(x => x.codigo === codigo);
+    if (!b) return;
+    b.qtd += delta;
+    if (b.qtd <= 0) state.bebidas = state.bebidas.filter(x => x.codigo !== codigo);
+    render();
+}
+
 function calcularTotal() {
     const totalMarmitas = state.carrinho.reduce((s, i) => s + i.qtd * i.precoUnit, 0);
     const totalBebidas = state.bebidas.reduce((s, b) => s + b.qtd * b.preco, 0);
@@ -438,7 +512,7 @@ function calcularTotal() {
 
 async function confirmarPedido() {
     if (!estaDentroDoHorario()) { view = 'fechado'; render(); return; }
-    if (state.carrinho.length === 0) { erro('Adicione pelo menos uma marmita ao pedido'); return; }
+    if (state.carrinho.length === 0 && state.bebidas.length === 0) { erro('Adicione pelo menos um item ao pedido'); return; }
     if (!state.nome.trim()) { erro('Informe seu nome'); return; }
     const digitosWhatsapp = state.whatsapp.replace(/\D/g, '');
     if (digitosWhatsapp.length < 10) { erro('Informe um WhatsApp válido com DDD'); return; }
@@ -605,13 +679,17 @@ function renderFormulario() {
     const linhasMarmitas = state.carrinho.map((item, i) => `
         <div class="item-carrinho">
             <div>
-                <div class="item-nome">${item.qtd}x Marmita ${item.tamanho}</div>
+                <div class="item-nome">Marmita ${item.tamanho}</div>
                 <div class="item-detalhe">${escapeHtml(item.carnes.join(' + '))}</div>
                 ${item.obs ? `<div class="item-detalhe">↳ ${escapeHtml(item.obs)}</div>` : ''}
             </div>
             <div class="linha-item-dir">
                 <div class="item-preco">R$ ${(item.qtd * item.precoUnit).toFixed(2)}</div>
-                <div class="item-lixeira" onclick="removerDoCarrinho(${i})">🗑</div>
+                <div class="qtd-mini">
+                    <div class="qtd-mini-btn" onclick="alterarQtdCarrinho(${i},-1)">−</div>
+                    <div class="qtd-mini-val">${item.qtd}</div>
+                    <div class="qtd-mini-btn" onclick="alterarQtdCarrinho(${i},1)">+</div>
+                </div>
             </div>
         </div>
     `).join('');
@@ -619,17 +697,21 @@ function renderFormulario() {
     const linhasBebidas = state.bebidas.map(b => `
         <div class="item-carrinho">
             <div>
-                <div class="item-nome">${b.qtd}x ${escapeHtml(b.nome)}</div>
+                <div class="item-nome">${escapeHtml(b.nome)}</div>
             </div>
             <div class="linha-item-dir">
                 <div class="item-preco">R$ ${(b.qtd * b.preco).toFixed(2)}</div>
-                <div class="item-lixeira" onclick="removerBebida(${b.codigo})">🗑</div>
+                <div class="qtd-mini">
+                    <div class="qtd-mini-btn" onclick="alterarQtdBebida(${b.codigo},-1)">−</div>
+                    <div class="qtd-mini-val">${b.qtd}</div>
+                    <div class="qtd-mini-btn" onclick="alterarQtdBebida(${b.codigo},1)">+</div>
+                </div>
             </div>
         </div>
     `).join('');
 
     const itensPedido = (state.carrinho.length === 0 && state.bebidas.length === 0)
-        ? `<div class="vazio">Configure sua marmita acima e toque em "Adicionar ao pedido"</div>`
+        ? `<div class="vazio">Adicione marmitas ou bebidas ao seu pedido acima</div>`
         : linhasMarmitas + linhasBebidas;
 
     const listaBebidasDisponiveis = state.bebidaAberta
@@ -643,8 +725,6 @@ function renderFormulario() {
     const total = calcularTotal();
 
     return `
-        ${state.erro ? `<div class="aviso">${escapeHtml(state.erro)}</div>` : ''}
-
         <div class="card" id="cardConfigurador">
             <div class="titulo-card">Peça sua marmita</div>
             <div class="dica" style="margin-bottom:12px;">Acompanha arroz, feijão, macarrão, batata e salada do buffet — você escolhe só o tamanho e a carne.</div>
@@ -685,7 +765,7 @@ function renderFormulario() {
             </div>
 
             <div class="acoes-pedido">
-                <button class="btn btn-fantasma" onclick="irParaConfigurador()">+ Adicionar outra marmita</button>
+                <button class="btn btn-fantasma" onclick="irParaConfigurador()">${state.carrinho.length > 0 ? '+ Adicionar outra marmita' : '+ Adicionar marmita'}</button>
                 <button class="btn btn-secundario" onclick="toggleBebidaAberta()">${state.bebidaAberta ? '− Fechar opções de bebida' : '+ Adicionar bebida'}</button>
             </div>
             ${listaBebidasDisponiveis}
@@ -711,8 +791,10 @@ function renderFormulario() {
 
 function renderConfirmacao() {
     const pedido = pedidoAtual;
-    const resumoItens = pedido.itens.map(i => `${i.qtd}x Marmita ${i.tamanho} — ${escapeHtml(i.carnes.join(' + '))}`).join('<br>');
-    const resumoBebidas = pedido.bebidas.map(b => `${b.qtd}x ${escapeHtml(b.nome)}`).join('<br>');
+    const linhasResumo = [
+        ...pedido.itens.map(i => `${i.qtd}x Marmita ${i.tamanho} — ${escapeHtml(i.carnes.join(' + '))}`),
+        ...pedido.bebidas.map(b => `${b.qtd}x ${escapeHtml(b.nome)}`)
+    ].join('<br>');
 
     return `
         <div class="card tela-centro">
@@ -720,8 +802,7 @@ function renderConfirmacao() {
             <div class="titulo-card" style="font-size:16px;">Pedido recebido</div>
             <div class="codigo-pedido">#${pedido.numero}</div>
             <div class="resumo-confirmacao">
-                ${resumoItens}
-                ${resumoBebidas ? '<br>' + resumoBebidas : ''}
+                ${linhasResumo}
                 <br><br><b>Total: R$ ${pedido.total.toFixed(2)}</b>
             </div>
             <button class="btn btn-primario" onclick="irParaStatus()">Acompanhar meu pedido</button>
@@ -785,15 +866,27 @@ function renderStatus() {
             <div class="mensagem-status">${msg[0]}</div>
             <div class="submensagem-status">${msg[1]}</div>
 
-            <div class="link-discreto" onclick="novoPedidoEmNovaAba()">Fazer novo pedido</div>
+            <button class="btn btn-secundario" style="margin-top:18px;" onclick="novoPedidoEmNovaAba()">+ Fazer novo pedido</button>
 
             ${renderAjuda()}
         </div>
     `;
 }
 
+function renderEnviando() {
+    return `
+        <div class="card tela-centro tela-enviando">
+            <span class="enviando-icone">🍽️</span>
+            <div class="titulo-card" style="margin:4px 0 6px;">Enviando seu pedido…</div>
+            <div class="dica">Só um instante, estamos registrando tudo</div>
+            <div class="enviando-dots"><span></span><span></span><span></span></div>
+        </div>
+    `;
+}
+
 function render() {
     const app = document.getElementById('app');
+    if (state.enviando) { app.innerHTML = renderEnviando(); return; }
     if (view === 'carregando') app.innerHTML = '<div class="loading-spinner">Carregando opções do dia...</div>';
     else if (view === 'confirmacao') app.innerHTML = renderConfirmacao();
     else if (view === 'status') app.innerHTML = renderStatus();
