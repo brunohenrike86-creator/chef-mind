@@ -234,12 +234,13 @@ function estaDentroDoHorario() {
 
 // ===== Chamadas à API =====
 // Regra 9: GETs usam AbortController com timeout de 20s.
+// cache: 'no-store' evita que o browser sirva resposta cacheada no polling de status.
 async function apiGet(action, params) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20000);
     const qs = new URLSearchParams(Object.assign({ action }, params || {})).toString();
     try {
-        const resp = await fetch(`${SHEETS_API_URL}?${qs}`, { signal: controller.signal });
+        const resp = await fetch(`${SHEETS_API_URL}?${qs}`, { signal: controller.signal, cache: 'no-store' });
         return await resp.json();
     } finally {
         clearTimeout(timeoutId);
