@@ -2552,6 +2552,12 @@
                     <button type="button" onclick="gerarEANInterno()" style="padding:8px 10px; background:var(--bg-light); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:11px; font-weight:bold; color:var(--primary); white-space:nowrap; flex-shrink:0;">⚡ Gerar EAN</button>
                     <button type="button" onclick="imprimirEtiquetaEAN()" style="padding:8px 10px; background:var(--bg-light); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:11px; font-weight:bold; color:var(--primary); white-space:nowrap; flex-shrink:0;">🖨️ Etiqueta</button>
                 </div>
+                <!-- EANs alternativos: produtos que têm mais de uma marca/embalagem com EANs diferentes -->
+                <div id="eanExtras"></div>
+                <button type="button" onclick="adicionarCampoEAN()"
+                        style="margin-top:6px; background:none; border:none; color:var(--primary); font-size:11px; cursor:pointer; padding:0; opacity:0.75;">
+                    + outro EAN (marca diferente)
+                </button>
             </div>
 
             <div class="modal-field">
@@ -8842,7 +8848,7 @@ function carregarComanda() {
                     return;
                 }
                 const entryChk = Object.entries(state.itens).find(
-                    ([, it]) => it.codigo_barras && String(it.codigo_barras).trim() === code.trim()
+                    ([, it]) => _eanList(it.codigo_barras).includes(code.trim())
                 );
                 if (!entryChk) {
                     showToast('❌ EAN não cadastrado: ' + code, 'error');
@@ -8883,9 +8889,9 @@ function carregarComanda() {
                 activeEl.value = '';
             }
 
-            // Busca por EAN (codigo_barras pode vir como número do Sheets — normaliza com String())
+            // Busca por EAN — suporta múltiplos EANs por item (pipe-separated)
             const entry = Object.entries(state.itens).find(
-                ([, it]) => it.codigo_barras && String(it.codigo_barras).trim() === code.trim()
+                ([, it]) => _eanList(it.codigo_barras).includes(code.trim())
             );
             if (!entry) {
                 showToast('❌ EAN não cadastrado: ' + code, 'error');
@@ -9045,14 +9051,66 @@ function carregarComanda() {
             return _MAP_CAT[cat] || (_CATS_DROPDOWN.includes(cat) ? cat : 'Outros');
         }
 
+        // ── Multi-EAN helpers ──────────────────────────────────────────────────
+        // EANs são armazenados como string pipe-separated: "7891234|7897654"
+        // Retorna array de EANs individuais (strings). Seguro para valor vazio/undefined.
+        function _eanList(codigoBarras) {
+            return String(codigoBarras || '').split('|').map(s => s.trim()).filter(Boolean);
+        }
+
+        // Coleta todos os EANs dos inputs do modal (principal + extras) como pipe-separated
+        function getEANsDoModal() {
+            const principal = (document.getElementById('modalCodigoBarras')?.value || '').trim();
+            const extras = Array.from(document.querySelectorAll('.ean-extra-input'))
+                .map(i => i.value.trim()).filter(Boolean);
+            return [principal, ...extras].filter(Boolean).join('|');
+        }
+
+        // Limpa campos extras de EAN (ao abrir modal de novo item)
+        function _clearEANExtras() {
+            const c = document.getElementById('eanExtras');
+            if (c) c.innerHTML = '';
+        }
+
+        // Popula campos EAN no modal ao editar: primeiro EAN no campo principal, demais como extras
+        function _setEANsNoModal(codigoBarras) {
+            const eans = _eanList(codigoBarras);
+            document.getElementById('modalCodigoBarras').value = eans[0] || '';
+            _clearEANExtras();
+            for (let i = 1; i < eans.length; i++) adicionarCampoEAN(eans[i]);
+        }
+
+        // Adiciona um campo EAN extra no modal (chamado pelo botão "+" e por _setEANsNoModal)
+        function adicionarCampoEAN(valor) {
+            const container = document.getElementById('eanExtras');
+            if (!container) return;
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex; gap:6px; align-items:center; margin-top:4px;';
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'modal-input ean-extra-input';
+            input.placeholder = 'EAN alternativo (ex: outra marca)';
+            input.style.cssText = 'flex:1; min-width:0;';
+            if (valor) input.value = valor;
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.textContent = '×';
+            del.title = 'Remover este EAN';
+            del.style.cssText = 'padding:6px 10px; background:var(--bg-light); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:14px; color:var(--gray); flex-shrink:0; line-height:1;';
+            del.onclick = () => container.removeChild(row);
+            row.appendChild(input);
+            row.appendChild(del);
+            container.appendChild(row);
+            if (!valor) input.focus();
+        }
+        // ──────────────────────────────────────────────────────────────────────
+
         // Gera EAN-13 de uso interno (prefixo 200 + 9 dígitos aleatórios + check digit)
         // Garante unicidade contra os EANs já cadastrados
         function gerarEANInterno() {
             const campo = document.getElementById('modalCodigoBarras');
             const eanUsados = new Set(
-                Object.values(state.itens)
-                    .map(it => it.codigo_barras ? String(it.codigo_barras).trim() : '')
-                    .filter(Boolean)
+                Object.values(state.itens).flatMap(it => _eanList(it.codigo_barras))
             );
             let ean;
             let tentativas = 0;
@@ -9227,6 +9285,7 @@ function carregarComanda() {
             document.getElementById('modalPreco').value = '';
             document.getElementById('modalCategoria').value = 'Outros';
             document.getElementById('modalCodigoBarras').value = '';
+            _clearEANExtras();
             document.getElementById('modalDisponivelOnline').checked = false; // novo item nasce inativo no pedido online por padrão
             selecionarTipo('Fixo');
             _resetFotoUI();
@@ -9243,7 +9302,7 @@ function carregarComanda() {
             document.getElementById('modalNome').value = item.nome;
             document.getElementById('modalTipo').value = item.tipo;
             document.getElementById('modalPreco').value = item.preco;
-            document.getElementById('modalCodigoBarras').value = item.codigo_barras || '';
+            _setEANsNoModal(item.codigo_barras);
             // Itens antigos não têm o campo ainda — tratamos undefined como "disponível" (default)
             document.getElementById('modalDisponivelOnline').checked = item.disponivelOnline !== false;
 
@@ -9295,7 +9354,7 @@ function carregarComanda() {
             const nome = document.getElementById('modalNome').value.trim();
             const tipo = document.getElementById('modalTipo').value;
             const preco = parseFloat(document.getElementById('modalPreco').value);
-            const codigoBarras = document.getElementById('modalCodigoBarras').value.trim();
+            const codigoBarras = getEANsDoModal(); // pipe-separated; suporta múltiplos EANs
             const disponivelOnline = document.getElementById('modalDisponivelOnline').checked;
 
             if (!nome || !tipo || !preco || isNaN(preco)) {
@@ -9303,15 +9362,16 @@ function carregarComanda() {
                 return;
             }
 
-            // Bug 4 — EAN não pode repetir entre itens
-            // String() necessário: Sheets pode retornar codigo_barras como número
+            // Bug 4 — cada EAN precisa ser único entre itens (verifica um por um no pipe-separated)
             if (codigoBarras) {
-                const eanDuplicado = Object.entries(state.itens).find(([cod, it]) =>
-                    it.codigo_barras && String(it.codigo_barras).trim() === codigoBarras && cod !== itemEmEdicao
-                );
-                if (eanDuplicado) {
-                    showToast(`EAN já cadastrado no item #${eanDuplicado[0]} — ${eanDuplicado[1].nome}`, 'error');
-                    return;
+                for (const ean of _eanList(codigoBarras)) {
+                    const eanDuplicado = Object.entries(state.itens).find(([cod, it]) =>
+                        _eanList(it.codigo_barras).includes(ean) && cod !== itemEmEdicao
+                    );
+                    if (eanDuplicado) {
+                        showToast(`EAN ${ean} já cadastrado em: ${eanDuplicado[1].nome}`, 'error');
+                        return;
+                    }
                 }
             }
 
@@ -9389,10 +9449,10 @@ function carregarComanda() {
             
             document.getElementById('vizPreco').textContent = `R$ ${item.preco.toFixed(2)}${tipoLabel}`;
 
-            // EAN / código de barras
-            const ean = item.codigo_barras || '';
-            document.getElementById('vizEan').textContent = ean || '—';
-            document.getElementById('vizEan').style.color = ean ? 'var(--text-dark)' : 'var(--gray)';
+            // EAN / código de barras (pode ter múltiplos — exibe separados por · )
+            const eans = _eanList(item.codigo_barras);
+            document.getElementById('vizEan').textContent = eans.length > 0 ? eans.join(' · ') : '—';
+            document.getElementById('vizEan').style.color = eans.length > 0 ? 'var(--text-dark)' : 'var(--gray)';
 
             // Foto
             const vizFotoField = document.getElementById('vizFotoField');
@@ -10962,7 +11022,7 @@ var itens = comanda.itens || [];
                     return;
                 }
                 const entryChk = Object.entries(state.itens).find(
-                    ([, it]) => it.codigo_barras && String(it.codigo_barras).trim() === codigoBarras.trim()
+                    ([, it]) => _eanList(it.codigo_barras).includes(codigoBarras.trim())
                 );
                 if (!entryChk) {
                     showToast('❌ EAN não cadastrado: ' + codigoBarras, 'error');
@@ -11005,10 +11065,9 @@ var itens = comanda.itens || [];
                 return;
             }
 
-            // Busca no cardápio por codigo_barras
-            // String() protege contra Sheets retornar codigo_barras como number
+            // Busca no cardápio por codigo_barras — suporta múltiplos EANs por item (pipe-separated)
             const itemEntry = Object.entries(state.itens).find(
-                ([, item]) => item.codigo_barras && String(item.codigo_barras).trim() === codigoBarras.trim()
+                ([, item]) => _eanList(item.codigo_barras).includes(codigoBarras.trim())
             );
 
             if (!itemEntry) {
