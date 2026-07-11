@@ -3280,6 +3280,14 @@
                 _initImpressaoMarmita();
             }
 
+            // ── Tela default pós-login: sempre reset, independente da sessão anterior ──
+            // Caixa já navega via caixaSwitchTo('lançar') acima.
+            if (state.perfil === 'Marmita') {
+                switchScreen('preparo', document.querySelector('[data-menu="preparo"]'));
+            } else if (state.perfil !== 'Caixa') {
+                switchScreen('lançar', document.querySelector('[data-menu="lançar"]'));
+            }
+
             // ✅ INICIAR POLLING
             iniciarPolling();
 
