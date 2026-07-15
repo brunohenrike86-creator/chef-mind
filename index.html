@@ -2973,14 +2973,24 @@
             const res = await sheetsAPI('novaComanda', { numero: String(numero), usuario: state.userLogado || state.user || '' });
             if (res && res.erro) console.error('[Sheets] novaComanda erro:', res.erro);
             if (res && res.jaAberta) {
-                // ⚠️ Outro device abriu essa comanda antes — desfaz criação local e sincroniza
-                console.warn('[Sheets] Comanda', numero, 'já aberta em outro device — revertendo');
+                // ⚠️ Comanda já existe no servidor (criada neste ou em outro device).
+                // Desfaz a criação local, sincroniza com o servidor e carrega a comanda
+                // existente automaticamente — sem mostrar erro nem obrigar o usuário a
+                // redigitar o número.
+                console.warn('[Sheets] Comanda', numero, 'já existe no servidor — revertendo e carregando');
                 delete state.comandas[chave];
                 if (state.comandaAtual === chave) state.comandaAtual = null;
                 saveStorage();
-                await pollFromSheets(); // sincroniza estado com servidor
-                showToast(`⚠️ Comanda #${numero} já foi aberta em outro dispositivo`, 'error');
-                limparTelaLançar();
+                await pollFromSheets(); // traz a comanda existente para o state
+                if (state.comandas[chave]) {
+                    // Comanda encontrada: carregar normalmente
+                    document.getElementById('lançarComandaNum').value = numero;
+                    carregarComanda();
+                } else {
+                    // Não encontrou mesmo após sync (raro): avisar e limpar
+                    showToast(`⚠️ Comanda #${numero} não encontrada — tente novamente`, 'error');
+                    limparTelaLançar();
+                }
                 return;
             }
             if (res && res.id && state.comandas[chave]) {
