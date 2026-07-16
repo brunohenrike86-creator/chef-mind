@@ -1727,8 +1727,20 @@
                 <div id="lancar-panel-right" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 200px;">
                     <!-- SECTION 4: CATEGORIAS + CARDÁPIO (dinâmico - ocupa resto) -->
                     <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 200px;">
-                        <!-- CATEGORIAS -->
+                        <!-- CATEGORIAS + BUSCA -->
                         <div style="padding: 6px; background: white; border-bottom: 1px solid var(--border); flex-shrink: 0;">
+                            <!-- Campo de busca por nome ou código -->
+                            <div style="position:relative; margin-bottom:6px;">
+                                <input type="text" id="lancBuscaInput"
+                                       placeholder="🔍 Buscar por nome ou código..."
+                                       autocomplete="off"
+                                       onclick="vkShow('lancBuscaInput','alpha')"
+                                       oninput="lancBuscaItem=this.value.toLowerCase().trim(); filtrarPorCategoria(state.categoriaAtual); document.getElementById('lancBuscaClear').style.display=this.value?'flex':'none';"
+                                       style="width:100%; padding:6px 30px 6px 10px; border-radius:6px; border:2px solid var(--border); font-size:11px; font-family:inherit; background:var(--bg-white); color:var(--text-dark); box-sizing:border-box;">
+                                <button id="lancBuscaClear"
+                                        onclick="document.getElementById('lancBuscaInput').value=''; lancBuscaItem=''; filtrarPorCategoria('Todos'); this.style.display='none'; vkHide();"
+                                        style="display:none; position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--gray); font-size:14px; padding:0; width:20px; height:20px; align-items:center; justify-content:center; line-height:1;">✕</button>
+                            </div>
                             <div style="font-size: 9px; font-weight: bold; color: var(--gray); margin-bottom: 4px;">CATEGORIAS</div>
                             <div id="abaCategorias" style="display: flex; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px;"></div>
                         </div>
@@ -2074,9 +2086,13 @@
 
                         <!-- LINHA 1: busca + botão novo -->
                         <div style="display:flex; gap:6px; align-items:center;">
-                            <input type="text" id="adminBuscaInput" placeholder="🔍 Buscar por nome..." autocomplete="off"
-                                   oninput="adminFiltroBusca=this.value.toLowerCase().trim(); renderAdminItensComFiltro();"
-                                   style="flex:1; padding:8px 10px; border-radius:6px; border:2px solid var(--border); font-size:12px; font-family:inherit; background:var(--bg-white); color:var(--text-dark); box-sizing:border-box;">
+                            <div style="position:relative; flex:1;">
+                                <input type="text" id="adminBuscaInput" placeholder="🔍 Buscar por nome, código ou EAN..." autocomplete="off"
+                                       oninput="adminFiltroBusca=this.value.toLowerCase().trim(); renderAdminItensComFiltro(); document.getElementById('adminBuscaClear').style.display=this.value?'flex':'none';"
+                                       style="width:100%; padding:8px 30px 8px 10px; border-radius:6px; border:2px solid var(--border); font-size:12px; font-family:inherit; background:var(--bg-white); color:var(--text-dark); box-sizing:border-box;">
+                                <button id="adminBuscaClear" onclick="document.getElementById('adminBuscaInput').value=''; adminFiltroBusca=''; renderAdminItensComFiltro(); this.style.display='none'; document.getElementById('adminBuscaInput').focus();"
+                                        style="display:none; position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--gray); font-size:14px; padding:0; width:20px; height:20px; align-items:center; justify-content:center; line-height:1;">✕</button>
+                            </div>
                             <button onclick="abrirModalNovoItem()" style="white-space:nowrap; padding:8px 12px; background:linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:12px; box-shadow:0 2px 6px rgba(212,114,79,0.3); flex-shrink:0;">+ Novo</button>
                         </div>
 
@@ -3947,10 +3963,11 @@
                 });
             });
 
-            // Atualizar categoria quando digita nome
+            // Atualizar categoria quando digita nome — SOMENTE em cadastro novo (não edição)
             const inputNome = document.getElementById('modalNome');
             if (inputNome) {
                 inputNome.addEventListener('input', () => {
+                    if (itemEmEdicao) return; // em edição, nunca sobrescrever categoria
                     const nome = inputNome.value;
                     const tipo = document.getElementById('modalTipo').value;
                     if (nome) {
@@ -3999,6 +4016,8 @@
             renderAdminItensComFiltro();
             showToast(`Item #${codigo} cadastrado`, 'success');
         }
+
+        let lancBuscaItem = ''; // busca na tela de lançar (nome ou código, lowercase)
 
         let adminFiltroCategoria = 'Todos'; // filtro por categoria
         let adminFiltroBusca    = '';      // busca por nome (lowercase)
@@ -4125,10 +4144,14 @@
                     return cat === adminFiltroCategoria;
                 });
             }
-            // Filtro: busca por nome
+            // Filtro: busca por nome, código ou EAN (suporta multi-EAN pipe-separated)
             if (adminFiltroBusca) {
-                itensFiltrados = itensFiltrados.filter(([, item]) =>
-                    (item.nome || '').toLowerCase().includes(adminFiltroBusca));
+                itensFiltrados = itensFiltrados.filter(([codigo, item]) => {
+                    if ((item.nome || '').toLowerCase().includes(adminFiltroBusca)) return true;
+                    if (String(codigo).includes(adminFiltroBusca)) return true;
+                    const eans = String(item.codigo_barras || '').split('|');
+                    return eans.some(e => e.trim() === adminFiltroBusca);
+                });
             }
             // Filtro: status ativo/inativo
             // Nota: getCardapio() no GAS já filtra só ativos → item.ativo sempre true aqui
@@ -5419,7 +5442,14 @@ function carregarComanda() {
             // Limpar abas
             const abaContainer = document.getElementById('abaCategorias');
             if (abaContainer) abaContainer.innerHTML = '';
-            
+
+            // Limpar campo de busca do cardápio
+            lancBuscaItem = '';
+            const buscaInput = document.getElementById('lancBuscaInput');
+            if (buscaInput) buscaInput.value = '';
+            const buscaClear = document.getElementById('lancBuscaClear');
+            if (buscaClear) buscaClear.style.display = 'none';
+
             // ✅ OCULTAR BOTÃO ATALHO (sem comanda carregada)
             atualizarVisibilidadeBotaoAtalho();
             vkHide(); // sem comanda ativa, VK deve sumir
@@ -6048,10 +6078,18 @@ function carregarComanda() {
                 itensParaMostrar = porCategoria[categoria] || [];
             }
             
+            // Filtro de busca (AND com categoria) — nome parcial ou código parcial
+            if (lancBuscaItem) {
+                itensParaMostrar = itensParaMostrar.filter(([codigo, item]) =>
+                    (item.nome || '').toLowerCase().includes(lancBuscaItem) ||
+                    String(codigo).toLowerCase().includes(lancBuscaItem)
+                );
+            }
+
             if (itensParaMostrar.length === 0) {
                 container.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--gray);padding:24px 10px;font-size:11px;">
-                    <div style="font-size:24px;margin-bottom:6px;">🍴</div>
-                    Nenhum item nesta categoria
+                    <div style="font-size:24px;margin-bottom:6px;">${lancBuscaItem ? '🔍' : '🍴'}</div>
+                    ${lancBuscaItem ? `Nenhum resultado para "<strong>${lancBuscaItem}</strong>"` : 'Nenhum item nesta categoria'}
                 </div>`;
                 return;
             }
@@ -6129,6 +6167,16 @@ function carregarComanda() {
         function lançarItemPorClique(codigo) {
             document.getElementById('lançarCodigoItem').value = codigo;
             lançarItem();
+
+            // Busca cumpriu papel de encontrar o item — limpa e volta ao estado padrão
+            if (lancBuscaItem) {
+                lancBuscaItem = '';
+                const bi = document.getElementById('lancBuscaInput');
+                if (bi) bi.value = '';
+                const bc = document.getElementById('lancBuscaClear');
+                if (bc) bc.style.display = 'none';
+                filtrarPorCategoria('Todos');
+            }
 
             // ✅ Devolve o foco pro campo de código (desktop) — _focusCodigoItem ignora
             // em modo-mobile (apenas faz blur), então não ativa teclado numérico no celular
@@ -9146,33 +9194,42 @@ function carregarComanda() {
             if (tipo === 'Gramas') return 'Buffet';
             if (tipo === 'Bebida') return 'Bebidas';
 
-            // Por palavras-chave no nome
+            // Por palavras-chave no nome (ordem importa: mais específico primeiro)
             const categorias = {
-                'Buffet':          ['buffet', 'quilo', 'por kg', 'por peso'],
-                'Bebidas':         ['refrigerante', 'refri', 'suco', 'água', 'agua', 'chá', 'cha',
-                                    'chopp', 'cerveja', 'vinho', 'bebida', 'coca', 'pepsi',
-                                    'guaraná', 'guarana', 'energético', 'energetico', 'gasosa',
-                                    'tampico', 'kapo', 'limonada', 'mate', 'isotônico', 'isotonico',
-                                    'h2o', 'del vale', 'sukinho', 'whey', 'shake', 'kombucha'],
-                'Sobremesas':      ['pudim', 'bolo', 'torta', 'sorvete', 'picolé', 'picole',
-                                    'doce', 'brownie', 'mousse', 'pavê', 'pave', 'gelatina',
-                                    'churros', 'brigadeiro', 'açaí', 'acai', 'sobremesa',
-                                    'petit gateau', 'crepe', 'waffle', 'creme', 'gelado',
-                                    'cookie', 'cupcake', 'cheesecake', 'tiramisu', 'flan'],
-                'Carnes':          ['frango', 'carne', 'peixe', 'camarão', 'camarao', 'costela',
-                                    'bife', 'cupim', 'picanha', 'linguiça', 'linguica', 'bacon',
-                                    'pernil', 'lombo', 'alcatra', 'contrafilé', 'contrafile',
-                                    'maminha', 'file', 'filé', 'cordeiro', 'porco', 'suíno', 'suino'],
-                'Lanches':         ['salgado', 'pastel', 'coxinha', 'acarajé', 'acaraje',
-                                    'sanduíche', 'sanduiche', 'burger', 'lanche', 'hamburguer',
-                                    'hotdog', 'hot dog', 'esfirra', 'esfiha', 'quibe', 'kibe',
-                                    'pão de queijo', 'pao de queijo', 'empada', 'empanada'],
-                'Acompanhamentos': ['arroz', 'feijão', 'feijao', 'batata', 'macarrão', 'macarrao',
-                                    'pão', 'pao', 'broa', 'farofa', 'legume', 'salada',
-                                    'maionese', 'purê', 'pure', 'mandioca', 'aipim', 'macaxeira',
-                                    'couve', 'vinagrete', 'tutu', 'pirão', 'pirao'],
-                'Cafés':           ['café', 'cafe', 'espresso', 'cappuccino', 'leite', 'latte',
-                                    'coado', 'expresso', 'descafeinado', 'achocolatado', 'chocolate quente']
+                // Sorvetes antes de Sobremesa — evita sorvete/picolé/açaí caírem na categoria errada
+                'Sorvetes':   ['sorvete', 'picolé', 'picole', 'sundae', 'milkshake', 'milk-shake',
+                               'açaí', 'acai', 'sorbet', 'gelado'],
+                'Bebidas':    ['refrigerante', 'refri', 'suco', 'água', 'agua', 'chá', 'cha',
+                               'chopp', 'cerveja', 'vinho', 'bebida', 'coca', 'pepsi',
+                               'guaraná', 'guarana', 'gasosa', 'tampico', 'kapo', 'limonada',
+                               'mate', 'isotônico', 'isotonico', 'gatorade', 'powerade',
+                               'energético', 'energetico', 'red bull', 'redbull', 'monster',
+                               'fanta', 'sprite', 'schweppes', 'kuat', 'tônico', 'tonico',
+                               'h2o', 'del vale', 'sukinho', 'kombucha',
+                               'café', 'cafe', 'espresso', 'cappuccino', 'latte',
+                               'coado', 'descafeinado', 'achocolatado', 'chocolate quente',
+                               'whey', 'shake'],
+                // Bomboniere: itens de conveniência vendidos por unidade
+                'Bomboniere': ['chocolate', 'bombom', 'bala', 'chiclete', 'goma de mascar',
+                               'biscoito', 'bolacha', 'wafer', 'chips', 'salgadinho', 'snack',
+                               'amendoim', 'pipoca', 'castanha', 'paçoca', 'pacoca',
+                               'cocada', 'pé de moleque', 'pe de moleque',
+                               'trident', 'halls', 'mentos', 'bis', 'kitkat'],
+                'Sobremesa':  ['pudim', 'bolo', 'torta', 'brownie', 'mousse', 'pavê', 'pave',
+                               'gelatina', 'churros', 'brigadeiro', 'sobremesa',
+                               'petit gateau', 'crepe', 'waffle', 'creme',
+                               'cookie', 'cupcake', 'cheesecake', 'tiramisu', 'flan', 'doce'],
+                // Buffet: tipo Gramas já retorna acima; keywords cobrem porções/itens avulsos
+                'Buffet':     ['buffet', 'quilo', 'por kg', 'por peso',
+                               'frango', 'carne', 'peixe', 'camarão', 'camarao', 'costela',
+                               'bife', 'cupim', 'picanha', 'linguiça', 'linguica', 'bacon',
+                               'pernil', 'lombo', 'alcatra', 'contrafilé', 'contrafile',
+                               'maminha', 'filé', 'file', 'cordeiro', 'porco', 'suíno', 'suino',
+                               'arroz', 'feijão', 'feijao', 'batata', 'macarrão', 'macarrao',
+                               'farofa', 'legume', 'salada', 'maionese', 'purê', 'pure',
+                               'mandioca', 'aipim', 'macaxeira', 'couve', 'vinagrete',
+                               'tutu', 'pirão', 'pirao', 'massa', 'lasanha', 'nhoque',
+                               'risoto', 'sopa', 'caldo'],
             };
 
             for (const [cat, keywords] of Object.entries(categorias)) {
@@ -11385,6 +11442,16 @@ var itens = comanda.itens || [];
                     e.preventDefault();
                     if (telaAtiva === 'lançar') {
                         state.comandaAtual ? irParaCheckout() : caixaSwitchTo('checkout');
+                    }
+                    return;
+                }
+
+                // F3 — focar campo de busca do cardápio (tela Lançar)
+                if (e.key === 'F3') {
+                    e.preventDefault();
+                    if (telaAtiva === 'lançar') {
+                        const busca = document.getElementById('lancBuscaInput');
+                        if (busca) busca.focus();
                     }
                     return;
                 }
