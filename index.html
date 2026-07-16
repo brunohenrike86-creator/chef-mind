@@ -1391,6 +1391,106 @@
         #mobileMenu .mobile-menu-btn.active-screen {
             background: var(--primary-light); color: var(--primary); font-weight: bold;
         }
+
+        /* ===== TECLADO VIRTUAL (modo-balanca-touch only) ===== */
+        body:not(.modo-balanca-touch) #vkPanel { display: none !important; }
+
+        /* Base: transição e z-index; posição definida pelas subclasses */
+        #vkPanel {
+            position: fixed;
+            z-index: 10001; /* acima de modais (9998) e confirmação (10000) */
+            user-select: none;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+            pointer-events: none;
+        }
+        #vkPanel:not(.vk-hidden) { pointer-events: auto; }
+
+        /* ── NUMÉRICO: card flutuante centralizado, posicionado mais alto ── */
+        #vkPanel.vk-numeric-mode {
+            bottom: 140px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 360px;
+            background: #fff;
+            border: 3px solid var(--primary);
+            border-radius: 20px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.28), 0 4px 12px rgba(0,0,0,0.14);
+            padding: 18px;
+        }
+        #vkPanel.vk-numeric-mode.vk-hidden {
+            transform: translateX(-50%) translateY(calc(100% + 160px));
+            opacity: 0;
+        }
+
+        /* ── ALFABÉTICO: painel no TOPO (não encobre botão Confirmar da modal) ── */
+        #vkPanel.vk-alpha-mode {
+            top: 0; left: 0; right: 0;
+            background: #f5f5f5;
+            border-bottom: 2px solid var(--primary);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            padding: 8px 8px 10px;
+        }
+        #vkPanel.vk-alpha-mode.vk-hidden { transform: translateY(-100%); opacity: 0; }
+
+        /* ── Linhas de teclas ── */
+        .vk-row {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            margin-bottom: 5px;
+        }
+        .vk-row:last-child { margin-bottom: 0; }
+
+        /* ── Teclas numéricas: maiores (card compacto de 3 colunas) ── */
+        #vkNumeric .vk-key {
+            flex: 1;
+            height: 86px;
+            font-size: 32px;
+            font-weight: 600;
+            background: #fff;
+            color: #222;
+            border: 1px solid #d8d8d8;
+            border-radius: 12px;
+            cursor: pointer;
+            line-height: 1;
+            box-shadow: 0 3px 0 #bbb;
+            transition: background 0.07s, transform 0.07s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #vkNumeric .vk-key:active { background: #f0f0f0 !important; box-shadow: none !important; transform: translateY(3px); }
+
+        /* ── Teclas alfabéticas: compactas (10-11 por linha) ── */
+        #vkAlpha .vk-key {
+            flex: 1;
+            height: 54px;
+            max-width: 78px;
+            font-size: 17px;
+            font-weight: 600;
+            background: #fff;
+            color: #222;
+            border: 1px solid #d0d0d0;
+            border-radius: 8px;
+            cursor: pointer;
+            line-height: 1;
+            box-shadow: 0 2px 0 #bbb;
+            transition: background 0.07s, transform 0.07s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #vkAlpha .vk-key:active { background: #e8e8e8 !important; box-shadow: none !important; transform: translateY(2px); }
+
+        /* ── Teclas especiais (compartilhadas) ── */
+        .vk-key-enter { background: #27AE60 !important; color: #fff !important; border-color: #219150 !important; box-shadow: 0 3px 0 #1a7a40 !important; font-size: 20px !important; }
+        .vk-key-enter:active { background: #219150 !important; box-shadow: none !important; }
+        .vk-key-back  { background: #ffeaea !important; color: #c0392b !important; border-color: #f5c6c6 !important; font-size: 20px !important; }
+        .vk-key-wide  { flex: 3 !important; font-size: 14px !important; letter-spacing: 1px; }
+        .vk-key-spc   { background: #eef0f4 !important; color: #555 !important; font-size: 12px !important; letter-spacing: 0.5px; }
+
+        /* ── Ajuste de layout quando VK está visível ── */
+        /* Numérico: sem padding no screen (card flutua sem barra), só modal empurra */
+        body.vk-open.modo-balanca-touch .modal-overlay  { padding-bottom: 350px !important; }
+        /* Alfabético: empurra conteúdo para baixo (VK está no topo) — 4 linhas ~270px */
+        body.vk-open-alpha.modo-balanca-touch #screen-lançar  { padding-top: 280px !important; }
+        body.vk-open-alpha.modo-balanca-touch .modal-overlay   { padding-top: 280px !important; }
     </style>
 </head>
 <body>
@@ -1586,7 +1686,7 @@
                     <div id="lancar-secao-comanda" style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); flex-shrink: 0;">
                         <div id="lancar-label-comanda" style="color: white; font-size: 10px; font-weight: bold; margin-bottom: 6px; opacity: 0.9;">📋 SELECIONE A COMANDA</div>
                         <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 6px;">
-                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="lançarComandaNum" placeholder="NÚMERO DA COMANDA" style="font-size: 18px; font-weight: bold; padding: 12px; border: 3px solid white; background: white; color: var(--primary); text-align: center; border-radius: 4px;">
+                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="lançarComandaNum" placeholder="NÚMERO DA COMANDA" onclick="vkShow('lançarComandaNum','numeric')" style="font-size: 18px; font-weight: bold; padding: 12px; border: 3px solid white; background: white; color: var(--primary); text-align: center; border-radius: 4px;">
                             <button id="btnLimparComanda" onclick="limparComanda()" style="padding: 12px 16px; background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.6); border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; min-width: 70px;">✕ Limpar [F4]</button>
                             <!-- nav mobile — mesmo grid row, sem altura extra; visível só no Lançar mobile -->
                             <button id="btnMobileMenuLancar" onclick="toggleMobileMenu()" style="display:none; padding:12px 10px; background:rgba(255,255,255,0.15); color:white; border:2px solid rgba(255,255,255,0.5); border-radius:4px; font-size:13px; font-weight:bold; cursor:pointer; white-space:nowrap;">≡ Menu</button>
@@ -1597,7 +1697,7 @@
                     <!-- SECTION 2: CÓDIGO DO ITEM -->
                     <div id="lancar-secao-codigo" style="padding: 8px; background: white; border-bottom: 2px solid var(--border); flex-shrink: 0;">
                         <div style="font-size: 9px; font-weight: bold; color: var(--gray); margin-bottom: 4px;">CÓDIGO DO ITEM</div>
-                        <input type="number" id="lançarCodigoItem" placeholder="Digite o código..." style="font-size: 16px; font-weight: bold; padding: 10px; border: 3px solid var(--primary); background: white; width: 100%; box-sizing: border-box; border-radius: 3px;" disabled inputmode="numeric">
+                        <input type="number" id="lançarCodigoItem" placeholder="Digite o código..." onclick="vkShow('lançarCodigoItem','numeric')" style="font-size: 16px; font-weight: bold; padding: 10px; border: 3px solid var(--primary); background: white; width: 100%; box-sizing: border-box; border-radius: 3px;" disabled inputmode="numeric">
                     </div>
 
                     <!-- SECTION 3: LISTA DA COMANDA + TOTAL (dinâmico) -->
@@ -2162,6 +2262,7 @@
                     <option value="Caixa">💳 Caixa</option>
                     <option value="Atendente">👤 Atendente</option>
                     <option value="Balança">⚖️ Balança</option>
+                    <option value="Balança Touch">⚖️ Balança Touch</option>
                     <option value="Marmita">🍛 Marmita</option>
                 </select>
             </div>
@@ -2311,6 +2412,7 @@
                 <input type="number" id="inputPeso" placeholder="0"
                     inputmode="numeric"
                     oninput="calcularTotalModal()"
+                    onclick="vkShow('inputPeso','numeric')"
                     onkeydown="if(event.key==='Enter'){event.preventDefault(); confirmarPesoModal();}"
                     style="width: 100%; padding: 16px 12px; border: 3px solid #D4724F;
                            border-radius: 10px; font-size: 52px; font-weight: bold;
@@ -2588,6 +2690,7 @@
                     type="text"
                     id="marnitaNomeCliente"
                     placeholder="Ex: João, Mesa 5..."
+                    onclick="vkShow('marnitaNomeCliente','alpha')"
                     style="width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 3px; font-family: inherit; font-size: 13px; box-sizing: border-box;"
                 >
             </div>
@@ -2608,6 +2711,7 @@
                 <textarea
                     id="marnitaObservacoes"
                     placeholder="Ex: Sem molho, bem temperado, etc..."
+                    onclick="vkShow('marnitaObservacoes','alpha')"
                     style="width: 100%; height: 50px; padding: 6px; border: 1px solid var(--border); border-radius: 3px; font-family: inherit; font-size: 11px; resize: none;"
                 ></textarea>
             </div>
@@ -2881,7 +2985,7 @@
                     usuarios.forEach(u => {
                         state.usuarios[u.login] = {
                             nome: u.nome || u.login, senha: String(u.senha),
-                            perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : 'Atendente'
+                            perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'balanca_touch' ? 'Balança Touch' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : 'Atendente'
                         };
                     });
                     console.log('[Sheets] ✅ Usuários:', usuarios.length);
@@ -3078,7 +3182,7 @@
 
                 // Atualizar header
                 document.getElementById('headerUser').textContent = state.user;
-                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : state.perfil === 'Marmita' ? '🍛 Marmita' : '👤 Atendente';
+                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Balança Touch' ? '⚖️ Balança Touch' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : state.perfil === 'Marmita' ? '🍛 Marmita' : '👤 Atendente';
 
                 // Mostrar app diretamente
                 document.getElementById('loginScreen').classList.add('hidden');
@@ -3087,8 +3191,9 @@
                 _initCaixaShortcuts();    // Ativar atalhos de teclado do Caixa
 
                 // Reativar modos especiais (balança/caixa) ao restaurar sessão
-                if (state.perfil === 'Balança') {
+                if (state.perfil === 'Balança' || state.perfil === 'Balança Touch') {
                     document.body.classList.add('modo-balanca');
+                    if (state.perfil === 'Balança Touch') document.body.classList.add('modo-balanca-touch');
                     _initWeightService();
                     _mostrarSplash('Balança');
                 } else if (state.perfil === 'Caixa') {
@@ -3203,7 +3308,7 @@
                         usuarios.forEach(u => {
                             state.usuarios[u.login] = {
                                 nome: u.nome || u.login, senha: String(u.senha),
-                                perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : 'Atendente'
+                                perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'balanca_touch' ? 'Balança Touch' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : 'Atendente'
                             };
                         });
                     }
@@ -3249,7 +3354,7 @@
 
             // ✅ Update header com informações
             document.getElementById('headerUser').textContent = `${state.user}`;
-            document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : state.perfil === 'Marmita' ? '🍛 Marmita' : '👤 Atendente';
+            document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Balança Touch' ? '⚖️ Balança Touch' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : state.perfil === 'Marmita' ? '🍛 Marmita' : '👤 Atendente';
 
             // ✅ Limpar campos de senha
             document.getElementById('loginPassword').value = '';
@@ -3266,8 +3371,9 @@
             detectarModoMobile();
 
             // ⚖️ MODO BALANÇA
-            if (state.perfil === 'Balança') {
+            if (state.perfil === 'Balança' || state.perfil === 'Balança Touch') {
                 document.body.classList.add('modo-balanca');
+                if (state.perfil === 'Balança Touch') document.body.classList.add('modo-balanca-touch');
                 _initWeightService();
                 _mostrarSplash('Balança'); // splash captura user gesture para fullscreen
             }
@@ -4839,7 +4945,7 @@
 
             saveStorage();
             // ☁️ SHEETS: criar ou atualizar usuário
-            const _nivel = perfil === 'Admin' ? 'admin' : perfil === 'Balança' ? 'balanca' : perfil === 'Gerente' ? 'gerente' : perfil === 'Caixa' ? 'caixa' : perfil === 'Marmita' ? 'marmita' : 'atendente';
+            const _nivel = perfil === 'Admin' ? 'admin' : perfil === 'Balança' ? 'balanca' : perfil === 'Balança Touch' ? 'balanca_touch' : perfil === 'Gerente' ? 'gerente' : perfil === 'Caixa' ? 'caixa' : perfil === 'Marmita' ? 'marmita' : 'atendente';
             if (usuarioEmEdicao) {
                 // Login mudou ou não: atualiza na mesma linha via loginAntigo
                 sheetsAPI('atualizarUsuario', { loginAntigo: usuarioEmEdicao, login, nome, senha, nivel: _nivel });
@@ -4872,7 +4978,7 @@
             container.innerHTML = '';
 
             usuarios.forEach(([login, user]) => {
-                const badge = user.perfil === 'Admin' ? '👑' : user.perfil === 'Balança' ? '⚖️' : user.perfil === 'Gerente' ? '🧑‍💼' : user.perfil === 'Caixa' ? '💳' : user.perfil === 'Marmita' ? '🍛' : '👤';
+                const badge = user.perfil === 'Admin' ? '👑' : (user.perfil === 'Balança' || user.perfil === 'Balança Touch') ? '⚖️' : user.perfil === 'Gerente' ? '🧑‍💼' : user.perfil === 'Caixa' ? '💳' : user.perfil === 'Marmita' ? '🍛' : '👤';
 
                 const div = document.createElement('div');
                 div.className = 'card';
@@ -4890,7 +4996,7 @@
                                     @${login}
                                 </span>
                                 <span style="background: rgba(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '39,174,96' : user.perfil === 'Gerente' ? '155,89,182' : user.perfil === 'Caixa' ? '22,160,133' : '41,128,185'}, 0.15); color: rgb(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '30,132,73' : user.perfil === 'Gerente' ? '142,68,173' : user.perfil === 'Caixa' ? '17,122,101' : '41,128,185'}); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-weight: bold;">
-                                    ${user.perfil === 'Admin' ? 'ADMIN' : user.perfil === 'Balança' ? 'BALANÇA' : user.perfil === 'Gerente' ? 'GERENTE' : user.perfil === 'Caixa' ? 'CAIXA' : user.perfil === 'Marmita' ? 'MARMITA' : 'ATENDENTE'}
+                                    ${user.perfil === 'Admin' ? 'ADMIN' : user.perfil === 'Balança' ? 'BALANÇA' : user.perfil === 'Balança Touch' ? 'BALANÇA TOUCH' : user.perfil === 'Gerente' ? 'GERENTE' : user.perfil === 'Caixa' ? 'CAIXA' : user.perfil === 'Marmita' ? 'MARMITA' : 'ATENDENTE'}
                                 </span>
                             </div>
                             <!-- SENHA MASCARADA -->
@@ -5234,7 +5340,7 @@ function carregarComanda() {
 
                 // ⚖️ MODO BALANÇA: abre modal de peso também ao carregar comanda em preparo
                 // (mesma regra de criarComandaInline — Buffet p/ Quilo item 002)
-                if (state.perfil === 'Balança') {
+                if (state.perfil === 'Balança' || state.perfil === 'Balança Touch') {
                     const item002 = state.itens['002'];
                     if (item002) setTimeout(() => abrirModalBuffetQuilo('002', item002), 200);
                 }
@@ -5276,7 +5382,7 @@ function carregarComanda() {
 
             // ⚖️ MODO BALANÇA: abre modal de peso também ao carregar comanda já aberta
             // (mesma regra de criarComandaInline — Buffet p/ Quilo item 002)
-            if (state.perfil === 'Balança') {
+            if (state.perfil === 'Balança' || state.perfil === 'Balança Touch') {
                 const item002 = state.itens['002'];
                 if (item002) setTimeout(() => abrirModalBuffetQuilo('002', item002), 200);
             }
@@ -5316,6 +5422,7 @@ function carregarComanda() {
             
             // ✅ OCULTAR BOTÃO ATALHO (sem comanda carregada)
             atualizarVisibilidadeBotaoAtalho();
+            vkHide(); // sem comanda ativa, VK deve sumir
         }
 
         // ✅ CRIAR COMANDA INLINE (fluxo unificado Atendente — sem fricção)
@@ -5352,7 +5459,7 @@ function carregarComanda() {
             setTimeout(_focusCodigoItem, 100); // ignorado em modo-mobile
 
             // ⚖️ MODO BALANÇA: abre modal de peso automaticamente (item 002 - Buffet p/ Quilo)
-            if (state.perfil === 'Balança') {
+            if (state.perfil === 'Balança' || state.perfil === 'Balança Touch') {
                 const item002 = state.itens['002'];
                 if (item002) setTimeout(() => abrirModalBuffetQuilo('002', item002), 200);
             }
@@ -5377,8 +5484,11 @@ function carregarComanda() {
                 if (document.activeElement) document.activeElement.blur();
                 return;
             }
+            // Balança Touch: usuário usa scanner ou toca nos cards — oculta VK e não dá foco
+            if (state.perfil === 'Balança Touch') { vkHide(); return; }
             const el = document.getElementById('lançarCodigoItem');
             if (el) el.focus();
+            vkShow('lançarCodigoItem', 'numeric');
         }
 
 
@@ -5434,6 +5544,7 @@ function carregarComanda() {
                 showToast('Item inválido', 'error');
                 return;
             }
+            vkHide(); // esconde VK numérico antes de abrir modal da marmita
 
             // ✅ BUSCAR CARNES DO DIA (centralizado)
             const carnesDoDia = obterMarnitasDodia();
@@ -5945,6 +6056,15 @@ function carregarComanda() {
                 return;
             }
 
+            // Ordenar: códigos numéricos por valor (1, 2, 10, 100...), alfanuméricos depois
+            itensParaMostrar.sort(([a], [b]) => {
+                const na = parseInt(a, 10), nb = parseInt(b, 10);
+                if (!isNaN(na) && !isNaN(nb)) return na - nb;
+                if (!isNaN(na)) return -1;
+                if (!isNaN(nb)) return 1;
+                return a.localeCompare(b);
+            });
+
             itensParaMostrar.forEach(([codigo, item]) => {
                 const btn = document.createElement('button');
                 btn.className = 'item-cat-btn';
@@ -5973,7 +6093,7 @@ function carregarComanda() {
                 btn.innerHTML = `
                     ${fotoHtml}
                     <div class="cat-nome">${item.nome}</div>
-                    <div class="cat-cod">#${codigo}</div>
+                    <div class="cat-cod">#${isNaN(codigo) ? codigo : parseInt(codigo, 10)}</div>
                     <div class="cat-preco">R$ ${item.preco.toFixed(1)}</div>
                 `;
 
@@ -6238,7 +6358,12 @@ function carregarComanda() {
             renderizarListaLançada();
             renderizarItensDisponiveis();
             resetIdleTimer();
-            setTimeout(() => { if (inputCodigo) inputCodigo.focus(); }, 100);
+            setTimeout(() => {
+                if (state.perfil !== 'Balança Touch') {
+                    if (inputCodigo) inputCodigo.focus();
+                    vkShow('lançarCodigoItem', 'numeric');
+                }
+            }, 120);
         }
 
         // ========== NOVO SISTEMA DE PAGAMENTO ==========
@@ -8671,6 +8796,7 @@ function carregarComanda() {
 
         function abrirModalBuffetQuilo(codigo, item) {
             itemQuilo = { codigo, item };
+            vkHide(); // esconde VK do campo de código antes de abrir a modal de peso
 
             document.getElementById('exibirPrecoQuilo').textContent = item.preco.toFixed(2);
             document.getElementById('exibirTotalModal').textContent = 'R$ 0,00';
@@ -8688,8 +8814,11 @@ function carregarComanda() {
                 _weightLog('modal aberta', 'status=' + weightService.getStatus() + ' peso=' + (weightService.getLastStableWeight() ?? 'nenhum'));
             } else {
                 // Usuário sem balança: foco para digitação manual
-                const inputPeso = document.getElementById('inputPeso');
-                setTimeout(() => inputPeso.focus(), 100);
+                // Balança Touch: não focar inputPeso (evita abrir VK desnecessariamente)
+                if (state.perfil !== 'Balança Touch') {
+                    const inputPeso = document.getElementById('inputPeso');
+                    setTimeout(() => inputPeso.focus(), 100);
+                }
                 _weightLogAction && _weightLog('modal_manual', 'sem_balanca');
             }
         }
@@ -8805,7 +8934,7 @@ function carregarComanda() {
                 inputComanda.addEventListener('input', () => {
                     inputComanda.value = inputComanda.value.replace(/[^0-9]/g, '');
                 });
-                inputComanda.addEventListener('keypress', (e) => {
+                inputComanda.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
                         carregarComanda();
@@ -10676,7 +10805,7 @@ var itens = comanda.itens || [];
         // ── 5. Lifecycle ─────────────────────────────────────
         let weightService = null;
 
-        const WEIGHT_PROFILES = ['Balança']; // perfis que usam balança
+        const WEIGHT_PROFILES = ['Balança', 'Balança Touch']; // perfis que usam balança
 
         async function _initWeightService() {
             if (!WEIGHT_PROFILES.includes(state.perfil)) return;
@@ -10928,6 +11057,105 @@ var itens = comanda.itens || [];
         // Prefixo fixo nas comandas: CMD;{numero} (hardcoded — impresso nas comandas físicas).
         // Se mudar, requer reimpressão das comandas. Configurabilidade aqui seria uma armadilha.
         const COMANDA_BARCODE_PREFIX = 'CMD;';
+
+        // ── TECLADO VIRTUAL TOUCH ─────────────────────────────────────────────────────
+        // Ativo apenas no perfil 'Balança Touch' (body.modo-balanca-touch).
+        // O VK não interfere com o leitor de código de barras: o scanner usa capture-phase
+        // keydown global (_initBarcodeListener) e independe do focus do input.
+        // vkShow() é chamado explicitamente — não no evento focus() — para evitar que
+        // o próprio scanner dispare a abertura do teclado.
+
+        const _vk = {
+            targetId:  null,    // ID do input que está sendo controlado
+            mode:      'numeric', // 'numeric' | 'alpha'
+            shiftOn:   false,
+            visible:   false,
+            _bsTimer:  null      // timer para long-press ⌫
+        };
+
+        function _isTouchMode() {
+            return state.perfil === 'Balança Touch';
+        }
+
+        function vkShow(inputId, mode) {
+            if (!_isTouchMode()) return;
+            mode = mode || 'numeric';
+            _vk.targetId = inputId;
+            _vk.mode     = mode;
+            _vk.visible  = true;
+
+            const panel = document.getElementById('vkPanel');
+            document.getElementById('vkNumeric').style.display = mode === 'numeric' ? '' : 'none';
+            document.getElementById('vkAlpha').style.display   = mode === 'alpha'   ? '' : 'none';
+
+            // Classe de modo define posicionamento CSS (card-base vs painel-topo)
+            panel.classList.toggle('vk-numeric-mode', mode === 'numeric');
+            panel.classList.toggle('vk-alpha-mode',   mode === 'alpha');
+            panel.classList.remove('vk-hidden');
+
+            if (mode === 'alpha') {
+                document.body.classList.remove('vk-open');
+                document.body.classList.add('vk-open-alpha');
+            } else {
+                document.body.classList.remove('vk-open-alpha');
+                document.body.classList.add('vk-open');
+            }
+
+            // Garante foco no input para que HID (scanner) continue funcionando
+            const el = document.getElementById(inputId);
+            if (el) el.focus();
+        }
+
+        function vkHide() {
+            _vk.targetId = null;
+            _vk.visible  = false;
+            document.getElementById('vkPanel').classList.add('vk-hidden');
+            document.body.classList.remove('vk-open', 'vk-open-alpha');
+        }
+
+        function vkPress(key) {
+            if (!_vk.targetId) return;
+            const el = document.getElementById(_vk.targetId);
+            if (!el) return;
+
+            if (key === '⌫') {
+                el.value = el.value.slice(0, -1);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+
+            } else if (key === '↵') {
+                // Fecha o VK primeiro, depois dispara Enter para o handler do campo
+                vkHide();
+                el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+
+            } else if (key === ' ') {
+                el.value += ' ';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+
+            } else {
+                // Alpha mode: sempre maiúscula (sem shift toggle — POS não usa minúsculas)
+                const char = _vk.mode === 'alpha' ? key.toUpperCase() : key;
+                el.value += char;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+
+        // _vkRenderShift removida — alpha sempre em CAIXA ALTA, sem shift toggle
+
+        // Long-press ⌫ (>800ms) → limpa o campo inteiro
+        document.addEventListener('DOMContentLoaded', function() {
+            const bsBtn = document.getElementById('vkBackspaceBtn');
+            if (bsBtn) {
+                bsBtn.addEventListener('pointerdown', function() {
+                    _vk._bsTimer = setTimeout(function() {
+                        const el = document.getElementById(_vk.targetId);
+                        if (el) { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); }
+                    }, 800);
+                });
+                bsBtn.addEventListener('pointerup',     function() { clearTimeout(_vk._bsTimer); });
+                bsBtn.addEventListener('pointercancel', function() { clearTimeout(_vk._bsTimer); });
+            }
+        });
+        // ─────────────────────────────────────────────────────────────────────────────
 
         let _bcBuffer = '';
         let _bcTimer  = null;
@@ -11285,6 +11513,93 @@ var itens = comanda.itens || [];
             <button class="pep-cancelar" onclick="fecharEdicaoPreco()">Cancelar</button>
         </div>
     </div>
+
+    <!-- ===== TECLADO VIRTUAL TOUCH (modo-balanca-touch only) =====
+         Renderizado mas oculto via CSS em qualquer outro perfil.
+         JS: vkShow() / vkHide() / vkPress() — ver bloco "TECLADO VIRTUAL" no script. -->
+    <div id="vkPanel" class="vk-hidden">
+
+        <!-- LAYOUT NUMÉRICO (comanda, peso, código do item) -->
+        <div id="vkNumeric">
+            <div class="vk-row">
+                <button class="vk-key" ontouchstart="" onclick="vkPress('7')">7</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('8')">8</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('9')">9</button>
+            </div>
+            <div class="vk-row">
+                <button class="vk-key" ontouchstart="" onclick="vkPress('4')">4</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('5')">5</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('6')">6</button>
+            </div>
+            <div class="vk-row">
+                <button class="vk-key" ontouchstart="" onclick="vkPress('1')">1</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('2')">2</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('3')">3</button>
+            </div>
+            <div class="vk-row">
+                <button class="vk-key vk-key-back" id="vkBackspaceBtn" ontouchstart="" onclick="vkPress('⌫')">⌫</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('0')">0</button>
+                <button class="vk-key vk-key-enter" ontouchstart="" onclick="vkPress('↵')">↵</button>
+            </div>
+        </div>
+
+        <!-- LAYOUT ALFABÉTICO (nome cliente, observações marmita) — sempre CAIXA ALTA -->
+        <div id="vkAlpha" style="display:none;">
+            <!-- Linha 1: QWERTYUIOP + ⌫ (único) -->
+            <div class="vk-row">
+                <button class="vk-key" ontouchstart="" onclick="vkPress('q')">Q</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('w')">W</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('e')">E</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('r')">R</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('t')">T</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('y')">Y</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('u')">U</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('i')">I</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('o')">O</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('p')">P</button>
+                <button class="vk-key vk-key-back" ontouchstart="" onclick="vkPress('⌫')">⌫</button>
+            </div>
+            <!-- Linha 2: ASDFGHJKL + Ç -->
+            <div class="vk-row">
+                <button class="vk-key" ontouchstart="" onclick="vkPress('a')">A</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('s')">S</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('d')">D</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('f')">F</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('g')">G</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('h')">H</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('j')">J</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('k')">K</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('l')">L</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('Ç')">Ç</button>
+            </div>
+            <!-- Linha 3: ZXCVBNM -->
+            <div class="vk-row">
+                <button class="vk-key" ontouchstart="" onclick="vkPress('z')">Z</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('x')">X</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('c')">C</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('v')">V</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('b')">B</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('n')">N</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('m')">M</button>
+            </div>
+            <!-- Linha 4: Acentos + Espaço + Enter na mesma linha -->
+            <div class="vk-row">
+                <button class="vk-key" ontouchstart="" onclick="vkPress('Ã')">Ã</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('Â')">Â</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('Á')">Á</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('É')">É</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('Ê')">Ê</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('Í')">Í</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('Ó')">Ó</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('Ô')">Ô</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('Õ')">Õ</button>
+                <button class="vk-key" ontouchstart="" onclick="vkPress('Ú')">Ú</button>
+                <button class="vk-key vk-key-spc" ontouchstart="" onclick="vkPress(' ')">SPC</button>
+                <button class="vk-key vk-key-enter" ontouchstart="" onclick="vkPress('↵')">↵</button>
+            </div>
+        </div>
+
+    </div><!-- /#vkPanel -->
 
     </body>
 </html>
