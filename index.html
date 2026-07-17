@@ -1783,7 +1783,7 @@
                     <!-- PAINEL DIREITO: detalhes + pagamento -->
                     <div id="checkout-panel-right" style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
                         <!-- SEÇÃO 2: DETALHES DA COMANDA -->
-                        <div id="areaDetalhes" style="display: none; flex: 0 1 auto; background: white; border: 1px solid var(--border); border-radius: 2px; border-left: 3px solid var(--primary); overflow: hidden; display: flex; flex-direction: column; gap: 0;">
+                        <div id="areaDetalhes" style="display: none; flex: 0 1 auto; flex-direction: column; gap: 0; background: white; border: 1px solid var(--border); border-radius: 2px; border-left: 3px solid var(--primary); overflow: hidden;">
                             <div class="co-hdr-detalhe">
                                 📦 Comanda <span id="numComandaSelecionada">-</span>
                             </div>
@@ -5517,8 +5517,17 @@ function carregarComanda() {
             const dataAtual = new Date().toISOString().split('T')[0];
             const key = `${numeroNorm}-${dataAtual}`;
             const comanda = state.comandas[key];
-            if (!comanda || comanda.encerramento === 'fechamento') {
+            const inputEl = document.getElementById('checkoutNumInput');
+            // Não existe ou foi resetada (expediente anterior)
+            if (!comanda || comanda.encerramento === 'reset') {
+                if (inputEl) inputEl.value = '';
                 showToast(`⚠️ Comanda #${numeroNorm} não encontrada`, 'warning');
+                return;
+            }
+            // Existe mas já foi paga ou encerrada
+            if (comanda.status === 'Fechada/Paga' || comanda.paid || comanda.encerramento === 'fechamento') {
+                if (inputEl) inputEl.value = '';
+                showToast(`⚠️ Comanda #${numeroNorm} já paga`, 'warning');
                 return;
             }
             document.getElementById('checkoutNumInput').value = '';
@@ -5531,6 +5540,12 @@ function carregarComanda() {
             document.getElementById('checkout-panel-left').classList.remove('comanda-ativa');
             const btnLimpar = document.getElementById('btnLimparCheckout');
             if (btnLimpar) btnLimpar.style.display = 'none';
+            // ✅ Highlight imediato — remove destaque sem esperar re-render
+            document.querySelectorAll('#listaComandas button').forEach(b => {
+                b.classList.remove('ck-selecionado');
+                b.onmouseover = () => b.style.background = 'var(--bg-light)';
+                b.onmouseout = () => b.style.background = 'white';
+            });
 
             // Limpar seleção de comanda
             const areaVazia = document.getElementById('areaVazia');
@@ -5540,6 +5555,11 @@ function carregarComanda() {
             if (areaVazia) areaVazia.style.display = 'block';
             if (areaDetalhes) areaDetalhes.style.display = 'none';
             if (areaPagamento) areaPagamento.style.display = 'none';
+
+            const _btnIrLancar = document.getElementById('btnIrLancar');
+            if (_btnIrLancar) _btnIrLancar.style.display = 'none';
+            const _btnConfirmar = document.getElementById('btnConfirmarPagamento');
+            if (_btnConfirmar) _btnConfirmar.style.display = 'none';
 
             // Limpar itens
             const listaItens = document.getElementById('listaCheckoutItens');
@@ -6276,6 +6296,8 @@ function carregarComanda() {
             document.getElementById('areaPagamento').style.display = 'block';
             const btnIrLancar = document.getElementById('btnIrLancar');
             if (btnIrLancar) btnIrLancar.style.display = comanda && !comanda.paid ? 'block' : 'none';
+            const btnConfirmar = document.getElementById('btnConfirmarPagamento');
+            if (btnConfirmar) btnConfirmar.style.display = comanda && !comanda.paid ? 'block' : 'none';
 
             document.getElementById('numComandaSelecionada').textContent = `#${comanda.numero}`;
 
