@@ -474,6 +474,7 @@
             padding: 10px;
             border: 2px solid var(--border);
             background: white;
+            color: var(--text-dark);
             border-radius: 6px;
             cursor: pointer;
             font-size: 11px;
@@ -1182,11 +1183,11 @@
         body.modo-caixa .ck-itens { font-size: 12px !important; }
         /* Estado compacto: comanda selecionada — lista recua, foco no detalhe/pagamento */
         body.modo-caixa #checkout-panel-left.comanda-ativa #listaComandas {
-            grid-template-columns: repeat(4, 1fr) !important;
-            max-height: 110px !important;
+            grid-template-columns: repeat(3, 1fr) !important;
+            max-height: 200px !important;
             gap: 4px !important;
         }
-        body.modo-caixa #checkout-panel-left.comanda-ativa #listaComandas button { height: 52px !important; }
+        body.modo-caixa #checkout-panel-left.comanda-ativa #listaComandas button { height: 60px !important; }
         body.modo-caixa #checkout-panel-left.comanda-ativa .ck-num   { font-size: 13px !important; }
         body.modo-caixa #checkout-panel-left.comanda-ativa .ck-val   { font-size: 11px !important; }
         body.modo-caixa #checkout-panel-left.comanda-ativa .ck-itens { display: none !important; }
@@ -1797,7 +1798,7 @@
                         </div>
 
                         <!-- ATALHO: IR PARA LANÇAR -->
-                        <button type="button" id="btnIrLancar" onclick="irParaLancarDoCheckout()" style="display:none; width:100%; padding:8px; background:linear-gradient(135deg,#E67E22 0%,#CA6F1E 100%); color:white; border:none; border-radius:3px; cursor:pointer; font-size:11px; font-weight:bold; letter-spacing:0.5px;">➕ LANÇAR ITEM NESTA COMANDA</button>
+                        <button type="button" id="btnIrLancar" onclick="irParaLancarDoCheckout()" style="display:none; width:100%; padding:8px; background:linear-gradient(135deg,#E67E22 0%,#CA6F1E 100%); color:white; border:none; border-radius:3px; cursor:pointer; font-size:11px; font-weight:bold; letter-spacing:0.5px;">➕ LANÇAR ITEM NESTA COMANDA [F1]</button>
 
                         <!-- SEÇÃO 3: FORMAS DE PAGAMENTO -->
                         <div id="areaPagamento" style="display: none; flex-shrink: 0; background: white; border: 1px solid var(--border); border-radius: 2px; padding: 4px;">
@@ -2090,7 +2091,7 @@
                                 <input type="text" id="adminBuscaInput" placeholder="🔍 Buscar por nome, código ou EAN..." autocomplete="off"
                                        oninput="adminFiltroBusca=this.value.toLowerCase().trim(); renderAdminItensComFiltro(); document.getElementById('adminBuscaClear').style.display=this.value?'flex':'none';"
                                        style="width:100%; padding:8px 30px 8px 10px; border-radius:6px; border:2px solid var(--border); font-size:12px; font-family:inherit; background:var(--bg-white); color:var(--text-dark); box-sizing:border-box;">
-                                <button id="adminBuscaClear" onclick="document.getElementById('adminBuscaInput').value=''; adminFiltroBusca=''; renderAdminItensComFiltro(); this.style.display='none'; document.getElementById('adminBuscaInput').focus();"
+                                <button id="adminBuscaClear" onclick="document.getElementById('adminBuscaInput').value=''; adminFiltroBusca=''; adminFiltroCategoria='Todos'; gerarFiltrosCategorias(); renderAdminItensComFiltro(); this.style.display='none'; document.getElementById('adminBuscaInput').focus();"
                                         style="display:none; position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--gray); font-size:14px; padding:0; width:20px; height:20px; align-items:center; justify-content:center; line-height:1;">✕</button>
                             </div>
                             <button onclick="abrirModalNovoItem()" style="white-space:nowrap; padding:8px 12px; background:linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:12px; box-shadow:0 2px 6px rgba(212,114,79,0.3); flex-shrink:0;">+ Novo</button>
@@ -4182,73 +4183,50 @@
                 return;
             }
             
-            // Agrupar por CATEGORIA (mantém a estrutura original)
-            const porCategoria = {};
-            itensFiltrados.forEach(([codigo, item]) => {
-                const categoria = item.categoria || categorizarItem(item.nome, item.tipo);
-                if (!porCategoria[categoria]) {
-                    porCategoria[categoria] = [];
-                }
-                porCategoria[categoria].push([codigo, item]);
+            // Ordenar: códigos numéricos por valor (1, 2, 10...), alfanuméricos depois
+            itensFiltrados.sort(([a], [b]) => {
+                const na = parseInt(a, 10), nb = parseInt(b, 10);
+                if (!isNaN(na) && !isNaN(nb)) return na - nb;
+                if (!isNaN(na)) return -1;
+                if (!isNaN(nb)) return 1;
+                return a.localeCompare(b);
             });
-            
-            // Ordenar categorias alfabeticamente
-            const categoriasOrdenadas = Object.keys(porCategoria).sort();
-            
-            categoriasOrdenadas.forEach(categoria => {
-                // Header da categoria
-                const headerDiv = document.createElement('div');
-                headerDiv.style.cssText = `
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                    padding: 8px 0;
-                    margin-top: 12px;
-                    margin-bottom: 6px;
-                    font-weight: bold;
-                    font-size: 12px;
-                    color: var(--text-dark);
-                    border-bottom: 2px solid var(--border);
-                `;
-                
-                const icone = getIconeCategoria(categoria);
-                headerDiv.innerHTML = `<span style="font-size: 16px;">${icone}</span> ${categoria}`;
-                container.appendChild(headerDiv);
-                
-                // Itens da categoria
-                porCategoria[categoria].forEach(([codigo, item]) => {
-                    const tipoColor = item.tipo === 'Marmita' ? '#F39C12' : item.tipo === 'Gramas' ? '#3498DB' : '#27AE60';
-                    const tipoLabel = item.tipo === 'Gramas' ? '/kg' : '';
-                    
-                    const div = document.createElement('div');
-                    div.className = 'card';
-                    div.style.marginBottom = '6px';
-                    
-                    const fotoThumb = item.foto
-                        ? `<img src="${item.foto}" style="width:44px; height:44px; object-fit:cover; border-radius:6px; border:1px solid var(--border); flex-shrink:0;">`
-                        : `<div style="width:44px; height:44px; background:var(--bg-light); border:1px solid var(--border); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;">${icone}</div>`;
 
-                    div.innerHTML = `
-                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px; gap:8px;">
-                            ${fotoThumb}
-                            <div style="flex: 1; min-width:0;">
-                                <div style="font-size: 12px; font-weight: bold; color: var(--text-dark);">#${codigo} - ${item.nome}</div>
-                                <div style="display: flex; gap: 4px; margin-top: 4px;">
-                                    <span style="background: ${tipoColor}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 9px;">${item.tipo}</span>
-                                </div>
-                            </div>
-                            <div style="text-align: right; font-weight: bold; color: var(--primary); font-size: 12px; flex-shrink:0;">
-                                R$ ${item.preco.toFixed(2)}${tipoLabel}
+            // Lista plana — sem separação por categoria (os filtros de categoria já fazem esse papel)
+            itensFiltrados.forEach(([codigo, item]) => {
+                const icone = getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo));
+                const tipoColor = item.tipo === 'Marmita' ? '#F39C12' : item.tipo === 'Gramas' ? '#3498DB' : '#27AE60';
+                const tipoLabel = item.tipo === 'Gramas' ? '/kg' : '';
+                const codigoDisplay = isNaN(parseInt(codigo, 10)) ? codigo : parseInt(codigo, 10);
+
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.style.marginBottom = '6px';
+
+                const fotoThumb = item.foto
+                    ? `<img src="${item.foto}" style="width:44px; height:44px; object-fit:cover; border-radius:6px; border:1px solid var(--border); flex-shrink:0;">`
+                    : `<div style="width:44px; height:44px; background:var(--bg-light); border:1px solid var(--border); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;">${icone}</div>`;
+
+                div.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px; gap:8px;">
+                        ${fotoThumb}
+                        <div style="flex: 1; min-width:0;">
+                            <div style="font-size: 12px; font-weight: bold; color: var(--text-dark);">#${codigoDisplay} - ${item.nome}</div>
+                            <div style="display: flex; gap: 4px; margin-top: 4px;">
+                                <span style="background: ${tipoColor}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 9px;">${item.tipo}</span>
                             </div>
                         </div>
-                        <div style="display: flex; gap: 4px;">
-                            <button onclick="visualizarItem('${codigo}')" style="flex: 1; padding: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--primary); font-weight: bold;">👁️ Ver</button>
-                            <button onclick="abrirModalEditarItem('${codigo}')" style="flex: 1; padding: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--primary); font-weight: bold;">✏️ Editar</button>
+                        <div style="text-align: right; font-weight: bold; color: var(--primary); font-size: 12px; flex-shrink:0;">
+                            R$ ${item.preco.toFixed(2)}${tipoLabel}
                         </div>
-                    `;
-                    
-                    container.appendChild(div);
-                });
+                    </div>
+                    <div style="display: flex; gap: 4px;">
+                        <button onclick="visualizarItem('${codigo}')" style="flex: 1; padding: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--primary); font-weight: bold;">👁️ Ver</button>
+                        <button onclick="abrirModalEditarItem('${codigo}')" style="flex: 1; padding: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--primary); font-weight: bold;">✏️ Editar</button>
+                    </div>
+                `;
+
+                container.appendChild(div);
             });
         }
 
@@ -5234,19 +5212,12 @@
 
             const comanda = state.comandas[state.comandaAtual];
             if (!comanda) return;
-            
-            // ☁️ SHEETS: aguarda _id se ainda estiver em trânsito
-            const _itemDel = comanda.itens[indice];
-            console.log('[Sheets] removerItem: item=', _itemDel?.nome, '_id=', _itemDel?._id, '_pendingAdd=', !!_itemDel?._pendingAdd);
-            if (_itemDel && _itemDel._pendingAdd) await _itemDel._pendingAdd;
-            console.log('[Sheets] removerItem após await: _id=', _itemDel?._id);
-            if (_itemDel && _itemDel._id) {
-                sheetsAPI('removerItem', { item_id: _itemDel._id });
-                console.log('[Sheets] removerItem chamado para item_id=', _itemDel._id);
-            } else {
-                console.warn('[Sheets] removerItem: _id não encontrado no item, delete não sincronizado com Sheets');
-            }
 
+            const _itemDel = comanda.itens[indice];
+            if (!_itemDel) return;
+
+            // ✅ Remoção local imediata — sem await, sem delay para o usuário.
+            // O segundo clique acidental não encontrará o mesmo item no índice (já foi spliced).
             comanda.itens.splice(indice, 1);
             atualizarTotalComanda(state.comandaAtual);
             saveStorage();
@@ -5254,6 +5225,15 @@
             renderizarItensDisponiveis();
             resetIdleTimer();
             showToast('✅ Item removido', 'success');
+
+            // ☁️ Sheets: sincroniza em background. Aguarda _id se o add ainda estiver em trânsito.
+            if (_itemDel._pendingAdd) await _itemDel._pendingAdd;
+            if (_itemDel._id) {
+                sheetsAPI('removerItem', { item_id: _itemDel._id });
+                console.log('[Sheets] removerItem chamado para item_id=', _itemDel._id);
+            } else {
+                console.warn('[Sheets] removerItem: _id não encontrado, delete não sincronizado com Sheets');
+            }
         }
 
 function carregarComanda() {
@@ -11427,10 +11407,16 @@ var itens = comanda.itens || [];
                 const isInput = tag === 'input' || tag === 'textarea' || tag === 'select';
                 const telaAtiva = document.querySelector('.screen.active')?.id?.replace('screen-', '');
 
-                // F1 — sempre vai para Lançar (troca de aba simples)
+                // F1 — context-aware:
+                //   Checkout + comanda selecionada → irParaLancarDoCheckout() (mantém comanda)
+                //   Qualquer outro caso          → troca de aba simples para Lançar
                 if (e.key === 'F1') {
                     e.preventDefault();
-                    caixaSwitchTo('lançar');
+                    if (telaAtiva === 'checkout' && comandaCheckoutAtual) {
+                        irParaLancarDoCheckout();
+                    } else {
+                        caixaSwitchTo('lançar');
+                    }
                     return;
                 }
 
