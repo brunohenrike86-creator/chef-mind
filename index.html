@@ -1181,16 +1181,11 @@
         body.modo-caixa .ck-num   { font-size: 20px !important; }
         body.modo-caixa .ck-val   { font-size: 16px !important; }
         body.modo-caixa .ck-itens { font-size: 12px !important; }
-        /* Estado compacto: comanda selecionada — lista recua, foco no detalhe/pagamento */
-        body.modo-caixa #checkout-panel-left.comanda-ativa #listaComandas {
-            grid-template-columns: repeat(3, 1fr) !important;
-            max-height: 200px !important;
-            gap: 4px !important;
+        /* Comanda selecionada: apenas destaque visual, sem encolher os cards */
+        body.modo-caixa #listaComandas button.ck-selecionado {
+            background: #fde9e0 !important;
+            border: 2px solid var(--primary) !important;
         }
-        body.modo-caixa #checkout-panel-left.comanda-ativa #listaComandas button { height: 60px !important; }
-        body.modo-caixa #checkout-panel-left.comanda-ativa .ck-num   { font-size: 13px !important; }
-        body.modo-caixa #checkout-panel-left.comanda-ativa .ck-val   { font-size: 11px !important; }
-        body.modo-caixa #checkout-panel-left.comanda-ativa .ck-itens { display: none !important; }
         body.modo-caixa .co-hdr-abertas { font-size: 14px !important; padding: 4px 6px !important; margin-bottom: 6px !important; }
         body.modo-caixa .co-hdr-detalhe { font-size: 18px !important; padding: 8px 10px !important; }
         body.modo-caixa .co-hdr-itens   { font-size: 12px !important; padding: 6px 8px !important; grid-template-columns: 1fr 56px 76px 76px !important; }
@@ -1768,6 +1763,19 @@
                     <!-- SEÇÃO 1: LISTA DE COMANDAS ABERTAS - GRID 3 COLUNAS -->
                     <div style="background: white; border: 1px solid var(--border); border-radius: 2px; flex-shrink: 0; padding: 3px; margin-bottom: 6px;">
                         <div class="co-hdr-abertas">📋 ABERTAS (<span id="countComandas">0</span>)</div>
+                        <div style="display:flex; align-items:center; gap:5px; padding:3px 2px 4px; border-bottom:1px solid var(--border); margin-bottom:3px;">
+                            <span style="font-size:11px; color:var(--gray); white-space:nowrap; flex-shrink:0;">Ir para:</span>
+                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="checkoutNumInput"
+                                   placeholder="nº da comanda"
+                                   autocomplete="off"
+                                   onkeydown="if(event.key==='Enter'){buscarComandaNoCheckout(this.value); this.blur();}"
+                                   style="flex:1; padding:3px 6px; font-size:12px; font-weight:bold; border:1px solid var(--border); border-radius:3px; text-align:center; color:var(--primary); background:white; font-family:inherit; min-width:0;">
+                            <button id="btnLimparCheckout"
+                                    onclick="limparCheckout(); renderizarListaComandas();"
+                                    style="display:none; padding:3px 7px; background:var(--danger); color:white; border:none; border-radius:3px; cursor:pointer; font-size:11px; font-weight:bold; white-space:nowrap; flex-shrink:0;">
+                                ✕ limpar
+                            </button>
+                        </div>
                         <div id="listaComandas" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; max-height: 150px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 2px;" onscroll="event.stopPropagation()"></div>
                     </div>
                     </div><!-- /checkout-panel-left -->
@@ -5503,10 +5511,26 @@ function carregarComanda() {
 
 
         // ✅ LIMPAR TELA CHECKOUT
+        function buscarComandaNoCheckout(num) {
+            const numeroNorm = String(parseInt(num, 10));
+            if (!num || numeroNorm === 'NaN') { showToast('Informe um número válido', 'error'); return; }
+            const dataAtual = new Date().toISOString().split('T')[0];
+            const key = `${numeroNorm}-${dataAtual}`;
+            const comanda = state.comandas[key];
+            if (!comanda || comanda.encerramento === 'fechamento') {
+                showToast(`⚠️ Comanda #${numeroNorm} não encontrada`, 'warning');
+                return;
+            }
+            document.getElementById('checkoutNumInput').value = '';
+            selecionarComandaCheckout(key, comanda);
+        }
+
         function limparCheckout() {
             comandaCheckoutAtual = null;
             formaPagamentoSelecionada = null;
             document.getElementById('checkout-panel-left').classList.remove('comanda-ativa');
+            const btnLimpar = document.getElementById('btnLimparCheckout');
+            if (btnLimpar) btnLimpar.style.display = 'none';
 
             // Limpar seleção de comanda
             const areaVazia = document.getElementById('areaVazia');
@@ -5917,33 +5941,28 @@ function carregarComanda() {
         }
 
                 async function removerTodosItem(idx) {
-            // BLOQUEAR SE ESTIVER EM MODO LEITURA
-            if (state.modoLeitura) {
-                showToast('Modo consulta - edição desativada', 'warning');
-                return;
-            }
-
+            if (state.modoLeitura) { showToast('Modo consulta - edição desativada', 'warning'); return; }
             const comanda = state.comandas[state.comandaAtual];
             const item = comanda.itens[idx];
-
-            // ☁️ SHEETS: marcar todos os itens com mesmo código como removidos
+            if (!item) return;
+            // Capturar antes de remover
             const itensParaRemover = comanda.itens.filter(i => i.codigo === item.codigo && i.tipo === item.tipo);
-            for (const _itemDel of itensParaRemover) {
-                console.log('[Sheets] removerTodosItem: item=', _itemDel.nome, '_id=', _itemDel._id, '_pendingAdd=', !!_itemDel._pendingAdd);
-                if (_itemDel._pendingAdd) await _itemDel._pendingAdd;
-                if (_itemDel._id) {
-                    sheetsAPI('removerItem', { item_id: _itemDel._id });
-                    console.log('[Sheets] removerItem chamado para item_id=', _itemDel._id);
-                } else {
-                    console.warn('[Sheets] removerTodosItem: _id não encontrado, item não sincronizado', _itemDel.nome);
-                }
-            }
-
-            // Remover todos os itens com mesmo código e tipo
+            // ✅ Remoção local imediata — sem await, sem delay para o usuário
             comanda.itens = comanda.itens.filter(i => !(i.codigo === item.codigo && i.tipo === item.tipo));
             saveStorage();
             renderizarListaLançada();
+            renderizarItensDisponiveis();
             resetIdleTimer();
+            showToast('✅ Itens removidos', 'success');
+            // ☁️ Sheets em background — aguarda _pendingAdd de cada item antes de deletar
+            for (const _itemDel of itensParaRemover) {
+                if (_itemDel._pendingAdd) await _itemDel._pendingAdd;
+                if (_itemDel._id) {
+                    sheetsAPI('removerItem', { item_id: _itemDel._id });
+                } else {
+                    console.warn('[Sheets] removerTodosItem: _id não encontrado', _itemDel.nome);
+                }
+            }
         }
 
         function renderizarItensDisponiveis() {
@@ -6229,6 +6248,20 @@ function carregarComanda() {
         function selecionarComandaCheckout(key, comanda) {
             comandaCheckoutAtual = key;
             document.getElementById('checkout-panel-left').classList.add('comanda-ativa');
+            const btnLimpar = document.getElementById('btnLimparCheckout');
+            if (btnLimpar) btnLimpar.style.display = 'block';
+            // ✅ Highlight imediato — sem esperar re-render da lista
+            document.querySelectorAll('#listaComandas button').forEach(b => {
+                const isSelected = b.dataset.comandaKey === key;
+                b.classList.toggle('ck-selecionado', isSelected);
+                if (isSelected) {
+                    b.onmouseover = () => {};
+                    b.onmouseout = () => {};
+                } else {
+                    b.onmouseover = () => b.style.background = 'var(--bg-light)';
+                    b.onmouseout = () => b.style.background = 'white';
+                }
+            });
 
             // ✅ RESETAR FORMA DE PAGAMENTO
             formaPagamentoSelecionada = null;
@@ -6476,6 +6509,8 @@ function carregarComanda() {
                 comandaCheckoutAtual = null;
                 formaPagamentoSelecionada = null;
                 document.getElementById('checkout-panel-left').classList.remove('comanda-ativa');
+                const _btnLimpar = document.getElementById('btnLimparCheckout');
+                if (_btnLimpar) _btnLimpar.style.display = 'none';
 
                 document.getElementById('areaDetalhes').style.display = 'none';
                 document.getElementById('areaPagamento').style.display = 'none';
@@ -9687,6 +9722,8 @@ function carregarComanda() {
                     comandaCheckoutAtual = null;
                     formaPagamentoSelecionada = null;
                     document.getElementById('checkout-panel-left').classList.remove('comanda-ativa');
+                    const _btnLimpar = document.getElementById('btnLimparCheckout');
+                    if (_btnLimpar) _btnLimpar.style.display = 'none';
                     document.getElementById('areaDetalhes').style.display = 'none';
                     document.getElementById('areaPagamento').style.display = 'none';
                     document.getElementById('areaVazia').style.display = 'flex';
@@ -9716,7 +9753,8 @@ function carregarComanda() {
                     return acc + (isPeso ? 1 : (item.quantidade || 1));
                 }, 0);
                 const btn = document.createElement('button');
-                
+                btn.dataset.comandaKey = key;
+
                 // ✅ DESTACAR COMANDAS COM PREPARO JÁ
                 // Comanda online também nasce com preparo_ja=true em todos os itens (pula a
                 // etapa 'aberta'), então essa condição sozinha sempre seria true pra pedido
@@ -9762,8 +9800,14 @@ function carregarComanda() {
                     <div class="ck-itens">${qtdItensCard} itens</div>
                     ${badge}
                 `;
-                btn.onmouseover = () => btn.style.background = 'var(--bg-light)';
-                btn.onmouseout = () => btn.style.background = 'white';
+                if (key === comandaCheckoutAtual) {
+                    btn.classList.add('ck-selecionado');
+                    btn.onmouseover = () => {};
+                    btn.onmouseout = () => {};
+                } else {
+                    btn.onmouseover = () => btn.style.background = 'var(--bg-light)';
+                    btn.onmouseout = () => btn.style.background = 'white';
+                }
                 btn.onclick = () => selecionarComandaCheckout(key, comanda);
                 container.appendChild(btn);
             });
@@ -11432,11 +11476,14 @@ var itens = comanda.itens || [];
                     return;
                 }
 
-                // F3 — focar campo de busca do cardápio (tela Lançar)
+                // F3 — context-aware: Lançar → busca de item; Checkout → busca de comanda
                 if (e.key === 'F3') {
                     e.preventDefault();
                     if (telaAtiva === 'lançar') {
                         const busca = document.getElementById('lancBuscaInput');
+                        if (busca) busca.focus();
+                    } else if (telaAtiva === 'checkout') {
+                        const busca = document.getElementById('checkoutNumInput');
                         if (busca) busca.focus();
                     }
                     return;
