@@ -1068,15 +1068,16 @@
 
         /* Botões de item maiores */
         body.modo-balanca #listaItensDisponiveis {
-            grid-template-columns: repeat(auto-fill, 100px) !important;
+            grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)) !important;
             gap: 8px !important;
             padding: 8px !important;
-            align-content: start !important;  /* sem gaps entre linhas */
+            align-content: start !important;
         }
-        body.modo-balanca .item-cat-btn { min-height: 96px !important; padding: 8px !important; }
+        body.modo-balanca .item-cat-btn { height: auto !important; min-height: 140px !important; padding: 8px !important; }
         body.modo-balanca .item-cat-btn img { width: 56px !important; height: 56px !important; }
         body.modo-balanca .cat-icone { font-size: 28px !important; }
-        body.modo-balanca .cat-nome  { font-size: 13px !important; font-weight: bold; }
+        body.modo-balanca .cat-nome  { font-size: 12px !important; font-weight: bold; word-break: break-word; line-height: 1.25; }
+        body.modo-balanca .cat-cod   { font-size: 9px !important; }
         body.modo-balanca .cat-preco { font-size: 12px !important; }
         body.modo-balanca #abaCategorias button { font-size: 13px !important; padding: 10px 16px !important; }
 
@@ -1157,15 +1158,15 @@
         body.modo-caixa #statusComanda     { font-size: 15px !important; padding: 12px !important; }
         body.modo-caixa #lançarCodigoItem  { font-size: 20px !important; padding: 14px !important; }
         body.modo-caixa #listaItensDisponiveis {
-            grid-template-columns: repeat(auto-fill, 100px) !important;
+            grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)) !important;
             gap: 8px !important;
             padding: 8px !important;
             align-content: start !important;
         }
-        body.modo-caixa .item-cat-btn  { min-height: 96px !important; padding: 8px !important; }
+        body.modo-caixa .item-cat-btn  { height: auto !important; min-height: 140px !important; padding: 8px !important; }
         body.modo-caixa .item-cat-btn img { width: 56px !important; height: 56px !important; }
         body.modo-caixa .cat-icone     { font-size: 28px !important; }
-        body.modo-caixa .cat-nome      { font-size: 13px !important; font-weight: bold; }
+        body.modo-caixa .cat-nome      { font-size: 12px !important; font-weight: bold; word-break: break-word; line-height: 1.25; }
         body.modo-caixa .cat-preco     { font-size: 12px !important; }
         body.modo-caixa #abaCategorias button { font-size: 13px !important; padding: 10px 16px !important; }
 
@@ -1424,8 +1425,9 @@
             background: #f5f5f5;
             border-bottom: 2px solid var(--primary);
             box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            padding: 8px 8px 10px;
+            padding: 4px 8px 10px;
         }
+        #vkPanel.vk-alpha-mode #vkDismissBar { margin-bottom: 2px; }
         #vkPanel.vk-alpha-mode.vk-hidden { transform: translateY(-100%); opacity: 0; }
 
         /* ── Linhas de teclas ── */
@@ -11640,6 +11642,13 @@ var itens = comanda.itens || [];
          Renderizado mas oculto via CSS em qualquer outro perfil.
          JS: vkShow() / vkHide() / vkPress() — ver bloco "TECLADO VIRTUAL" no script. -->
     <div id="vkPanel" class="vk-hidden">
+
+        <!-- BARRA DE FECHAR — compartilhada entre numérico e alfabético -->
+        <div id="vkDismissBar" style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:4px;">
+            <button ontouchstart="" onclick="vkHide()"
+                    style="min-width:44px; min-height:44px; background:none; border:none; font-size:22px; color:#999; cursor:pointer; display:flex; align-items:center; justify-content:center; border-radius:8px; line-height:1; padding:0;"
+                    title="Fechar teclado">▼</button>
+        </div>
 
         <!-- LAYOUT NUMÉRICO (comanda, peso, código do item) -->
         <div id="vkNumeric">
