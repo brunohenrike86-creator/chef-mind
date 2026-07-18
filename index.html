@@ -1978,7 +1978,7 @@
                             <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
 
                                 <div>
-                                    <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">💳 Máquinas de Cartão (total cobrado no cartão)</div>
+                                    <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">💳 Máquinas (PIX + Cartão)</div>
                                     <div style="position:relative;">
                                         <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:13px; color:var(--gray); font-weight:bold;">R$</span>
                                         <input type="number" id="inputMaquinas" placeholder="0,00" min="0" step="0.01" oninput="calcularFechamento()"
@@ -1987,7 +1987,7 @@
                                 </div>
 
                                 <div>
-                                    <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">💵 Caixa Físico — Sangria (valor retirado)</div>
+                                    <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">💵 Sangria (valor retirado)</div>
                                     <div style="position:relative;">
                                         <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:13px; color:var(--gray); font-weight:bold;">R$</span>
                                         <input type="number" id="inputSangria" placeholder="0,00" min="0" step="0.01" oninput="calcularFechamento()"
@@ -1996,7 +1996,7 @@
                                 </div>
 
                                 <div>
-                                    <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">🏦 Caixa Físico — Próximo Dia (troco que fica)</div>
+                                    <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">🏦 Dinheiro Caixa (fica para amanhã)</div>
                                     <div style="position:relative;">
                                         <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:13px; color:var(--gray); font-weight:bold;">R$</span>
                                         <input type="number" id="inputResidual" placeholder="0,00" min="0" step="0.01" oninput="calcularFechamento()"
@@ -2007,13 +2007,19 @@
 
                             <!-- Resultado da fórmula (live) -->
                             <div id="fechResultado" style="border-radius:10px; padding:14px 16px; margin-bottom:14px; background:#f5f5f5; border:2px solid #ddd; transition: all 0.3s;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                                    <span style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; letter-spacing:1px;">Vendas + Troco</span>
-                                    <span style="font-size:14px; font-weight:bold;" id="fechEntradas">R$ 0,00</span>
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                                    <div>
+                                        <div style="font-size:10px; font-weight:bold; color:#27AE60; text-transform:uppercase; letter-spacing:1px;">(+) Total do dia</div>
+                                        <div style="font-size:9px; color:#555; margin-top:3px; line-height:1.4;" id="fechEntradasDetalhe"></div>
+                                    </div>
+                                    <span style="font-size:14px; font-weight:bold; margin-left:8px; white-space:nowrap;" id="fechEntradas">R$ 0,00</span>
                                 </div>
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                                    <span style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; letter-spacing:1px;">Saídas declaradas</span>
-                                    <span style="font-size:14px; font-weight:bold;" id="fechSaidas">R$ 0,00</span>
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                                    <div>
+                                        <div style="font-size:10px; font-weight:bold; color:#E74C3C; text-transform:uppercase; letter-spacing:1px;">(−) Deduções</div>
+                                        <div style="font-size:9px; color:#555; margin-top:3px; line-height:1.4;" id="fechSaidasDetalhe"></div>
+                                    </div>
+                                    <span style="font-size:14px; font-weight:bold; margin-left:8px; white-space:nowrap;" id="fechSaidas">R$ 0,00</span>
                                 </div>
                                 <div style="height:1px; background:#ddd; margin-bottom:10px;"></div>
                                 <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -2036,7 +2042,7 @@
                                     <!-- Linha Maquininhas -->
                                     <div style="margin-bottom:10px;">
                                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; gap:6px;">
-                                            <span style="font-size:11px; font-weight:bold; color:#555; flex:1; min-width:0;">💳 Maquininhas (PIX+DB+CC+VC)</span>
+                                            <span style="font-size:11px; font-weight:bold; color:#555; flex:1; min-width:0;">💳 Máquinas</span>
                                             <span id="diagMaqStatus" style="font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px; white-space:nowrap; flex-shrink:0;"></span>
                                         </div>
                                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:11px; color:#666;">
@@ -2048,7 +2054,7 @@
                                     <!-- Linha Dinheiro -->
                                     <div style="border-top:1px solid #E8DAEF; padding-top:10px; margin-bottom:10px;">
                                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; gap:6px;">
-                                            <span style="font-size:11px; font-weight:bold; color:#555; flex:1; min-width:0;">💵 Dinheiro Físico (Troco + Vendas)</span>
+                                            <span style="font-size:11px; font-weight:bold; color:#555; flex:1; min-width:0;">💵 Troco Inicial + Vendas em Dinheiro</span>
                                             <span id="diagDinStatus" style="font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px; white-space:nowrap; flex-shrink:0;"></span>
                                         </div>
                                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:11px; color:#666;">
@@ -3077,8 +3083,12 @@
                 }
 
                 // Processar status do caixa
+                // ATENÇÃO: usar data LOCAL (não UTC) para comparar com caixaStatus.data que
+                // vem do GAS em timezone local. toISOString() retorna UTC — após 21h BRT
+                // (= 00h UTC) isso dá a data de amanhã e o caixa some como "fechado".
                 if (caixaStatus) {
-                    const dataHoje = new Date().toISOString().split('T')[0];
+                    const _dh = new Date();
+                    const dataHoje = _dh.getFullYear() + '-' + String(_dh.getMonth()+1).padStart(2,'0') + '-' + String(_dh.getDate()).padStart(2,'0');
                     if (caixaStatus.status === 'aberto' && caixaStatus.data === dataHoje) {
                         state.caixa = {
                             status:       'aberto',
@@ -8129,6 +8139,10 @@ function carregarComanda() {
         // ========== CAIXA — ABERTURA / FECHAMENTO ==========
 
         function renderizarCaixa() {
+            // Não interromper o fluxo de fechamento ativo — o poll roda a cada 3s e
+            // chamaria isso enquanto o usuário está preenchendo os campos de fechamento.
+            if (document.getElementById('caixa-fase-fechamento').style.display !== 'none') return;
+
             const dataHoje = new Date().toISOString().split('T')[0];
             const hoje = new Date();
             const dias  = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
@@ -8234,14 +8248,14 @@ function carregarComanda() {
             } catch(e) {}
         }
 
-        function iniciarFechamentoCaixa() {
+        async function iniciarFechamentoCaixa() {
             const dataAtual = new Date().toISOString().split('T')[0];
             const abertas   = Object.values(state.comandas).filter(c =>
                 c.data === dataAtual && !c.encerramento &&
                 (c.status === 'Aberta' || (c.status === 'Em Preparo' && !c.paid))
             );
 
-            // Calcular totais para preencher automaticamente
+            // Calcular totais a partir do estado local (sem await)
             const comandasHoje = Object.values(state.comandas).filter(c =>
                 c.data === dataAtual && !c.encerramento && c.paid
             );
@@ -8250,7 +8264,7 @@ function carregarComanda() {
                 .filter(c => (c.formaPagamento || '').toLowerCase() === 'a_receber')
                 .reduce((s, c) => s + (c.total || 0), 0);
 
-            // Mostrar fase 3
+            // Mostrar fase 3 IMEDIATAMENTE — sem esperar API
             document.getElementById('caixa-fase-aberto').style.display        = 'none';
             document.getElementById('caixa-fase-fechamento').style.display    = 'flex';
             document.getElementById('caixa-fase-fechamento').style.flexDirection = 'column';
@@ -8269,6 +8283,15 @@ function carregarComanda() {
             ['inputMaquinas','inputSangria','inputResidual'].forEach(id => {
                 document.getElementById(id).value = '';
             });
+
+            // Estado inicial sem baixas AR (preenchido antes do fetch)
+            const painel = document.getElementById('caixa-fase-fechamento');
+            painel.dataset.vendaTotal    = vendaTotal;
+            painel.dataset.aReceber      = aReceber;
+            painel.dataset.abertasCount  = abertas.length;
+            painel.dataset.baixasHoje    = 0;
+            painel.dataset.baixasMaqHoje = 0;
+            painel.dataset.baixasDinHoje = 0;
             calcularFechamento();
 
             // Alerta de comandas abertas
@@ -8285,27 +8308,75 @@ function carregarComanda() {
                 alertaEl.style.display = 'none';
             }
 
-            // Armazenar para uso no confirmar e no calcularFechamento
-            document.getElementById('caixa-fase-fechamento').dataset.vendaTotal   = vendaTotal;
-            document.getElementById('caixa-fase-fechamento').dataset.aReceber     = aReceber;
-            document.getElementById('caixa-fase-fechamento').dataset.abertasCount = abertas.length;
+            // Indicador de loading enquanto busca baixas AR
+            const _detEnt = document.getElementById('fechEntradasDetalhe');
+            _detEnt.textContent += (_detEnt.textContent ? ' · ' : '') + '⏳ baixas A Receber...';
+
+            // Buscar baixas A Receber em background (atualiza o resultado quando chegar)
+            // (dinheiro → afeta gaveta; PIX/cartão → já incluso na leitura das máquinas)
+            try {
+                const arRes = await sheetsAPI('getAReceber');
+                const arDados = Array.isArray(arRes) ? arRes : [];
+                const FORMAS_MAQ_AR = ['pix', 'credito', 'debito', 'voucher'];
+                const baixasHoje = arDados.filter(c =>
+                    c.baixa_data && String(c.baixa_data).split('T')[0] === dataAtual
+                );
+                const totalBaixasHoje = baixasHoje.reduce((s, c) => s + (parseFloat(c.total) || 0), 0);
+                const baixasMaqHoje   = baixasHoje
+                    .filter(c => FORMAS_MAQ_AR.includes((c.baixa_forma || '').toLowerCase()))
+                    .reduce((s, c) => s + (parseFloat(c.total) || 0), 0);
+                const baixasDinHoje   = baixasHoje
+                    .filter(c => (c.baixa_forma || '').toLowerCase() === 'dinheiro')
+                    .reduce((s, c) => s + (parseFloat(c.total) || 0), 0);
+
+                // Atualizar datasets e recalcular (só se ainda estiver na tela de fechamento)
+                if (document.getElementById('caixa-fase-fechamento').style.display !== 'none') {
+                    painel.dataset.baixasHoje    = totalBaixasHoje;
+                    painel.dataset.baixasMaqHoje = baixasMaqHoje;
+                    painel.dataset.baixasDinHoje = baixasDinHoje;
+                    calcularFechamento();
+                }
+            } catch(e) {
+                // Remove loading indicator se falhar
+                const _d = document.getElementById('fechEntradasDetalhe');
+                _d.textContent = _d.textContent.replace(/ · ⏳ baixas A Receber\.\.\.$/, '').replace(/^⏳ baixas A Receber\.\.\.$/, '');
+                console.warn('[Fechamento] Falha ao buscar baixas AR:', e);
+            }
         }
 
         function calcularFechamento() {
-            const vendaTotal = parseFloat(document.getElementById('caixa-fase-fechamento').dataset.vendaTotal) || 0;
-            const aReceber   = parseFloat(document.getElementById('caixa-fase-fechamento').dataset.aReceber) || 0;
+            const painel     = document.getElementById('caixa-fase-fechamento');
+            const vendaTotal = parseFloat(painel.dataset.vendaTotal) || 0;
+            const aReceber   = parseFloat(painel.dataset.aReceber)   || 0;
+            const baixasHoje = parseFloat(painel.dataset.baixasHoje) || 0;
             const troco      = state.caixa.troco || 0;
             const maquinas   = parseFloat(document.getElementById('inputMaquinas').value) || 0;
             const sangria    = parseFloat(document.getElementById('inputSangria').value)  || 0;
             const residual   = parseFloat(document.getElementById('inputResidual').value) || 0;
 
-            // Fórmula: Diferença = VendaTotal - ((Máquinas + Sangria + Residual + AReceber) - Troco)
-            const entradas = vendaTotal + troco;
+            // Baixas AR recebidas hoje entram como entrada adicional
+            // (dinheiro: afeta gaveta diretamente; PIX/cartão: já incluso no total lido das máquinas)
+            const entradas = vendaTotal + troco + baixasHoje;
             const saidas   = maquinas + sangria + residual + aReceber;
             const diff     = entradas - saidas;
 
-            document.getElementById('fechEntradas').textContent = 'R$ ' + entradas.toFixed(2);
-            document.getElementById('fechSaidas').textContent   = 'R$ ' + saidas.toFixed(2);
+            // Subtext de Entradas
+            const partsEnt = [];
+            if (vendaTotal) partsEnt.push('Total Vendido R$' + vendaTotal.toFixed(2));
+            if (troco)      partsEnt.push('Troco Inicial R$' + troco.toFixed(2));
+            if (baixasHoje) partsEnt.push('Baixas AR R$' + baixasHoje.toFixed(2));
+            document.getElementById('fechEntradasDetalhe').textContent = partsEnt.join(' · ');
+
+            // Subtext de Saídas
+            const partsSai = [];
+            if (maquinas)  partsSai.push('Máquinas R$' + maquinas.toFixed(2));
+            if (sangria)   partsSai.push('Retirado R$' + sangria.toFixed(2));
+            if (residual)  partsSai.push('Dinheiro Caixa R$' + residual.toFixed(2));
+            if (aReceber)  partsSai.push('A Receber R$' + aReceber.toFixed(2));
+            document.getElementById('fechSaidasDetalhe').textContent = partsSai.join(' · ');
+
+            document.getElementById('fechEntradas').textContent  = 'R$ ' + entradas.toFixed(2);
+            document.getElementById('fechSaidas').textContent    = 'R$ ' + saidas.toFixed(2);
             document.getElementById('fechDiferenca').textContent = (diff >= 0 ? '+' : '') + 'R$ ' + diff.toFixed(2);
 
             const resultado   = document.getElementById('fechResultado');
@@ -8375,18 +8446,22 @@ function carregarComanda() {
                 c.data === dataAtual && c.paid && !c.encerramento
             );
 
-            // Totais por grupo vindos das comandas
+            // Totais por grupo vindos das comandas + baixas AR recebidas hoje
+            const _painelFech = document.getElementById('caixa-fase-fechamento');
+            const baixasMaqHoje = parseFloat(_painelFech.dataset.baixasMaqHoje) || 0;
+            const baixasDinHoje = parseFloat(_painelFech.dataset.baixasDinHoje) || 0;
+
             const totalMaqSistema = pagas
                 .filter(c => FORMAS_MAQ.includes((c.formaPagamento || '').toLowerCase()))
-                .reduce((s, c) => s + (c.total || 0), 0);
+                .reduce((s, c) => s + (c.total || 0), 0) + baixasMaqHoje;
 
             const totalDinheiroSistema = pagas
                 .filter(c => (c.formaPagamento || '').toLowerCase() === 'dinheiro')
                 .reduce((s, c) => s + (c.total || 0), 0);
 
-            // Dinheiro esperado = troco abertura + vendas em dinheiro
+            // Dinheiro esperado = troco abertura + vendas em dinheiro + baixas AR em dinheiro
             const trocoAbertura = state.caixa.troco || 0;
-            const dinEsperado   = trocoAbertura + totalDinheiroSistema;
+            const dinEsperado   = trocoAbertura + totalDinheiroSistema + baixasDinHoje;
             const dinDeclarado  = inputSangria + inputResidual;
 
             const diffMaq = inputMaquinas - totalMaqSistema;
@@ -8443,13 +8518,15 @@ function carregarComanda() {
         }
 
         async function confirmarFechamentoCaixa() {
-            const vendaTotal = parseFloat(document.getElementById('caixa-fase-fechamento').dataset.vendaTotal) || 0;
-            const aReceber   = parseFloat(document.getElementById('caixa-fase-fechamento').dataset.aReceber)   || 0;
+            const painel     = document.getElementById('caixa-fase-fechamento');
+            const vendaTotal = parseFloat(painel.dataset.vendaTotal) || 0;
+            const aReceber   = parseFloat(painel.dataset.aReceber)   || 0;
+            const baixasHoje = parseFloat(painel.dataset.baixasHoje) || 0;
             const maquinas   = parseFloat(document.getElementById('inputMaquinas').value) || 0;
             const sangria    = parseFloat(document.getElementById('inputSangria').value)  || 0;
             const residual   = parseFloat(document.getElementById('inputResidual').value) || 0;
             const troco      = state.caixa.troco || 0;
-            const diff       = (vendaTotal + troco) - (maquinas + sangria + residual + aReceber);
+            const diff       = (vendaTotal + troco + baixasHoje) - (maquinas + sangria + residual + aReceber);
 
             const okFechar = await confirmarAcao({
                 titulo: 'Fechar caixa',
@@ -8463,13 +8540,14 @@ function carregarComanda() {
             showToast('⏳ Fechando caixa...', 'info');
             try {
                 const res = await sheetsAPI('fecharCaixa', {
-                    valor_maquinas:    maquinas,
-                    sangria:           sangria,
-                    residual_prox_dia: residual,
-                    a_receber:         aReceber,
-                    venda_total:       vendaTotal,
-                    diferenca:         diff,
-                    usuario:           state.userLogado || state.user
+                    valor_maquinas:      maquinas,
+                    sangria:             sangria,
+                    residual_prox_dia:   residual,
+                    a_receber:           aReceber,
+                    venda_total:         vendaTotal,
+                    baixas_ar_recebidas: baixasHoje,
+                    diferenca:           diff,
+                    usuario:             state.userLogado || state.user
                 });
                 if (res && res.sucesso) {
                     // Marcar localmente
