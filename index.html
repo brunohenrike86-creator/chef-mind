@@ -1775,7 +1775,7 @@
                             <button id="btnLimparCheckout"
                                     onclick="limparCheckout(); renderizarListaComandas();"
                                     style="display:none; padding:3px 7px; background:var(--danger); color:white; border:none; border-radius:3px; cursor:pointer; font-size:11px; font-weight:bold; white-space:nowrap; flex-shrink:0;">
-                                ✕ limpar
+                                ✕ limpar [F4]
                             </button>
                         </div>
                         <div id="listaComandas" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; max-height: 150px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 2px;" onscroll="event.stopPropagation()"></div>
@@ -2154,8 +2154,8 @@
 
                     <!-- TAB: ESTOQUE -->
                     <div id="admin-estoque" class="admin-tab" style="display: none; flex-direction: column; gap: 8px;">
-                        <!-- AÇÃO PRINCIPAL: lançar compra (cobre de 1 a N itens — substitui o antigo "Lançar Entrada" avulso) -->
-                        <button onclick="abrirModalLancarCompra()" style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; box-shadow: 0 2px 8px rgba(212,114,79,0.3);">🛒 Lançar Compra</button>
+                        <!-- AÇÃO PRINCIPAL: entrada em lote (cobre de 1 a N itens) -->
+                        <button onclick="abrirModalLancarCompra()" style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; box-shadow: 0 2px 8px rgba(212,114,79,0.3);">🛒 Entrada em Lote</button>
 
                         <!-- CABEÇALHO DA LISTA: título + filtro compacto (chip), no lugar de um botão de largura total -->
                         <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 2px 0;">
@@ -2169,8 +2169,7 @@
                         <!-- LISTAGEM ESTOQUE -->
                         <div style="flex: 1; overflow-y: auto;">
                             <div id="estoqueLista"></div>
-                            <!-- Ação de configuração (rara — só no cadastro inicial de cada produto): vira link discreto no rodapé, não compete com "Lançar Compra" -->
-                            <button onclick="abrirModalNovoEstoqueItem()" style="width: 100%; margin-top: 10px; padding: 8px; background: transparent; color: var(--primary); border: 1px dashed var(--border); border-radius: 6px; cursor: pointer; font-size: 10px;">🔗 Vincular novo produto ao estoque</button>
+                            <!-- Ativar estoque: feito diretamente no card do item na tab Itens (botão 📦) -->
                         </div>
                     </div>
 
@@ -2311,14 +2310,11 @@
     <!-- MODAL: VINCULAR ITEM AO ESTOQUE -->
     <div id="modalEstoqueItem" class="modal">
         <div class="modal-content">
-            <div class="modal-header" id="modalEstoqueItemTitulo">📦 Vincular Item ao Estoque</div>
+            <div class="modal-header" id="modalEstoqueItemTitulo">📦 Configurar Estoque</div>
 
-            <div class="modal-field">
-                <div class="modal-label">Item do cardápio</div>
-                <select id="estoqueItemCodigo" class="modal-input">
-                    <option value="">Selecione um item do cardápio...</option>
-                </select>
-            </div>
+            <!-- hidden: identifica o item do cardápio e o registro de estoque (se já existir) -->
+            <input type="hidden" id="modalEstoqueItemCodigo">
+            <input type="hidden" id="estoqueItemId">
 
             <div class="modal-field">
                 <div class="modal-label">Classificação</div>
@@ -2340,7 +2336,7 @@
             </div>
 
             <div class="info-box" style="font-size: 11px; color: var(--text-dark);">
-                💡 Ao vincular, toda venda desse item na comanda gera baixa automática 1:1 no saldo quando a comanda é paga.
+                💡 Toda venda desse item gera baixa automática 1:1 no saldo ao pagar a comanda.
             </div>
 
             <div class="modal-buttons">
@@ -2353,7 +2349,7 @@
     <!-- MODAL: LANÇAR ENTRADA DE ESTOQUE -->
     <div id="modalEstoqueEntrada" class="modal">
         <div class="modal-content">
-            <div class="modal-header">📥 Lançar Entrada de Estoque</div>
+            <div class="modal-header">📥 Entrada Avulsa</div>
 
             <div class="modal-field">
                 <div class="modal-label">Item</div>
@@ -2407,7 +2403,7 @@
     <!-- MODAL: LANÇAR COMPRA (entrada em lote de vários itens) -->
     <div id="modalLancarCompra" class="modal">
         <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
-            <div class="modal-header">🛒 Lançar Compra</div>
+            <div class="modal-header">🛒 Entrada em Lote</div>
             <div style="font-size: 10px; color: var(--gray); padding: 0 0 8px;">Registre de uma vez todos os itens de uma compra (ex: nota fiscal com vários produtos). Cada linha vira uma entrada de estoque com o mesmo lançamento.</div>
 
             <div class="modal-field">
@@ -2423,7 +2419,7 @@
 
             <div class="modal-buttons">
                 <button class="modal-btn-secondary" onclick="fecharModalLancarCompra()">Cancelar</button>
-                <button class="modal-btn-primary" onclick="salvarLancamentoCompra()">Lançar Compra</button>
+                <button class="modal-btn-primary" onclick="salvarLancamentoCompra()">Lançar Entrada</button>
             </div>
         </div>
     </div>
@@ -2863,6 +2859,7 @@
                 '026': { nome: 'Sobremesa', preco: 2.00, icone: '🍰', categoria: 'Sobremesas', tipo: 'Fixo' },
                 '027': { nome: 'Sorvete', preco: 5.00, icone: '🍦', categoria: 'Sobremesas', tipo: 'Fixo' }
             },
+            cardapioAdmin: {},  // { [codigo]: item } — todos os itens (ativos + inativos), carregado lazy na aba Admin > Itens
             estoque: {
                 itens: [],          // [{ id, nome, cardapio_codigo, unidade, ponto_pedido, ativo, saldo, alerta }]
                 filtroAlerta: false, // true = mostra só itens com saldo <= ponto_pedido (checklist de reposição)
@@ -3777,6 +3774,34 @@
                 carregarAReceber();
             } else if (screenName === 'admin') {
                 pararTimerPreparo();
+                // Resetar sempre para o tab Itens (default) ao entrar no Admin
+                document.querySelectorAll('.admin-tab').forEach(t => t.style.display = 'none');
+                document.querySelectorAll('.admin-tab-btn').forEach(b => {
+                    b.style.background = 'var(--bg-light)';
+                    b.style.color = 'var(--text-dark)';
+                    b.style.border = '2px solid var(--border)';
+                });
+                const _tabItens = document.getElementById('admin-itens');
+                if (_tabItens) _tabItens.style.display = 'flex';
+                const _btnItens = document.querySelector('[data-admin-tab="itens"]');
+                if (_btnItens) {
+                    _btnItens.style.background = 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)';
+                    _btnItens.style.color = 'white';
+                    _btnItens.style.border = 'none';
+                }
+                // Reset filtros da aba Itens
+                adminFiltroCategoria = 'Todos';
+                adminFiltroBusca     = '';
+                adminFiltroStatus    = 'todos';
+                adminFiltroEstoque   = false;
+                adminFiltroOnline    = false;
+                const _biA = document.getElementById('adminBuscaInput');
+                if (_biA) _biA.value = '';
+                const _bcA = document.getElementById('adminBuscaClear');
+                if (_bcA) _bcA.style.display = 'none';
+                gerarFiltrosCategorias(); // chama gerarFiltrosRapidos internamente
+                renderAdminItensComFiltro();
+                // Por último: verificar permissões por perfil (Gerente vai p/ Carnes, etc.)
                 atualizarVisibilidadeAbasAdmin();
             } else {
                 pararTimerPreparo();
@@ -3965,13 +3990,27 @@
                     btn.style.color = 'white';
                     btn.style.border = 'none';
                     
-                    // Se for aba de marmitas do dia, inicializar com dia de hoje
+                    // Se for aba de itens, recarregar cardápio completo (ativos + inativos)
+                    // Reset filtros ao entrar na aba — não faz sentido manter busca/filtro ao voltar
+                    if (tabName === 'itens') {
+                        adminFiltroCategoria = 'Todos';
+                        adminFiltroBusca     = '';
+                        adminFiltroStatus    = 'todos';
+                        adminFiltroEstoque   = false;
+                        adminFiltroOnline    = false;
+                        const _bi = document.getElementById('adminBuscaInput');
+                        if (_bi) _bi.value = '';
+                        const _bc = document.getElementById('adminBuscaClear');
+                        if (_bc) _bc.style.display = 'none';
+                        gerarFiltrosRapidos(); // resetar visual dos chips
+                        carregarCardapioAdmin();
+                    }
+
+                    // Se for aba de marmitas do dia, sempre inicializar em Segunda (default)
                     if (tabName === 'marnitasDia') {
                         try {
                             inicializarMarnitasDia();
-                            const hoje = new Date().getDay();
-                            const dia = hoje === 0 ? 6 : hoje - 1;
-                            selecionarDiaMarnitaAdmin(dia);
+                            selecionarDiaMarnitaAdmin(0); // 0 = Segunda
                         } catch (e) {
                             console.error('Erro ao inicializar marmitas:', e);
                         }
@@ -3980,6 +4019,11 @@
                     // Se for aba de estoque, carregar saldo (sempre revalida ao abrir)
                     if (tabName === 'estoque') {
                         carregarEstoque();
+                    }
+
+                    // Se for aba de usuários, sempre resetar para "Todos" (perfil)
+                    if (tabName === 'usuarios') {
+                        filtrarUsuariosPorPerfil('Todos');
                     }
                 });
             });
@@ -4047,9 +4091,10 @@
         let adminFiltroOnline   = false;   // true = só disponíveis no pedido online
 
         function gerarFiltrosCategorias() {
-            // ✅ Coletar todas as categorias únicas dos itens
+            // Usa cardapioAdmin (todos os itens) quando disponível; cai em state.itens (só ativos) como fallback
+            const fonte = Object.keys(state.cardapioAdmin).length > 0 ? state.cardapioAdmin : state.itens;
             const categorias = new Set();
-            Object.values(state.itens).forEach(item => {
+            Object.values(fonte).forEach(item => {
                 const categoria = item.categoria || categorizarItem(item.nome, item.tipo);
                 categorias.add(categoria);
             });
@@ -4143,9 +4188,11 @@
         function renderAdminItensComFiltro() {
             const container = document.getElementById('adminItensList');
             if (!container) return;
-            
-            const itens = Object.entries(state.itens).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
-            
+
+            // Usa cardapioAdmin (ativos + inativos) quando carregado; cai em state.itens como fallback
+            const fonte = Object.keys(state.cardapioAdmin).length > 0 ? state.cardapioAdmin : state.itens;
+            const itens = Object.entries(fonte).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
+
             if (itens.length === 0) {
                 container.innerHTML = `<div style="text-align:center;color:var(--gray);padding:36px 20px;font-size:12px;">
                     <div style="font-size:28px;margin-bottom:8px;">📋</div>
@@ -4182,9 +4229,11 @@
             } else if (adminFiltroStatus === 'inativos') {
                 itensFiltrados = itensFiltrados.filter(([, item]) => item.ativo === false);
             }
-            // Filtro: controla estoque (boolean em state.itens)
+            // Filtro: controla estoque — usa state.estoque.itens como fonte de verdade
+            // (state.itens.controla_estoque pode estar desatualizado na sessão após vincular)
             if (adminFiltroEstoque) {
-                itensFiltrados = itensFiltrados.filter(([, item]) => item.controla_estoque === true);
+                const vinculados = new Set((state.estoque.itens || []).map(i => parseInt(i.cardapio_codigo, 10)));
+                itensFiltrados = itensFiltrados.filter(([codigo]) => vinculados.has(parseInt(codigo, 10)));
             }
             // Filtro: disponível online (campo disponivelOnline camelCase boolean em state.itens)
             if (adminFiltroOnline) {
@@ -4218,22 +4267,28 @@
                 const tipoColor = item.tipo === 'Marmita' ? '#F39C12' : item.tipo === 'Gramas' ? '#3498DB' : '#27AE60';
                 const tipoLabel = item.tipo === 'Gramas' ? '/kg' : '';
                 const codigoDisplay = isNaN(parseInt(codigo, 10)) ? codigo : parseInt(codigo, 10);
+                const isAtivo = item.ativo !== false; // default true quando campo ausente
 
                 const div = document.createElement('div');
                 div.className = 'card';
                 div.style.marginBottom = '6px';
+                div.dataset.adminCard = codigo;
+                if (!isAtivo) div.style.opacity = '0.55';
 
                 const fotoThumb = item.foto
                     ? `<img src="${item.foto}" style="width:44px; height:44px; object-fit:cover; border-radius:6px; border:1px solid var(--border); flex-shrink:0;">`
                     : `<div style="width:44px; height:44px; background:var(--bg-light); border:1px solid var(--border); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;">${icone}</div>`;
+
+                const badgeInativo = `<span data-inativo-badge="${codigo}" style="background:#C0392B; color:white; padding:2px 6px; border-radius:3px; font-size:9px; font-weight:bold;${isAtivo ? ' display:none;' : ''}">INATIVO</span>`;
 
                 div.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px; gap:8px;">
                         ${fotoThumb}
                         <div style="flex: 1; min-width:0;">
                             <div style="font-size: 12px; font-weight: bold; color: var(--text-dark);">#${codigoDisplay} - ${item.nome}</div>
-                            <div style="display: flex; gap: 4px; margin-top: 4px;">
+                            <div style="display: flex; gap: 4px; margin-top: 4px; flex-wrap:wrap;">
                                 <span style="background: ${tipoColor}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 9px;">${item.tipo}</span>
+                                ${badgeInativo}
                             </div>
                         </div>
                         <div style="text-align: right; font-weight: bold; color: var(--primary); font-size: 12px; flex-shrink:0;">
@@ -4243,11 +4298,91 @@
                     <div style="display: flex; gap: 4px;">
                         <button onclick="visualizarItem('${codigo}')" style="flex: 1; padding: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--primary); font-weight: bold;">👁️ Ver</button>
                         <button onclick="abrirModalEditarItem('${codigo}')" style="flex: 1; padding: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--primary); font-weight: bold;">✏️ Editar</button>
+                        ${(function() {
+                            const ei = _getEstoqueItemPorCodigo(codigo);
+                            if (ei) {
+                                const saldo = parseFloat(ei.saldo) || 0;
+                                const alerta = !!ei.alerta;
+                                const cor = alerta ? '#C0392B' : '#27AE60';
+                                return '<button onclick="abrirModalConfigurarEstoque(\'' + codigo + '\')" style="flex:1; padding:6px; background:' + (alerta ? 'rgba(192,57,43,0.1)' : 'rgba(39,174,96,0.1)') + '; border:1px solid ' + cor + '; border-radius:4px; cursor:pointer; font-size:10px; color:' + cor + '; font-weight:bold;">📦 ' + saldo + ' ' + (ei.unidade || 'un') + '</button>';
+                            }
+                            return '<button onclick="abrirModalConfigurarEstoque(\'' + codigo + '\')" style="flex:1; padding:6px; background:var(--bg-light); border:1px dashed var(--border); border-radius:4px; cursor:pointer; font-size:10px; color:var(--gray);">📦 Estoque</button>';
+                        })()}
+                        <button data-toggle-ativo="${codigo}" onclick="toggleAtivoItemCardapio('${codigo}', ${!isAtivo})" style="padding:4px 10px; background:var(--bg-light); border:1px solid var(--border); border-radius:12px; cursor:pointer; font-size:10px; color:var(--text-muted); white-space:nowrap; flex-shrink:0;">${isAtivo ? '⏸ Inativar' : '▶ Ativar'}</button>
                     </div>
                 `;
 
                 container.appendChild(div);
             });
+        }
+
+        // ========== CARDÁPIO ADMIN (todos os itens, ativos + inativos) ==========
+        // Carregado lazy ao abrir a aba Admin > Itens — não faz parte do poll.
+        // getCardapioAdmin() no GAS retorna sem filtro de ativo.
+        async function carregarCardapioAdmin() {
+            const itens = await sheetsAPI('getCardapioAdmin');
+            if (!Array.isArray(itens)) return;
+            const mapa = {};
+            itens.forEach(item => {
+                const codigo = String(item.codigo).padStart(3, '0');
+                const cat = (item.categoria || '').toLowerCase();
+                const tipoInferido = item.tipo ||
+                    (cat === 'marmita' || cat === 'marmitas' ? 'Marmita' :
+                     cat === 'gramas' ? 'Gramas' : 'Fixo');
+                const categoriaLegada = !item.categoria || item.categoria === 'Geral';
+                mapa[codigo] = {
+                    nome: item.nome,
+                    preco: parseFloat(item.preco) || 0,
+                    icone: item.icone || '🍽️',
+                    categoria: categoriaLegada
+                        ? categorizarItem(item.nome, tipoInferido)
+                        : item.categoria,
+                    tipo: tipoInferido,
+                    foto: item.foto || null,
+                    codigo_barras: item.codigo_barras || '',
+                    disponivelOnline: String(item.disponivel_online).toLowerCase() !== 'false',
+                    ativo: String(item.ativo).toLowerCase() !== 'false',
+                    controla_estoque: String(item.controla_estoque).toLowerCase() === 'true'
+                };
+            });
+            Object.keys(state.cardapioAdmin).forEach(k => delete state.cardapioAdmin[k]);
+            Object.assign(state.cardapioAdmin, mapa);
+            gerarFiltrosCategorias();
+            renderAdminItensComFiltro();
+        }
+
+        async function toggleAtivoItemCardapio(codigo, novoAtivo) {
+            const btn = document.querySelector(`[data-toggle-ativo="${codigo}"]`);
+            if (btn) { btn.disabled = true; btn.textContent = '...'; }
+            const resp = await sheetsAPI('atualizarItemCardapio', { codigo, ativo: novoAtivo });
+            if (resp && resp.sucesso) {
+                showToast(novoAtivo ? '✅ Item reativado' : '⛔ Item inativado', 'success');
+                // Atualiza estado local
+                if (state.cardapioAdmin[codigo]) state.cardapioAdmin[codigo].ativo = novoAtivo;
+                // Também sincroniza state.itens: reativar adiciona, inativar remove
+                if (!novoAtivo) {
+                    delete state.itens[codigo];
+                } else if (state.cardapioAdmin[codigo]) {
+                    state.itens[codigo] = { ...state.cardapioAdmin[codigo] };
+                }
+                // Update in-place: só atualiza o card afetado, sem reconstruir toda a lista (evita flicker)
+                const card = document.querySelector(`[data-admin-card="${codigo}"]`);
+                if (card) {
+                    card.style.opacity = novoAtivo ? '1' : '0.55';
+                    const badge = card.querySelector(`[data-inativo-badge="${codigo}"]`);
+                    if (badge) badge.style.display = novoAtivo ? 'none' : '';
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = novoAtivo ? '⏸ Inativar' : '▶ Ativar';
+                        btn.onclick = () => toggleAtivoItemCardapio(codigo, !novoAtivo);
+                    }
+                } else {
+                    renderAdminItensComFiltro(); // fallback se card não encontrado
+                }
+            } else {
+                showToast((resp && resp.erro) || 'Erro ao alterar status', 'error');
+                if (btn) { btn.disabled = false; btn.textContent = novoAtivo ? '▶ Ativar' : '⏸ Inativar'; }
+            }
         }
 
         // ========== ESTOQUE (Trilha A — produtos vendidos diretamente) ==========
@@ -4292,8 +4427,8 @@
 
             if (todos.length === 0) {
                 container.innerHTML = `<div style="text-align: center; color: var(--gray); padding: 24px; font-size: 12px;">
-                    📦 Nenhum item de estoque vinculado ainda.<br><br>
-                    Toque em <b>"Vincular novo produto ao estoque"</b>, no rodapé desta lista, e escolha um produto do cardápio que tenha estoque controlado (ex: bebidas, bomboniere).
+                    📦 Nenhum item com estoque ativado ainda.<br><br>
+                    Acesse a aba <b>Itens</b> e toque em <b>📦 Estoque</b> no card do produto para ativar o controle de estoque.
                 </div>`;
                 return;
             }
@@ -4339,44 +4474,59 @@
                         </div>
                     </div>
                     <div style="display: flex; gap: 4px; margin-top: 8px;">
-                        <button onclick="abrirModalEntradaEstoque('${item.id}')" style="flex: 1; padding: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--primary); font-weight: bold;">📥 Lançar Entrada</button>
+                        <button onclick="abrirModalEntradaEstoque('${item.id}')" style="flex: 1; padding: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--primary); font-weight: bold;">📥 Entrada Avulsa</button>
+                        <button onclick="abrirModalConfigurarEstoqueById('${item.id}')" style="flex: 1; padding: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--gray); font-weight: bold;">✏️ Editar</button>
                     </div>
                 `;
                 container.appendChild(div);
             });
         }
 
-        function preencherSelectCardapioEstoque() {
-            const select = document.getElementById('estoqueItemCodigo');
-            select.innerHTML = '<option value="">Selecione um item do cardápio...</option>';
-
-            // ⚠️ Compara como inteiro (mesmo padrão de _vincularCardapioAoEstoque no GAS) —
-            // evita mismatch entre código zero-padded ('012') e número (12) vindo do Sheets
-            const jaVinculados = new Set((state.estoque.itens || []).map(i => parseInt(i.cardapio_codigo, 10)));
-
-            Object.entries(state.itens)
-                .sort((a, b) => parseInt(a[0], 10) - parseInt(b[0], 10))
-                .forEach(([codigo, item]) => {
-                    const vinculado = jaVinculados.has(parseInt(codigo, 10));
-                    const opt = document.createElement('option');
-                    opt.value = codigo; // mantém formato zero-padded (ex: '012'); GAS faz parseInt na comparação
-                    opt.textContent = `#${codigo} - ${item.nome}` + (vinculado ? ' ✅ (já vinculado)' : '');
-                    if (vinculado) opt.disabled = true;
-                    select.appendChild(opt);
-                });
+        // Retorna o item de estoque vinculado a um código de cardápio (ou null se não vinculado)
+        function _getEstoqueItemPorCodigo(codigoCardapio) {
+            if (!state.estoque || !state.estoque.itens) return null;
+            return state.estoque.itens.find(i =>
+                parseInt(i.cardapio_codigo, 10) === parseInt(codigoCardapio, 10)
+            ) || null;
         }
 
-        function abrirModalNovoEstoqueItem() {
-            document.getElementById('modalEstoqueItemTitulo').textContent = '📦 Vincular Item ao Estoque';
-            document.getElementById('estoqueItemUnidade').value = 'un';
-            document.getElementById('estoqueItemPontoPedido').value = '';
-            // Por enquanto só usamos "Revenda" no dia a dia — fica como padrão,
-            // mas Matéria-prima/Uso e Consumo já existem para quando o estoque
-            // de insumos entrar em uso.
-            document.getElementById('estoqueItemClassificacao').value = 'Revenda';
-            preencherSelectCardapioEstoque();
-            document.getElementById('estoqueItemCodigo').value = '';
+        // Retorna true se o item tem controle de estoque ativo E saldo <= 0.
+        // Usado para bloquear o card/lançamento sem remover o item da tela.
+        function _itemEsgotado(codigo) {
+            const ei = _getEstoqueItemPorCodigo(codigo);
+            return !!ei && (parseFloat(ei.saldo) || 0) <= 0;
+        }
+
+        // Abre o modal de configuração de estoque a partir do código do cardápio.
+        // Funciona tanto para ativar pela primeira vez quanto para editar (ponto de pedido,
+        // classificação, unidade) — o campo hidden estoqueItemId distingue create vs update.
+        function abrirModalConfigurarEstoque(codigoCardapio) {
+            const itemCardapio = state.itens[codigoCardapio];
+            if (!itemCardapio) { showToast('Item não encontrado', 'error'); return; }
+
+            const ei = _getEstoqueItemPorCodigo(codigoCardapio);
+
+            document.getElementById('modalEstoqueItemTitulo').textContent = '📦 ' + itemCardapio.nome;
+            document.getElementById('modalEstoqueItemCodigo').value = codigoCardapio;
+            document.getElementById('estoqueItemId').value           = ei ? (ei.id || '') : '';
+            document.getElementById('estoqueItemClassificacao').value = ei ? (ei.classificacao || 'Revenda') : 'Revenda';
+            document.getElementById('estoqueItemUnidade').value       = ei ? (ei.unidade || 'un') : 'un';
+            document.getElementById('estoqueItemPontoPedido').value   = ei ? (ei.ponto_pedido || '') : '';
             document.getElementById('modalEstoqueItem').classList.add('active');
+        }
+
+        // Atalho para abrir o modal a partir do id interno do item de estoque
+        // (usado pelo botão ✏️ na lista de estoque)
+        // ATENÇÃO: cardapio_codigo vem como inteiro (ex: 1) mas state.itens usa
+        // chave zero-padded (ex: "001") — comparar por parseInt para encontrar a chave certa
+        function abrirModalConfigurarEstoqueById(estoqueItemId) {
+            const ei = (state.estoque.itens || []).find(i => i.id === estoqueItemId);
+            if (!ei) { showToast('Item de estoque não encontrado', 'error'); return; }
+            const codigoStr = Object.keys(state.itens).find(k =>
+                parseInt(k, 10) === parseInt(ei.cardapio_codigo, 10)
+            );
+            if (!codigoStr) { showToast('Item do cardápio não encontrado', 'error'); return; }
+            abrirModalConfigurarEstoque(codigoStr);
         }
 
         function fecharModalEstoqueItem() {
@@ -4384,38 +4534,37 @@
         }
 
         async function salvarEstoqueItem() {
-            const codigo = document.getElementById('estoqueItemCodigo').value;
+            const codigo       = document.getElementById('modalEstoqueItemCodigo').value;
+            const existingId   = document.getElementById('estoqueItemId').value;
             const classificacao = document.getElementById('estoqueItemClassificacao').value || 'Revenda';
-            const unidade = document.getElementById('estoqueItemUnidade').value.trim() || 'un';
-            const pontoPedido = document.getElementById('estoqueItemPontoPedido').value;
-
-            if (!codigo) {
-                showToast('Selecione um item do cardápio', 'error');
-                return;
-            }
+            const unidade      = document.getElementById('estoqueItemUnidade').value.trim() || 'un';
+            const pontoPedido  = document.getElementById('estoqueItemPontoPedido').value;
 
             const itemCardapio = state.itens[codigo];
-            const nome = itemCardapio ? itemCardapio.nome : '';
-            if (!nome) {
-                showToast('Item do cardápio não encontrado', 'error');
-                return;
-            }
+            if (!itemCardapio) { showToast('Item do cardápio não encontrado', 'error'); return; }
 
-            const resp = await sheetsAPI('cadastrarEstoqueItem', {
-                nome: nome,
+            const btn = document.querySelector('#modalEstoqueItem .modal-btn-primary');
+            if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+
+            const payload = {
+                nome:            itemCardapio.nome,
                 cardapio_codigo: parseInt(codigo, 10),
-                classificacao: classificacao,
-                unidade: unidade,
-                ponto_pedido: pontoPedido || 0,
-                ativo: true
-            });
+                classificacao,
+                unidade,
+                ponto_pedido:    pontoPedido || 0,
+                ativo:           true
+            };
+            if (existingId) payload.id = existingId; // GAS: update mode
 
+            const resp = await sheetsAPI('cadastrarEstoqueItem', payload);
             if (resp && resp.sucesso) {
-                showToast('✅ Item vinculado ao estoque', 'success');
+                showToast(existingId ? '✅ Estoque atualizado' : '✅ Estoque ativado', 'success');
                 fecharModalEstoqueItem();
                 await carregarEstoque();
+                renderAdminItensComFiltro(); // atualiza badge 📦 no card
             } else {
-                showToast((resp && resp.erro) || 'Erro ao vincular item ao estoque', 'error');
+                showToast((resp && resp.erro) || 'Erro ao salvar estoque', 'error');
+                if (btn) { btn.disabled = false; btn.textContent = 'Salvar'; }
             }
         }
 
@@ -4464,6 +4613,9 @@
                 return;
             }
 
+            const btn = document.querySelector('#modalEstoqueEntrada .modal-btn-primary');
+            if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+
             const resp = await sheetsAPI('registrarEntradaEstoque', {
                 item_id: itemId,
                 quantidade: qtd,
@@ -4479,6 +4631,7 @@
                 await carregarEstoque();
             } else {
                 showToast((resp && resp.erro) || 'Erro ao registrar entrada de estoque', 'error');
+                if (btn) { btn.disabled = false; btn.textContent = 'Salvar'; }
             }
         }
 
@@ -4798,6 +4951,9 @@
                 return;
             }
 
+            const btn = document.querySelector('#modalLancarCompra .modal-btn-primary');
+            if (btn) { btn.disabled = true; btn.textContent = 'Lançando...'; }
+
             const entradas = validas.map(l => ({
                 item_id: l.item_id,
                 quantidade: l.quantidade,
@@ -4811,11 +4967,12 @@
             });
 
             if (resp && resp.sucesso) {
-                showToast(`✅ Compra lançada — ${resp.qtd_lancada} ${resp.qtd_lancada === 1 ? 'item registrado' : 'itens registrados'}`, 'success');
+                showToast(`✅ Entrada lançada — ${resp.qtd_lancada} ${resp.qtd_lancada === 1 ? 'item registrado' : 'itens registrados'}`, 'success');
                 fecharModalLancarCompra();
                 await carregarEstoque();
             } else {
-                showToast((resp && resp.erro) || 'Erro ao lançar compra', 'error');
+                showToast((resp && resp.erro) || 'Erro ao lançar entrada', 'error');
+                if (btn) { btn.disabled = false; btn.textContent = 'Lançar Entrada'; }
             }
         }
 
@@ -5907,9 +6064,31 @@ function carregarComanda() {
                 return;
             }
 
+            if (_itemEsgotado(codigo)) {
+                showToast('Item sem estoque', 'error');
+                document.getElementById('lançarCodigoItem').value = '';
+                _focusCodigoItem();
+                return;
+            }
+
             const item = state.itens[codigo];
 
             const comanda = state.comandas[state.comandaAtual];
+
+            // Bloquear se saldo disponível < 1 unidade (Fixo, Marmita, Quilo)
+            // Gramas tem check separado após o prompt de peso
+            const _ei = _getEstoqueItemPorCodigo(codigo);
+            if (_ei && item.tipo !== 'Gramas') {
+                const _saldo = parseFloat(_ei.saldo) || 0;
+                const _jaLanc = (comanda.itens || []).filter(i => i.codigo === codigo)
+                    .reduce((s, i) => s + (parseFloat(i.quantidade) || 1), 0);
+                if (_saldo - _jaLanc < 1) {
+                    showToast(`Estoque insuficiente (disponível: ${Math.max(0, _saldo - _jaLanc).toFixed(0)} un)`, 'error');
+                    document.getElementById('lançarCodigoItem').value = '';
+                    _focusCodigoItem();
+                    return;
+                }
+            }
 
             // REGRA: Se o NOME contém "Quilo" → abre prompt para peso
             if (item.nome.toLowerCase().includes('quilo')) {
@@ -5939,6 +6118,17 @@ function carregarComanda() {
                     if (isNaN(pesoNum) || pesoNum <= 0) {
                         showToast('Peso inválido', 'error');
                         return;
+                    }
+                    // Bloquear se peso > saldo disponível
+                    if (_ei) {
+                        const _saldoG = parseFloat(_ei.saldo) || 0;
+                        const _jaLancG = (comanda.itens || []).filter(i => i.codigo === codigo)
+                            .reduce((s, i) => s + (parseFloat(i.quantidade) || 0), 0);
+                        const _dispG = _saldoG - _jaLancG;
+                        if (pesoNum > _dispG) {
+                            showToast(`Estoque insuficiente (disponível: ${Math.max(0, _dispG).toFixed(3)}kg)`, 'error');
+                            return;
+                        }
                     }
                     const total = pesoNum * item.preco;
                     const _itemGramas = {
@@ -6135,15 +6325,16 @@ function carregarComanda() {
             });
 
             itensParaMostrar.forEach(([codigo, item]) => {
+                const esgotado = _itemEsgotado(codigo);
                 const btn = document.createElement('button');
                 btn.className = 'item-cat-btn';
                 btn.style.cssText = `
                     width: 100%;
                     padding: 5px;
                     background: white;
-                    border: 2px solid var(--border);
+                    border: 2px solid ${esgotado ? '#C0392B' : 'var(--border)'};
                     border-radius: 3px;
-                    cursor: pointer;
+                    cursor: ${esgotado ? 'not-allowed' : 'pointer'};
                     text-align: center;
                     transition: all 0.2s;
                     display: flex;
@@ -6151,6 +6342,8 @@ function carregarComanda() {
                     align-items: center;
                     justify-content: center;
                     gap: 2px;
+                    opacity: ${esgotado ? '0.45' : '1'};
+                    pointer-events: ${esgotado ? 'none' : 'auto'};
                     flex-shrink: 0;
                 `;
 
@@ -6163,21 +6356,26 @@ function carregarComanda() {
                     ${fotoHtml}
                     <div class="cat-nome">${item.nome}</div>
                     <div class="cat-cod">#${isNaN(codigo) ? codigo : parseInt(codigo, 10)}</div>
-                    <div class="cat-preco">R$ ${item.preco.toFixed(1)}</div>
+                    ${esgotado
+                        ? `<div style="font-size:9px; color:#C0392B; font-weight:bold; margin-top:1px;">⛔ Esgotado</div>`
+                        : `<div class="cat-preco">R$ ${item.preco.toFixed(1)}</div>`
+                    }
                 `;
 
-                btn.onmouseover = () => {
-                    btn.style.borderColor = 'var(--primary)';
-                    btn.style.background = 'var(--bg-light)';
-                };
-                btn.onmouseout = () => {
-                    btn.style.borderColor = 'var(--border)';
-                    btn.style.background = 'white';
-                };
-                btn.onclick = () => lançarItemPorClique(codigo);
+                if (!esgotado) {
+                    btn.onmouseover = () => {
+                        btn.style.borderColor = 'var(--primary)';
+                        btn.style.background = 'var(--bg-light)';
+                    };
+                    btn.onmouseout = () => {
+                        btn.style.borderColor = 'var(--border)';
+                        btn.style.background = 'white';
+                    };
+                    btn.onclick = () => lançarItemPorClique(codigo);
+                }
 
                 // Long press (mobile): 500ms → abre input de quantidade (só Fixo e Marmita)
-                if (item.tipo === 'Fixo' || item.tipo === 'Marmita') {
+                if (!esgotado && (item.tipo === 'Fixo' || item.tipo === 'Marmita')) {
                     let _lpTimer = null;
                     btn.addEventListener('touchstart', (e) => {
                         _lpTimer = setTimeout(() => {
@@ -6534,6 +6732,8 @@ function carregarComanda() {
             // ☁️ SHEETS: registrar pagamento
             const _totalPago = (comanda.itens || []).reduce((s,i)=>s+(i.total||(i.preco*i.quantidade)||0),0);
             sheets_pagarComanda(comandaCheckoutAtual, _totalPago, formaPagamentoSelecionada, obsAReceber || '');
+            // Recarregar estoque após pagamento (GAS leva ~2s para baixar o saldo)
+            setTimeout(() => carregarEstoque(), 2500);
             
             // FEEDBACK
             showToast('✓ Pagamento confirmado!', 'success');
