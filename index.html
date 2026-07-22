@@ -1217,6 +1217,19 @@
         body.modo-marmita #preparoHeader > div:first-child { font-size: 20px !important; }
         body.modo-marmita #btnFullscreenPreparo { display: none !important; }
 
+        /* ── MODO TV: tela do cliente em fullscreen dedicado ───────────────────────
+           O #fullscreenPreparo cobre tudo — header/sidebar ficam ocultos embaixo.
+           btnFullscreenPreparo some pois TV tem seu próprio perfil agora. */
+        body.modo-tv .header   { display: none !important; }
+        body.modo-tv .sidebar  { display: none !important; }
+        body.modo-tv .container-main { padding: 0 !important; height: 100dvh; box-sizing: border-box; }
+        body.modo-tv #mainApp  { height: 100dvh; }
+        body.modo-tv #btnFullscreenPreparo { display: none !important; }
+
+        /* ── btnFullscreenPreparo: oculto para todos os perfis não-marmita/tv ───────
+           TV tem perfil dedicado; demais perfis não usam esta feature. */
+        #btnFullscreenPreparo { display: none !important; }
+
         /* Grid mais espaçoso e cards/botões maiores para toque rápido em paisagem */
         body.modo-marmita #areaPreparando { padding: 14px !important; }
         body.modo-marmita .kdsGrid {
@@ -1492,6 +1505,13 @@
     </style>
 </head>
 <body>
+
+    <!-- BANNER: reativar fullscreen para Balança / Balança Touch / Caixa
+         Aparece quando o usuário sai acidentalmente do fullscreen (ex: tecla Windows,
+         notificação do SO). O toque aqui serve como user gesture para requestFullscreen(). -->
+    <div id="bannerVoltarFullscreenGlobal" onclick="_voltarFullscreenGlobal()" style="display:none; position:fixed; top:0; left:0; right:0; z-index:99999; background:#F39C12; color:white; text-align:center; padding:14px; font-size:16px; font-weight:bold; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+        👆 Toque aqui para voltar à tela cheia
+    </div>
 
     <!-- MODE SPLASH — captura user gesture para requestFullscreen (Balança e Caixa) -->
     <div id="balancaSplash" style="display:none; position:fixed; inset:0; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); z-index:100000; align-items:center; justify-content:center; flex-direction:column; gap:20px;">
@@ -2127,35 +2147,35 @@
                     </div>
 
                     <!-- TAB: MARMITAS DO DIA -->
-                    <div id="admin-marnitasDia" class="admin-tab" style="display: none; flex-direction: column; gap: 8px;">
-                        <div style="font-size: 11px; font-weight: bold; color: var(--primary); margin-bottom: 4px;">🥩 CARNES DISPONÍVEIS POR DIA</div>
-                        <div id="diaSelecionadoLabel" style="font-size: 10px; color: var(--gray); padding: 6px; background: var(--bg-light); border-radius: 3px; text-align: center; margin-bottom: 4px;">Nenhum dia selecionado</div>
-                        
+                    <div id="admin-marnitasDia" class="admin-tab" style="display: none; flex-direction: column; gap: 10px;">
+                        <div style="font-size: 12px; font-weight: bold; color: var(--primary);">🥩 CARNES DISPONÍVEIS POR DIA</div>
+
                         <!-- SELETORES DE DIA -->
-                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
-                            <button data-dia="0" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(0)" style="padding: 8px; font-size: 10px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-weight: bold;">SEG</button>
-                            <button data-dia="1" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(1)" style="padding: 8px; font-size: 10px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-weight: bold;">TER</button>
-                            <button data-dia="2" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(2)" style="padding: 8px; font-size: 10px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-weight: bold;">QUA</button>
-                            <button data-dia="3" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(3)" style="padding: 8px; font-size: 10px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-weight: bold;">QUI</button>
-                            <button data-dia="4" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(4)" style="padding: 8px; font-size: 10px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-weight: bold;">SEX</button>
-                            <button data-dia="5" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(5)" style="padding: 8px; font-size: 10px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-weight: bold;">SAB</button>
-                            <button data-dia="6" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(6)" style="padding: 8px; font-size: 10px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-weight: bold;">DOM</button>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+                            <button data-dia="0" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(0)" style="padding: 12px 6px; font-size: 13px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: bold;">Seg</button>
+                            <button data-dia="1" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(1)" style="padding: 12px 6px; font-size: 13px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: bold;">Ter</button>
+                            <button data-dia="2" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(2)" style="padding: 12px 6px; font-size: 13px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: bold;">Qua</button>
+                            <button data-dia="3" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(3)" style="padding: 12px 6px; font-size: 13px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: bold;">Qui</button>
+                            <button data-dia="4" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(4)" style="padding: 12px 6px; font-size: 13px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: bold;">Sex</button>
+                            <button data-dia="5" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(5)" style="padding: 12px 6px; font-size: 13px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: bold;">Sáb</button>
+                            <button data-dia="6" class="dia-btn" onclick="selecionarDiaMarnitaAdmin(6)" style="padding: 12px 6px; font-size: 13px; background: var(--bg-light); border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: bold;">Dom</button>
                         </div>
 
                         <!-- TEXTAREA CARNES DO DIA -->
-                        <div style="flex: 1; display: flex; flex-direction: column;">
-                            <label style="font-size: 10px; font-weight: bold; color: var(--gray); margin-bottom: 4px;">Opções disponíveis (uma por linha):</label>
-                            <textarea id="marnitasDiaInput" placeholder="Frango&#10;Porco&#10;Costela" style="flex: 1; padding: 8px; border: 2px solid var(--border); border-radius: 4px; font-size: 11px; font-family: Arial; resize: none;"></textarea>
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+                            <label id="diaSelecionadoLabel" style="font-size: 13px; font-weight: bold; color: var(--text-dark);">— Selecione um dia</label>
+                            <textarea id="marnitasDiaInput" placeholder="Frango&#10;Porco&#10;Costela" style="flex: 1; min-height: 120px; padding: 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; font-family: inherit; line-height: 1.7; resize: none;"></textarea>
+                            <div style="font-size: 11px; color: var(--gray);">Uma opção por linha</div>
                         </div>
 
                         <!-- BOTÃO SALVAR -->
-                        <button onclick="salvarMarnitasDia()" style="width: 100%; padding: 10px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px;">💾 SALVAR CARNES</button>
+                        <button onclick="salvarMarnitasDia()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; box-shadow: 0 2px 8px rgba(212,114,79,0.3);">💾 Salvar Carnes</button>
                     </div>
 
                     <!-- TAB: ESTOQUE -->
                     <div id="admin-estoque" class="admin-tab" style="display: none; flex-direction: column; gap: 8px;">
                         <!-- AÇÃO PRINCIPAL: entrada em lote (cobre de 1 a N itens) -->
-                        <button onclick="abrirModalLancarCompra()" style="padding: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; box-shadow: 0 2px 8px rgba(212,114,79,0.3);">🛒 Entrada em Lote</button>
+                        <button onclick="abrirModalLancarCompra()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; box-shadow: 0 2px 8px rgba(212,114,79,0.3);">🛒 Entrada em Lote</button>
 
                         <!-- CABEÇALHO DA LISTA: título + filtro compacto (chip), no lugar de um botão de largura total -->
                         <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 2px 0;">
@@ -2191,7 +2211,7 @@
                     <!-- TAB: USUÁRIOS -->
                     <div id="admin-usuarios" class="admin-tab" style="display: none; flex-direction: column; gap: 8px;">
                         <!-- BOTÃO NOVO USUÁRIO -->
-                        <button onclick="abrirModalNovoUsuario()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; box-shadow: 0 2px 8px rgba(212,114,79,0.3);">➕ NOVO USUÁRIO</button>
+                        <button onclick="abrirModalNovoUsuario()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; box-shadow: 0 2px 8px rgba(212,114,79,0.3);">➕ Novo Usuário</button>
 
                         <!-- FILTROS DE PERFIL -->
                         <div style="display: flex; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 6px 0;">
@@ -2202,6 +2222,7 @@
                             <button onclick="filtrarUsuariosPorPerfil('Atendente')" class="filtro-perfil-btn" data-filtro="Atendente" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">👤 Atendente</button>
                             <button onclick="filtrarUsuariosPorPerfil('Balança')" class="filtro-perfil-btn" data-filtro="Balança" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">⚖️ Balança</button>
                             <button onclick="filtrarUsuariosPorPerfil('Marmita')" class="filtro-perfil-btn" data-filtro="Marmita" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">🍛 Marmita</button>
+                            <button onclick="filtrarUsuariosPorPerfil('TV')" class="filtro-perfil-btn" data-filtro="TV" style="padding: 6px 10px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; flex-shrink: 0;">📺 TV</button>
                         </div>
 
                         <!-- LISTAGEM DE USUÁRIOS -->
@@ -2296,6 +2317,7 @@
                     <option value="Balança">⚖️ Balança</option>
                     <option value="Balança Touch">⚖️ Balança Touch</option>
                     <option value="Marmita">🍛 Marmita</option>
+                    <option value="TV">📺 TV</option>
                 </select>
             </div>
 
@@ -3015,7 +3037,7 @@
                     usuarios.forEach(u => {
                         state.usuarios[u.login] = {
                             nome: u.nome || u.login, senha: String(u.senha),
-                            perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'balanca_touch' ? 'Balança Touch' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : 'Atendente'
+                            perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'balanca_touch' ? 'Balança Touch' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : u.nivel === 'tv' ? 'TV' : 'Atendente'
                         };
                     });
                     console.log('[Sheets] ✅ Usuários:', usuarios.length);
@@ -3216,7 +3238,7 @@
 
                 // Atualizar header
                 document.getElementById('headerUser').textContent = state.user;
-                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Balança Touch' ? '⚖️ Balança Touch' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : state.perfil === 'Marmita' ? '🍛 Marmita' : '👤 Atendente';
+                document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Balança Touch' ? '⚖️ Balança Touch' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : state.perfil === 'Marmita' ? '🍛 Marmita' : state.perfil === 'TV' ? '📺 TV' : '👤 Atendente';
 
                 // Mostrar app diretamente
                 document.getElementById('loginScreen').classList.add('hidden');
@@ -3224,25 +3246,8 @@
                 _initBarcodeListener();   // Ativar leitor de código de barras
                 _initCaixaShortcuts();    // Ativar atalhos de teclado do Caixa
 
-                // Reativar modos especiais (balança/caixa) ao restaurar sessão
-                if (state.perfil === 'Balança' || state.perfil === 'Balança Touch') {
-                    document.body.classList.add('modo-balanca');
-                    if (state.perfil === 'Balança Touch') document.body.classList.add('modo-balanca-touch');
-                    _initWeightService();
-                    _mostrarSplash('Balança');
-                } else if (state.perfil === 'Caixa') {
-                    document.body.classList.add('modo-caixa');
-                    const drawerUser   = document.getElementById('caixaDrawerUser');
-                    const drawerPerfil = document.getElementById('caixaDrawerPerfil');
-                    if (drawerUser)   drawerUser.textContent   = state.user;
-                    if (drawerPerfil) drawerPerfil.textContent = '💳 Caixa';
-                    caixaSwitchTo('lançar');
-                    _mostrarSplash('Caixa');
-                } else if (state.perfil === 'Marmita') {
-                    document.body.classList.add('modo-marmita');
-                    _mostrarSplash('Marmita');
-                    _initImpressaoMarmita();
-                }
+                // Reativar modo operacional ao restaurar sessão
+                _ativarModoEspecial(state.perfil);
 
                 atualizarVisibilidadeAbas();
                 detectarModoMobile();
@@ -3342,7 +3347,7 @@
                         usuarios.forEach(u => {
                             state.usuarios[u.login] = {
                                 nome: u.nome || u.login, senha: String(u.senha),
-                                perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'balanca_touch' ? 'Balança Touch' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : 'Atendente'
+                                perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'balanca_touch' ? 'Balança Touch' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : u.nivel === 'tv' ? 'TV' : 'Atendente'
                             };
                         });
                     }
@@ -3388,7 +3393,7 @@
 
             // ✅ Update header com informações
             document.getElementById('headerUser').textContent = `${state.user}`;
-            document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Balança Touch' ? '⚖️ Balança Touch' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : state.perfil === 'Marmita' ? '🍛 Marmita' : '👤 Atendente';
+            document.getElementById('headerPerfil').textContent = state.perfil === 'Admin' ? '👑 Admin' : state.perfil === 'Balança' ? '⚖️ Balança' : state.perfil === 'Balança Touch' ? '⚖️ Balança Touch' : state.perfil === 'Gerente' ? '🧑‍💼 Gerente' : state.perfil === 'Caixa' ? '💳 Caixa' : state.perfil === 'Marmita' ? '🍛 Marmita' : state.perfil === 'TV' ? '📺 TV' : '👤 Atendente';
 
             // ✅ Limpar campos de senha
             document.getElementById('loginPassword').value = '';
@@ -3404,35 +3409,12 @@
             // 📱 MODO MOBILE — detecta automaticamente pelo tamanho da tela
             detectarModoMobile();
 
-            // ⚖️ MODO BALANÇA
-            if (state.perfil === 'Balança' || state.perfil === 'Balança Touch') {
-                document.body.classList.add('modo-balanca');
-                if (state.perfil === 'Balança Touch') document.body.classList.add('modo-balanca-touch');
-                _initWeightService();
-                _mostrarSplash('Balança'); // splash captura user gesture para fullscreen
-            }
-
-            // 💳 MODO CAIXA
-            if (state.perfil === 'Caixa') {
-                document.body.classList.add('modo-caixa');
-                const drawerUser   = document.getElementById('caixaDrawerUser');
-                const drawerPerfil = document.getElementById('caixaDrawerPerfil');
-                if (drawerUser)   drawerUser.textContent   = state.user;
-                if (drawerPerfil) drawerPerfil.textContent = '💳 Caixa';
-                caixaSwitchTo('lançar');
-                _mostrarSplash('Caixa'); // splash captura user gesture para fullscreen
-            }
-
-            // 🍛 MODO MARMITA — KDS do operador em tablet kiosk
-            if (state.perfil === 'Marmita') {
-                document.body.classList.add('modo-marmita');
-                _mostrarSplash('Marmita'); // splash captura user gesture para fullscreen
-                _initImpressaoMarmita();
-            }
+            // Ativa modo operacional do perfil (Balança/Caixa/Marmita/TV ou nenhum para Admin/Gerente/Atendente)
+            _ativarModoEspecial(state.perfil);
 
             // ── Tela default pós-login: sempre reset, independente da sessão anterior ──
             // Caixa já navega via caixaSwitchTo('lançar') acima.
-            if (state.perfil === 'Marmita') {
+            if (state.perfil === 'Marmita' || state.perfil === 'TV') {
                 switchScreen('preparo', document.querySelector('[data-menu="preparo"]'));
             } else if (state.perfil !== 'Caixa') {
                 switchScreen('lançar', document.querySelector('[data-menu="lançar"]'));
@@ -3516,7 +3498,8 @@
             'Gerente':  ['lançar', 'preparo', 'admin'],
             'Atendente':['lançar', 'preparo'],
             'Balança':  ['lançar'],
-            'Marmita':  ['preparo']
+            'Marmita':  ['preparo'],
+            'TV':       ['preparo']   // TV vai direto para #fullscreenPreparo; preparo é necessário para renderizar a fila
         };
 
         function atualizarVisibilidadeAbas() {
@@ -3651,12 +3634,9 @@
             const _mbq = document.getElementById('modalBuffetQuilo');
             if (_mbq) _mbq.style.display = 'none';
 
-            // Sair dos modos especiais
-            document.body.classList.remove('modo-balanca');
-            document.body.classList.remove('modo-caixa');
-            document.body.classList.remove('modo-marmita');
-            document.body.classList.remove('modo-mobile');
-            document.body.classList.remove('mobile-lista-aberta');
+            // Sair de todos os modos especiais (limpa modo-balanca, modo-balanca-touch,
+            // modo-caixa, modo-marmita, modo-tv, modo-mobile e mobile-lista-aberta)
+            _limparModoEspecial();
             closeCaixaDrawer();
             _destroyWeightService();
             // Botão de impressão é específico do perfil Marmita — _initImpressaoMarmita()
@@ -4006,11 +3986,13 @@
                         carregarCardapioAdmin();
                     }
 
-                    // Se for aba de marmitas do dia, sempre inicializar em Segunda (default)
+                    // Se for aba de marmitas do dia, inicializar no dia atual
                     if (tabName === 'marnitasDia') {
                         try {
                             inicializarMarnitasDia();
-                            selecionarDiaMarnitaAdmin(0); // 0 = Segunda
+                            // JS: 0=Dom,1=Seg...6=Sáb → nosso índice: 0=Seg...6=Dom
+                            const diaHoje = (new Date().getDay() + 6) % 7;
+                            selecionarDiaMarnitaAdmin(diaHoje);
                         } catch (e) {
                             console.error('Erro ao inicializar marmitas:', e);
                         }
@@ -5123,7 +5105,7 @@
 
             saveStorage();
             // ☁️ SHEETS: criar ou atualizar usuário
-            const _nivel = perfil === 'Admin' ? 'admin' : perfil === 'Balança' ? 'balanca' : perfil === 'Balança Touch' ? 'balanca_touch' : perfil === 'Gerente' ? 'gerente' : perfil === 'Caixa' ? 'caixa' : perfil === 'Marmita' ? 'marmita' : 'atendente';
+            const _nivel = perfil === 'Admin' ? 'admin' : perfil === 'Balança' ? 'balanca' : perfil === 'Balança Touch' ? 'balanca_touch' : perfil === 'Gerente' ? 'gerente' : perfil === 'Caixa' ? 'caixa' : perfil === 'Marmita' ? 'marmita' : perfil === 'TV' ? 'tv' : 'atendente';
             if (usuarioEmEdicao) {
                 // Login mudou ou não: atualiza na mesma linha via loginAntigo
                 sheetsAPI('atualizarUsuario', { loginAntigo: usuarioEmEdicao, login, nome, senha, nivel: _nivel });
@@ -5145,7 +5127,11 @@
 
             // ✅ FILTRAR por perfil
             if (filtroPerfilAtual !== 'Todos') {
-                usuarios = usuarios.filter(([login, user]) => user.perfil === filtroPerfilAtual);
+                // Chip "Balança" agrupa Balança e Balança Touch
+                const perfisFiltro = filtroPerfilAtual === 'Balança'
+                    ? ['Balança', 'Balança Touch']
+                    : [filtroPerfilAtual];
+                usuarios = usuarios.filter(([login, user]) => perfisFiltro.includes(user.perfil));
             }
 
             if (usuarios.length === 0) {
@@ -5156,7 +5142,7 @@
             container.innerHTML = '';
 
             usuarios.forEach(([login, user]) => {
-                const badge = user.perfil === 'Admin' ? '👑' : (user.perfil === 'Balança' || user.perfil === 'Balança Touch') ? '⚖️' : user.perfil === 'Gerente' ? '🧑‍💼' : user.perfil === 'Caixa' ? '💳' : user.perfil === 'Marmita' ? '🍛' : '👤';
+                const badge = user.perfil === 'Admin' ? '👑' : (user.perfil === 'Balança' || user.perfil === 'Balança Touch') ? '⚖️' : user.perfil === 'Gerente' ? '🧑‍💼' : user.perfil === 'Caixa' ? '💳' : user.perfil === 'Marmita' ? '🍛' : user.perfil === 'TV' ? '📺' : '👤';
 
                 const div = document.createElement('div');
                 div.className = 'card';
@@ -5173,8 +5159,8 @@
                                 <span style="background: rgba(212,114,79,0.15); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-family: monospace;">
                                     @${login}
                                 </span>
-                                <span style="background: rgba(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '39,174,96' : user.perfil === 'Gerente' ? '155,89,182' : user.perfil === 'Caixa' ? '22,160,133' : '41,128,185'}, 0.15); color: rgb(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' ? '30,132,73' : user.perfil === 'Gerente' ? '142,68,173' : user.perfil === 'Caixa' ? '17,122,101' : '41,128,185'}); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-weight: bold;">
-                                    ${user.perfil === 'Admin' ? 'ADMIN' : user.perfil === 'Balança' ? 'BALANÇA' : user.perfil === 'Balança Touch' ? 'BALANÇA TOUCH' : user.perfil === 'Gerente' ? 'GERENTE' : user.perfil === 'Caixa' ? 'CAIXA' : user.perfil === 'Marmita' ? 'MARMITA' : 'ATENDENTE'}
+                                <span style="background: rgba(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' || user.perfil === 'Balança Touch' ? '39,174,96' : user.perfil === 'Gerente' ? '155,89,182' : user.perfil === 'Caixa' ? '22,160,133' : user.perfil === 'Marmita' ? '230,126,34' : user.perfil === 'TV' ? '52,152,219' : '41,128,185'}, 0.15); color: rgb(${user.perfil === 'Admin' ? '195,51,51' : user.perfil === 'Balança' || user.perfil === 'Balança Touch' ? '30,132,73' : user.perfil === 'Gerente' ? '142,68,173' : user.perfil === 'Caixa' ? '17,122,101' : user.perfil === 'Marmita' ? '185,89,14' : user.perfil === 'TV' ? '41,128,185' : '41,128,185'}); padding: 4px 8px; border-radius: 3px; font-size: 10px; font-weight: bold;">
+                                    ${user.perfil === 'Admin' ? 'ADMIN' : user.perfil === 'Balança' ? 'BALANÇA' : user.perfil === 'Balança Touch' ? 'BALANÇA TOUCH' : user.perfil === 'Gerente' ? 'GERENTE' : user.perfil === 'Caixa' ? 'CAIXA' : user.perfil === 'Marmita' ? 'MARMITA' : user.perfil === 'TV' ? 'TV' : 'ATENDENTE'}
                                 </span>
                             </div>
                             <!-- SENHA MASCARADA -->
@@ -6816,10 +6802,10 @@ function carregarComanda() {
             
             const diasNomes = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
             
-            // Atualizar label
+            // Atualizar label (agora acima do textarea)
             const label = document.getElementById('diaSelecionadoLabel');
             if (label) {
-                label.textContent = `📅 ${diasNomes[dia]}`;
+                label.textContent = `🥩 ${diasNomes[dia]}`;
             }
             
             // Destaque visual do dia selecionado
@@ -7437,16 +7423,52 @@ function carregarComanda() {
         // Troca de abordagem: em vez de tentar reentrar via JS, mostra um banner
         // tocável — o toque do operador É o gesto que o navegador exige.
         document.addEventListener('fullscreenchange', () => {
+            // ── KDS / Preparo: fullscreen no #fullscreenPreparo ──────────────────────
             const fsElement = document.getElementById('fullscreenPreparo');
             const banner = document.getElementById('bannerVoltarFullscreen');
-            if (!fsElement || !banner) return;
-            const deveriaEstarAberta = fsElement.style.display === 'flex';
-            if (deveriaEstarAberta && !document.fullscreenElement) {
-                banner.style.display = 'block';
-            } else {
-                banner.style.display = 'none';
+            if (fsElement && banner) {
+                const deveriaEstarAberta = fsElement.style.display === 'flex';
+                if (deveriaEstarAberta && !document.fullscreenElement) {
+                    // Perfil TV (Smart TV / sem touch): banner com 2 botões navegáveis por teclado
+                    if (state.perfil === 'TV') {
+                        banner.innerHTML = `
+                            <div style="display:flex;gap:16px;justify-content:center;align-items:center;flex-wrap:wrap;">
+                                <button id="btnVoltarFSKDS" onclick="_voltarFullscreen()" tabindex="0"
+                                    style="padding:10px 28px;background:white;color:#E67E22;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">
+                                    ↩ Voltar à tela cheia
+                                </button>
+                                <button onclick="event.stopPropagation();fecharFullscreen();logout();" tabindex="0"
+                                    style="padding:10px 28px;background:rgba(255,255,255,0.15);color:white;border:2px solid white;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">
+                                    ✕ Sair do sistema
+                                </button>
+                            </div>`;
+                        banner.onclick = null; // botões internos tratam os cliques
+                        banner.style.display = 'block';
+                        setTimeout(() => document.getElementById('btnVoltarFSKDS')?.focus(), 80);
+                    } else {
+                        banner.innerHTML = '👆 Toque aqui para voltar à tela cheia';
+                        banner.onclick = _voltarFullscreen;
+                        banner.style.display = 'block';
+                    }
+                } else {
+                    banner.style.display = 'none';
+                }
+            }
+
+            // ── Balança / Caixa: fullscreen no documentElement ───────────────────────
+            const bannerGlobal = document.getElementById('bannerVoltarFullscreenGlobal');
+            if (bannerGlobal) {
+                const perfilFullscreen = ['Balança', 'Balança Touch', 'Caixa', 'Marmita'].includes(state.perfil);
+                bannerGlobal.style.display = (perfilFullscreen && !document.fullscreenElement) ? 'block' : 'none';
             }
         });
+
+        function _voltarFullscreenGlobal() {
+            const banner = document.getElementById('bannerVoltarFullscreenGlobal');
+            document.documentElement.requestFullscreen()
+                .then(() => { if (banner) banner.style.display = 'none'; })
+                .catch(() => {});
+        }
 
         function _voltarFullscreen() {
             const fsElement = document.getElementById('fullscreenPreparo');
@@ -11268,16 +11290,77 @@ var itens = comanda.itens || [];
             }
         }
 
-        // ── SPLASH para Balança e Caixa: captura user gesture e aciona fullscreen ──
+        // ── Limpa TODOS os body classes de modo especial ──────────────────────────
+        // Chamar antes de ativar qualquer modo e no logout. Sem isso, trocar de
+        // perfil especial (ex: TV → Admin) deixa classes residuais que ocultam
+        // header/sidebar no próximo login.
+        function _limparModoEspecial() {
+            document.body.classList.remove(
+                'modo-balanca', 'modo-balanca-touch',
+                'modo-caixa', 'modo-marmita', 'modo-tv',
+                'modo-mobile', 'mobile-lista-aberta'
+            );
+        }
+
+        // ── Ativa o modo visual/operacional do perfil — FONTE ÚNICA DE VERDADE ──
+        // Chamada tanto no login fresco quanto no session restore. Garante limpeza
+        // prévia para evitar classes residuais de sessões anteriores.
+        function _ativarModoEspecial(perfil) {
+            _limparModoEspecial();
+
+            if (perfil === 'Balança' || perfil === 'Balança Touch') {
+                document.body.classList.add('modo-balanca');
+                if (perfil === 'Balança Touch') document.body.classList.add('modo-balanca-touch');
+                _initWeightService();
+                _mostrarSplash('Balança');
+            } else if (perfil === 'Caixa') {
+                document.body.classList.add('modo-caixa');
+                const drawerUser   = document.getElementById('caixaDrawerUser');
+                const drawerPerfil = document.getElementById('caixaDrawerPerfil');
+                if (drawerUser)   drawerUser.textContent   = state.user;
+                if (drawerPerfil) drawerPerfil.textContent = '💳 Caixa';
+                caixaSwitchTo('lançar');
+                _mostrarSplash('Caixa');
+            } else if (perfil === 'Marmita') {
+                document.body.classList.add('modo-marmita');
+                _mostrarSplash('Marmita');
+                _initImpressaoMarmita();
+            } else if (perfil === 'TV') {
+                document.body.classList.add('modo-tv');
+                _mostrarSplash('TV');
+            }
+            // Admin / Gerente / Atendente: sem modo especial — interface padrão
+        }
+
+        // ── SPLASH para perfis operacionais: captura user gesture para fullscreen ──
         async function _mostrarSplash(perfil) {
-            const icone    = { 'Balança': '⚖️', 'Caixa': '💳', 'Marmita': '🍛' };
-            const legenda  = { 'Balança': 'Sistema de Balança — Pronto', 'Caixa': 'Sistema de Caixa — Pronto', 'Marmita': 'Sistema de Preparo — Pronto' };
+            const icone    = { 'Balança': '⚖️', 'Caixa': '💳', 'Marmita': '🍛', 'TV': '📺' };
+            const legenda  = { 'Balança': 'Sistema de Balança — Pronto', 'Caixa': 'Sistema de Caixa — Pronto', 'Marmita': 'Sistema de Preparo — Pronto', 'TV': 'TV do Cliente — Pronto' };
             const icon = document.getElementById('splashIcon');
             const sub  = document.getElementById('splashSubtitle');
             if (icon) icon.textContent = icone[perfil]  || '🍽️';
             if (sub)  sub.textContent  = legenda[perfil] || 'Pronto';
             const splash = document.getElementById('balancaSplash');
             if (splash) splash.style.display = 'flex';
+
+            // TV: fullscreen é no #fullscreenPreparo (KDS do cliente), não no document.
+            // Mesma lógica dos outros perfis: tenta abrir no gesto do login. Se conseguir,
+            // fecha splash automaticamente. Se expirou, splash fica para o botão "Iniciar".
+            if (perfil === 'TV') {
+                const fsElement = document.getElementById('fullscreenPreparo');
+                try {
+                    fsElement.style.display = 'flex';
+                    renderizarFullscreen();
+                    iniciarTimerFullscreen();
+                    await fsElement.requestFullscreen();
+                    if (splash) splash.style.display = 'none'; // sucesso — passa batido
+                } catch(e) {
+                    // Gesto expirou — reverter e deixar splash para capturar próximo toque
+                    fsElement.style.display = 'none';
+                    pararTimerFullscreen();
+                }
+                return;
+            }
 
             // Tenta requestFullscreen no contexto do gesto do login (normalmente ainda ativo,
             // pois o código até aqui é majoritariamente síncrono após o clique em "Entrar").
@@ -11291,13 +11374,25 @@ var itens = comanda.itens || [];
         }
 
         async function _iniciarSessaoEspecial() {
+            const splash = document.getElementById('balancaSplash');
+
+            // TV: abrirFullscreen() já faz fsElement.requestFullscreen() internamente.
+            // Chamar document.documentElement.requestFullscreen() ANTES causaria dois
+            // fullscreen transitions em sequência (document → #fullscreenPreparo),
+            // exibindo o #screenPreparo (tela operacional) durante a janela de exit+enter.
+            if (state.perfil === 'TV') {
+                if (splash) splash.style.display = 'none';
+                abrirFullscreen();
+                return;
+            }
+
+            // Balança / Caixa / Marmita: fullscreen no documentElement
             // requestFullscreen AQUI dentro de click handler real — user gesture garantido
             try {
                 await document.documentElement.requestFullscreen();
             } catch(e) {
                 // Fullscreen rejeitado — ignora; CSS modo-balanca/modo-caixa já faz height:100dvh
             }
-            const splash = document.getElementById('balancaSplash');
             if (splash) splash.style.display = 'none';
         }
 
@@ -11836,6 +11931,37 @@ var itens = comanda.itens || [];
             });
             console.log('[Caixa] Atalhos ativos: F1 Lançar · F2 Checkout · F4 Limpar · 1-6 Pgto · Enter Confirmar');
         }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // Setas do teclado rolam o conteúdo de modais abertos (sem interferir com inputs)
+        // Cobre: modalItem, modalMarnitaCarnes, modalEstoqueItem/Entrada, modalLancamento,
+        //        modalLancarCompra, modalVisualizar (todos usam .modal.active > .modal-content)
+        //        e modalUsuario (estrutura diferente, sem classe .modal).
+        // ArrowUp/Down em inputs continuam movendo o cursor — comportamento intacto.
+        // ─────────────────────────────────────────────────────────────────────────────
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+            const tag = document.activeElement?.tagName?.toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+            // Modais com classe .modal
+            const mc = document.querySelector('.modal.active .modal-content');
+            if (mc) {
+                e.preventDefault();
+                mc.scrollBy({ top: e.key === 'ArrowDown' ? 80 : -80, behavior: 'smooth' });
+                return;
+            }
+
+            // modalUsuario (sem classe .modal — div interna tem overflow-y: auto)
+            const mu = document.getElementById('modalUsuario');
+            if (mu && mu.style.display === 'flex') {
+                const inner = mu.firstElementChild;
+                if (inner) {
+                    e.preventDefault();
+                    inner.scrollBy({ top: e.key === 'ArrowDown' ? 80 : -80, behavior: 'smooth' });
+                }
+            }
+        });
 
         </script>
 
