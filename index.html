@@ -3036,7 +3036,7 @@
                 if (usuarios && usuarios.length > 0) {
                     usuarios.forEach(u => {
                         state.usuarios[u.login] = {
-                            nome: u.nome || u.login, senha: String(u.senha),
+                            nome: u.nome || u.login,
                             perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'balanca_touch' ? 'Balança Touch' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : u.nivel === 'tv' ? 'TV' : 'Atendente'
                         };
                     });
@@ -3346,7 +3346,7 @@
                     if (usuarios && usuarios.length > 0) {
                         usuarios.forEach(u => {
                             state.usuarios[u.login] = {
-                                nome: u.nome || u.login, senha: String(u.senha),
+                                nome: u.nome || u.login,
                                 perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'balanca_touch' ? 'Balança Touch' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : u.nivel === 'tv' ? 'TV' : 'Atendente'
                             };
                         });
@@ -3364,7 +3364,21 @@
                 return;
             }
 
-            if (state.usuarios[user].senha !== pass) {
+            // Verificar credenciais via GAS — senha nunca fica em memória (getUsuarios não retorna senha)
+            const _btnVerify = document.getElementById('btnLogin');
+            _btnVerify.disabled = true;
+            _btnVerify.textContent = 'Verificando...';
+            let _loginOk = false;
+            try {
+                const _res = await sheetsAPI('login', { login: user, senha: pass });
+                _loginOk = _res && _res.sucesso === true;
+            } catch(e) {
+                _loginOk = false;
+            } finally {
+                _btnVerify.disabled = false;
+                _btnVerify.textContent = 'Entrar';
+            }
+            if (!_loginOk) {
                 mostrarErroLogin('❌ Senha incorreta. Tente novamente.', 'loginPassword');
                 document.getElementById('loginPassword').value = '';
                 return;
@@ -5011,7 +5025,8 @@
             // Preencher formulário
             document.getElementById('modalUserNome').value = user.nome;
             document.getElementById('modalUserLogin').value = login;
-            document.getElementById('modalUserSenha').value = user.senha;
+            document.getElementById('modalUserSenha').value = '';
+            document.getElementById('modalUserSenha').placeholder = 'Deixe em branco para manter a senha atual';
             document.getElementById('modalUserPerfil').value = user.perfil;
 
             // Atualizar título
@@ -5030,6 +5045,7 @@
             document.getElementById('modalUserNome').value = '';
             document.getElementById('modalUserLogin').value = '';
             document.getElementById('modalUserSenha').value = '';
+            document.getElementById('modalUserSenha').placeholder = 'Mínimo 3 caracteres';
             document.getElementById('modalUserPerfil').value = '';
         }
 
@@ -5070,11 +5086,11 @@
                 showToast('Usuário precisa ter pelo menos 3 caracteres', 'error');
                 return;
             }
-            if (!senha) {
+            if (!usuarioEmEdicao && !senha) {
                 showToast('Digite uma senha', 'error');
                 return;
             }
-            if (senha.length < 3) {
+            if (senha && senha.length < 3) {
                 showToast('Senha precisa ter pelo menos 3 caracteres', 'error');
                 return;
             }
@@ -5108,7 +5124,10 @@
             const _nivel = perfil === 'Admin' ? 'admin' : perfil === 'Balança' ? 'balanca' : perfil === 'Balança Touch' ? 'balanca_touch' : perfil === 'Gerente' ? 'gerente' : perfil === 'Caixa' ? 'caixa' : perfil === 'Marmita' ? 'marmita' : perfil === 'TV' ? 'tv' : 'atendente';
             if (usuarioEmEdicao) {
                 // Login mudou ou não: atualiza na mesma linha via loginAntigo
-                sheetsAPI('atualizarUsuario', { loginAntigo: usuarioEmEdicao, login, nome, senha, nivel: _nivel });
+                // Só envia senha se o Admin preencheu — vazio significa "manter a atual"
+                const payloadEdicao = { loginAntigo: usuarioEmEdicao, login, nome, nivel: _nivel };
+                if (senha) payloadEdicao.senha = senha;
+                sheetsAPI('atualizarUsuario', payloadEdicao);
             } else {
                 sheetsAPI('novoUsuario', { login, nome, senha, nivel: _nivel });
             }
@@ -5163,12 +5182,6 @@
                                     ${user.perfil === 'Admin' ? 'ADMIN' : user.perfil === 'Balança' ? 'BALANÇA' : user.perfil === 'Balança Touch' ? 'BALANÇA TOUCH' : user.perfil === 'Gerente' ? 'GERENTE' : user.perfil === 'Caixa' ? 'CAIXA' : user.perfil === 'Marmita' ? 'MARMITA' : user.perfil === 'TV' ? 'TV' : 'ATENDENTE'}
                                 </span>
                             </div>
-                            <!-- SENHA MASCARADA -->
-                            <div style="display: flex; align-items: center; gap: 6px;">
-                                <span style="font-size: 11px; color: var(--gray);">Senha:</span>
-                                <span id="senha-${login}" style="font-size: 11px; font-family: monospace; letter-spacing: 2px;">••••••••</span>
-                                <button onclick="alternarVisualizarSenha('${login}')" title="Visualizar senha" style="padding: 2px 6px; background: rgba(212,114,79,0.2); color: var(--primary); border: none; border-radius: 2px; cursor: pointer; font-size: 11px; font-weight: bold;">👁️</button>
-                            </div>
                         </div>
 
                         <!-- AÇÕES -->
@@ -5188,20 +5201,7 @@
             });
         }
 
-        function alternarVisualizarSenha(login) {
-            const span = document.getElementById(`senha-${login}`);
-            const user = state.usuarios[login];
-
-            if (span.textContent === '••••••••') {
-                span.textContent = user.senha;
-                span.style.letterSpacing = '0px';
-            } else {
-                span.textContent = '••••••••';
-                span.style.letterSpacing = '2px';
-            }
-        }
-
-        function abrirResetSenhaUsuario(login) {
+function abrirResetSenhaUsuario(login) {
             // ✅ PROTEÇÃO: Não permitir resetar senha de bruno
             if (login === 'bruno') {
                 showToast('❌ Não é permitido resetar a senha de "bruno" (usuário padrão)', 'error');
