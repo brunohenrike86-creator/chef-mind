@@ -1911,7 +1911,8 @@
                             <div style="font-size:11px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:10px;">💵 Troco Inicial do Caixa</div>
                             <div style="position:relative;">
                                 <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:15px; color:var(--gray); font-weight:bold;">R$</span>
-                                <input type="number" id="inputTrocoAbertura" placeholder="0,00" min="0" step="0.01"
+                                <input type="text" inputmode="numeric" id="inputTrocoAbertura" placeholder="0,00"
+                                    oninput="_mascaraMoeda(this)"
                                     onkeydown="if(event.key==='Enter') abrirCaixaDia()"
                                     style="width:100%; padding:14px 14px 14px 40px; border:2px solid var(--border); border-radius:8px;
                                            font-size:22px; font-weight:bold; box-sizing:border-box; text-align:right; color:#2C3E50;">
@@ -2027,7 +2028,7 @@
                                     <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">💳 Máquinas (PIX + Cartão)</div>
                                     <div style="position:relative;">
                                         <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:13px; color:var(--gray); font-weight:bold;">R$</span>
-                                        <input type="number" id="inputMaquinas" placeholder="0,00" min="0" step="0.01" oninput="calcularFechamento()"
+                                        <input type="text" inputmode="numeric" id="inputMaquinas" placeholder="0,00" oninput="_mascaraMoeda(this); calcularFechamento()"
                                             style="width:100%; padding:11px 10px 11px 34px; border:2px solid var(--border); border-radius:6px; font-size:18px; font-weight:bold; box-sizing:border-box; text-align:right;">
                                     </div>
                                 </div>
@@ -2036,7 +2037,7 @@
                                     <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">💵 Sangria (valor retirado)</div>
                                     <div style="position:relative;">
                                         <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:13px; color:var(--gray); font-weight:bold;">R$</span>
-                                        <input type="number" id="inputSangria" placeholder="0,00" min="0" step="0.01" oninput="calcularFechamento()"
+                                        <input type="text" inputmode="numeric" id="inputSangria" placeholder="0,00" oninput="_mascaraMoeda(this); calcularFechamento()"
                                             style="width:100%; padding:11px 10px 11px 34px; border:2px solid var(--border); border-radius:6px; font-size:18px; font-weight:bold; box-sizing:border-box; text-align:right;">
                                     </div>
                                 </div>
@@ -2045,7 +2046,7 @@
                                     <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">🏦 Dinheiro Caixa (fica para amanhã)</div>
                                     <div style="position:relative;">
                                         <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:13px; color:var(--gray); font-weight:bold;">R$</span>
-                                        <input type="number" id="inputResidual" placeholder="0,00" min="0" step="0.01" oninput="calcularFechamento()"
+                                        <input type="text" inputmode="numeric" id="inputResidual" placeholder="0,00" oninput="_mascaraMoeda(this); calcularFechamento()"
                                             style="width:100%; padding:11px 10px 11px 34px; border:2px solid var(--border); border-radius:6px; font-size:18px; font-weight:bold; box-sizing:border-box; text-align:right;">
                                     </div>
                                 </div>
@@ -2190,7 +2191,7 @@
                         <!-- TEXTAREA CARNES DO DIA -->
                         <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
                             <label id="diaSelecionadoLabel" style="font-size: 13px; font-weight: bold; color: var(--text-dark);">— Selecione um dia</label>
-                            <textarea id="marnitasDiaInput" placeholder="Frango&#10;Porco&#10;Costela" style="flex: 1; min-height: 120px; padding: 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; font-family: inherit; line-height: 1.7; resize: none;"></textarea>
+                            <textarea id="marnitasDiaInput" placeholder="Frango&#10;Porco&#10;Costela" style="flex: 1; min-height: 240px; padding: 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; font-family: inherit; line-height: 1.7; resize: vertical;"></textarea>
                             <div style="font-size: 11px; color: var(--gray);">Uma opção por linha</div>
                         </div>
 
@@ -2689,7 +2690,7 @@
                 <div class="modal-label">Preço</div>
                 <div style="display: flex; gap: 6px;">
                     <span style="display: flex; align-items: center; color: var(--gray); font-weight: bold;">R$</span>
-                    <input type="number" id="modalPreco" class="modal-input" placeholder="0.00" step="0.01" style="flex: 1;">
+                    <input type="text" inputmode="numeric" id="modalPreco" class="modal-input" placeholder="0,00" oninput="_mascaraMoeda(this)" style="flex: 1; text-align: right;">
                     <span id="modalPrecoUnit" style="display: flex; align-items: center; color: var(--gray); font-weight: bold; min-width: 40px;">un.</span>
                 </div>
             </div>
@@ -2880,6 +2881,22 @@
                     });
                 });
             }).observe(document.body, { childList: true, subtree: true });
+        }
+        // ── Máscara monetária (RTL — padrão caixa BR) ────────────────────────────
+        // Aplica a máscara ao oninput: o usuário digita apenas dígitos e o valor
+        // vai sendo preenchido da direita para a esquerda (0,01 → 0,15 → 1,50).
+        function _mascaraMoeda(el) {
+            var digits = el.value.replace(/\D/g, '');
+            if (!digits) { el.value = ''; return; }
+            var num = parseInt(digits, 10) || 0;
+            var reais = Math.floor(num / 100);
+            var centavos = num % 100;
+            el.value = reais + ',' + centavos.toString().padStart(2, '0');
+        }
+        // Lê o valor de um campo com máscara monetária e retorna float
+        function _lerMoeda(el) {
+            if (!el || !el.value) return 0;
+            return parseFloat(el.value.replace(',', '.')) || 0;
         }
         // ─────────────────────────────────────────────────────────────────────────
 
@@ -3192,6 +3209,16 @@
         async function sheets_novaComanda(chave, numero) {
             const res = await sheetsAPI('novaComanda', { numero: String(numero), usuario: state.userLogado || state.user || '' });
             if (res && res.erro) console.error('[Sheets] novaComanda erro:', res.erro);
+            if (res && res.cancelada) {
+                // ⚠️ Número inutilizado: comanda foi cancelada neste dia — não pode ser reaberta.
+                console.warn('[Sheets] Comanda', numero, 'foi cancelada — número inutilizado no dia');
+                delete state.comandas[chave];
+                if (state.comandaAtual === chave) state.comandaAtual = null;
+                saveStorage();
+                showToast(`⚠️ Comanda #${numero} foi cancelada — número inutilizado neste dia`, 'warning');
+                limparTelaLançar();
+                return;
+            }
             if (res && res.jaAberta) {
                 // ⚠️ Comanda já existe no servidor (criada neste ou em outro device).
                 // Desfaz a criação local, sincroniza com o servidor e carrega a comanda
@@ -4712,24 +4739,16 @@
             });
         }
 
-        // Reais: formata como 1.234,56 conforme digita (centavos → reais)
+        // Reais: wrapper sobre _mascaraMoeda — unifica comportamento RTL em todo o sistema
         function _maskReais(el) {
             el.setAttribute('inputmode', 'numeric');
+            el.setAttribute('type', 'text');
             el.setAttribute('placeholder', '0,00');
-            el.dataset.centavos = '0';
-            el.addEventListener('input', () => {
-                const digits = el.value.replace(/\D/g, '');
-                const cents = parseInt(digits || '0', 10);
-                el.dataset.centavos = cents;
-                const reais = (cents / 100).toFixed(2);
-                const [intPart, decPart] = reais.split('.');
-                const intFmt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-                el.value = intFmt + ',' + decPart;
-            });
+            el.addEventListener('input', () => _mascaraMoeda(el));
         }
 
         function _leituraValorLancamento(c, el) {
-            if (c.mascara === 'reais')  return ((parseInt(el.dataset.centavos || '0', 10)) / 100).toFixed(2).replace('.', ',');
+            if (c.mascara === 'reais')  return (parseFloat((el.value || '0').replace(',', '.')) || 0).toFixed(2).replace('.', ',');
             if (c.mascara === 'gramas') return el.value.replace(/\./g, ''); // remove ponto milhar → inteiro em gramas
             if (c.id === 'lc_data')    return el.value;
             return el.value;
@@ -5499,6 +5518,13 @@ function carregarComanda() {
                 return;
             }
 
+            // COMANDA CANCELADA = bloquear (número inutilizado no dia)
+            if (comanda.encerramento === 'cancelada') {
+                showToast(`⚠️ Comanda #${numeroNorm} foi cancelada — número inutilizado neste dia`, 'warning');
+                limparTelaLançar();
+                return;
+            }
+
             // COMANDA PAGA = ABRIR EM LEITURA
             if (comanda.paid) {
                 state.comandaAtual = key;
@@ -5663,7 +5689,17 @@ function carregarComanda() {
             const dataAtual = new Date().toISOString().split('T')[0];
             const chave = `${numeroNorm}-${dataAtual}`;
 
-            if (state.comandas[chave] && state.comandas[chave].encerramento) delete state.comandas[chave];
+            const _cmd = state.comandas[chave];
+
+            // Número inutilizado neste dia: comanda cancelada fica no state com encerramento='cancelada'
+            // (persiste no localStorage e sobrevive a polling/reload — o GAS também rejeita como guardião)
+            if (_cmd && _cmd.encerramento === 'cancelada') {
+                showToast(`⚠️ Comanda #${numeroNorm} foi cancelada — número inutilizado neste dia`, 'warning');
+                return;
+            }
+
+            // Comanda de expediente anterior (reset): limpar e permitir recriação
+            if (_cmd && _cmd.encerramento) delete state.comandas[chave];
 
             state.comandas[chave] = {
                 id: chave, numero: numeroNorm, data: dataAtual,
@@ -8111,6 +8147,8 @@ function carregarComanda() {
                 for (const chave of Object.keys(state.comandas)) {
                     const local = state.comandas[chave];
                     if (local._id && !serverMap[chave] && local.data === dataAtual) {
+                        // Canceladas permanecem no state para bloquear recriação do número no dia
+                        if (local.encerramento === 'cancelada') continue;
                         // Grace period: não apaga comanda criada há menos de 30s (Sheets ainda indexando)
                         const age = Date.now() - (local._createdAt || 0);
                         if (age < 30000) continue;
@@ -8460,7 +8498,7 @@ function carregarComanda() {
 
         async function abrirCaixaDia() {
             const trocoEl = document.getElementById('inputTrocoAbertura');
-            const troco   = parseFloat(trocoEl.value) || 0;
+            const troco   = _lerMoeda(trocoEl);
 
             const okAbrir = await confirmarAcao({
                 titulo: 'Abrir caixa',
@@ -8632,9 +8670,9 @@ function carregarComanda() {
             const aReceber   = parseFloat(painel.dataset.aReceber)   || 0;
             const baixasHoje = parseFloat(painel.dataset.baixasHoje) || 0;
             const troco      = state.caixa.troco || 0;
-            const maquinas   = parseFloat(document.getElementById('inputMaquinas').value) || 0;
-            const sangria    = parseFloat(document.getElementById('inputSangria').value)  || 0;
-            const residual   = parseFloat(document.getElementById('inputResidual').value) || 0;
+            const maquinas   = _lerMoeda(document.getElementById('inputMaquinas'));
+            const sangria    = _lerMoeda(document.getElementById('inputSangria'));
+            const residual   = _lerMoeda(document.getElementById('inputResidual'));
 
             // Baixas AR recebidas hoje entram como entrada adicional
             // (dinheiro: afeta gaveta diretamente; PIX/cartão: já incluso no total lido das máquinas)
@@ -8804,9 +8842,9 @@ function carregarComanda() {
             const vendaTotal = parseFloat(painel.dataset.vendaTotal) || 0;
             const aReceber   = parseFloat(painel.dataset.aReceber)   || 0;
             const baixasHoje = parseFloat(painel.dataset.baixasHoje) || 0;
-            const maquinas   = parseFloat(document.getElementById('inputMaquinas').value) || 0;
-            const sangria    = parseFloat(document.getElementById('inputSangria').value)  || 0;
-            const residual   = parseFloat(document.getElementById('inputResidual').value) || 0;
+            const maquinas   = _lerMoeda(document.getElementById('inputMaquinas'));
+            const sangria    = _lerMoeda(document.getElementById('inputSangria'));
+            const residual   = _lerMoeda(document.getElementById('inputResidual'));
             const troco      = state.caixa.troco || 0;
             const diff       = (vendaTotal + troco + baixasHoje) - (maquinas + sangria + residual + aReceber);
 
@@ -9104,9 +9142,16 @@ function carregarComanda() {
             const container = document.getElementById('listaItensLançados');
             
             if (!comanda || comanda.itens.length === 0) {
+                const podeCancelar = comanda && !comanda.paid && !comanda.encerramento
+                    && ['Admin', 'Gerente', 'Caixa'].includes(state.perfil);
                 container.innerHTML = `<div style="text-align:center;color:var(--gray);padding:18px 10px;font-size:10px;">
                     <div style="font-size:20px;margin-bottom:4px;">🍽️</div>
                     Nenhum item lançado ainda
+                    ${podeCancelar ? `<div style="margin-top:14px;">
+                        <button onclick="cancelarComandaVazia()"
+                            style="background:none;border:none;color:#c0392b;font-size:11px;cursor:pointer;opacity:0.65;text-decoration:underline;padding:4px 8px;"
+                            title="Cancelar esta comanda (sem itens)">🗑️ Cancelar comanda</button>
+                    </div>` : ''}
                 </div>`;
                 document.getElementById('totalComanda').textContent = 'R$ 0,00';
                 return;
@@ -9115,7 +9160,7 @@ function carregarComanda() {
             container.innerHTML = '';
             let total = 0;
             const _isAdmin = ['Admin', 'Caixa'].includes(state.perfil);
-            const _comandaPaga = comanda.status === 'Fechada/Paga'; // B1: sem edição em comanda fechada
+            const _comandaPaga = comanda.status === 'Fechada/Paga' || comanda.paid === true; // B1: sem edição em comanda fechada/paga
 
             // REGRA: Buffet por kg NÃO agrupa. Tudo mais agrupa.
             const agrupados = {};
@@ -9905,7 +9950,7 @@ function carregarComanda() {
             document.getElementById('modalCodigo').value = `#${item.codigo}`;
             document.getElementById('modalNome').value = item.nome;
             document.getElementById('modalTipo').value = item.tipo;
-            document.getElementById('modalPreco').value = item.preco;
+            document.getElementById('modalPreco').value = parseFloat(item.preco || 0).toFixed(2).replace('.', ',');
             _setEANsNoModal(item.codigo_barras);
             // Itens antigos não têm o campo ainda — tratamos undefined como "disponível" (default)
             document.getElementById('modalDisponivelOnline').checked = item.disponivelOnline !== false;
@@ -9957,7 +10002,7 @@ function carregarComanda() {
             console.log('🔍 salvarItem foi chamado!');
             const nome = document.getElementById('modalNome').value.trim();
             const tipo = document.getElementById('modalTipo').value;
-            const preco = parseFloat(document.getElementById('modalPreco').value);
+            const preco = parseFloat((document.getElementById('modalPreco').value || '').replace(',', '.')) || 0;
             const codigoBarras = getEANsDoModal(); // pipe-separated; suporta múltiplos EANs
             const disponivelOnline = document.getElementById('modalDisponivelOnline').checked;
 
@@ -10330,6 +10375,54 @@ function carregarComanda() {
             _idleTimer = null;
         }
 
+        // ========== CANCELAR COMANDA VAZIA (Admin/Gerente/Caixa) ==========
+
+        async function cancelarComandaVazia() {
+            const chave = state.comandaAtual;
+            const comanda = chave ? state.comandas[chave] : null;
+            if (!comanda) return;
+
+            // Garante que não há itens ativos (segurança extra no frontend)
+            const itensAtivos = (comanda.itens || []).filter(i => !i.removido);
+            if (itensAtivos.length > 0) {
+                showToast('Comanda possui itens — use o checkout para encerrá-la', 'warning');
+                return;
+            }
+
+            const numero = chave.split('-')[0];
+            const ok = await confirmarAcao({
+                titulo: 'Cancelar comanda',
+                mensagem: `Cancelar comanda #${numero} sem itens?\n\nEsta ação não pode ser desfeita.`,
+                textoConfirmar: 'Cancelar comanda',
+                corPerigo: true,
+                icone: '🗑️'
+            });
+            if (!ok) return;
+
+            showToast('⏳ Cancelando comanda...', 'info');
+            try {
+                const parts = chave.split('-');
+                const numStr = parts[0];
+                const dia    = parts.slice(1).join('-');
+                const res = await sheetsAPI('cancelarComanda', { numero: numStr, dia: dia });
+                if (res && res.sucesso) {
+                    // Manter no state local com encerramento='cancelada' — persiste no localStorage
+                    // e bloqueia recriação otimista mesmo após polling ou reload da aba
+                    state.comandas[chave] = Object.assign({}, state.comandas[chave] || {}, {
+                        encerramento: 'cancelada', itens: [], total: 0
+                    });
+                    state.comandaAtual = null;
+                    saveStorage();
+                    limparTelaLançar();
+                    showToast('✅ Comanda cancelada', 'success');
+                } else {
+                    showToast(`❌ ${(res && res.erro) || 'Erro ao cancelar'}`, 'error');
+                }
+            } catch (e) {
+                showToast('❌ Erro ao cancelar comanda', 'error');
+            }
+        }
+
         // ========== EDICAO DE PRECO (ADMIN) ==========
 
         let _editPrecoCtx = null;
@@ -10340,7 +10433,7 @@ function carregarComanda() {
             var popup = document.getElementById('popupEditPreco');
             popup.querySelector('.pep-nome').textContent = nomeItem;
             var input = document.getElementById('pepInput');
-            input.value = precoAtual.toFixed(2);
+            input.value = precoAtual.toFixed(2).replace('.', ',');
             var popupW = 230;
             var rect = btnEl.getBoundingClientRect();
             var left = rect.left - popupW + rect.width;
@@ -10449,7 +10542,7 @@ var itens = comanda.itens || [];
             // Mostrar/ocultar botão limpar
             const btnLimpar = document.getElementById('arBuscaLimpar');
             if (btnLimpar) btnLimpar.style.display = buscaRaw ? 'block' : 'none';
-            const isAdmin = state.perfil === 'Admin';
+            const isAdmin = ['Admin', 'Caixa'].includes(state.perfil);
 
             const pendentes = _arDados.filter(c => !c.baixa_data);
             const recebidos  = _arDados.filter(c =>  c.baixa_data);
@@ -12095,7 +12188,8 @@ var itens = comanda.itens || [];
     <div id="popupEditPreco" style="display:none;">
         <div class="pep-titulo">Editar Preço Unitário</div>
         <div class="pep-nome"></div>
-        <input id="pepInput" type="number" step="0.01" min="0" placeholder="0,00"
+        <input id="pepInput" type="text" inputmode="numeric" placeholder="0,00"
+               oninput="_mascaraMoeda(this)"
                onkeydown="if(event.key==='Enter'){salvarEdicaoPreco();} if(event.key==='Escape'){fecharEdicaoPreco();}">
         <div class="pep-btns">
             <button class="pep-salvar"   onclick="salvarEdicaoPreco()">Salvar</button>
