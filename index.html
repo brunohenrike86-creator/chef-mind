@@ -2913,6 +2913,9 @@
 
         const SHEETS_API_URL = USAR_AMBIENTE === 'staging' ? SHEETS_API_URL_STAGING : SHEETS_API_URL_PROD;
 
+        // Token de API — deve ser igual ao valor definido em GAS → Project Settings → Script Properties → API_TOKEN
+        const API_TOKEN = 'cm-37172ab32d1cf5e095fd40e0';
+
         async function sheetsAPI(action, dados = {}, timeoutMs = 20000) {
             try {
                 const ehLeitura = action.startsWith('get');
@@ -2922,7 +2925,7 @@
                     const controller = new AbortController();
                     const timeoutId  = setTimeout(() => controller.abort(), timeoutMs);
                     try {
-                        const params = new URLSearchParams({ action, ...dados });
+                        const params = new URLSearchParams({ action, token: API_TOKEN, ...dados });
                         resp = await fetch(`${SHEETS_API_URL}?${params}`, { signal: controller.signal });
                     } finally {
                         clearTimeout(timeoutId);
@@ -2932,7 +2935,7 @@
                     // com AbortController em alguns browsers Android/Chrome
                     resp = await fetch(SHEETS_API_URL, {
                         method: 'POST',
-                        body: JSON.stringify({ action, ...dados })
+                        body: JSON.stringify({ action, token: API_TOKEN, ...dados })
                     });
                 }
                 const json = await resp.json();
