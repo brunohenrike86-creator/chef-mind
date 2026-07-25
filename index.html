@@ -4900,7 +4900,7 @@
 
             // Validação mínima: campo1 obrigatório em todos os tipos
             if (!payload.campo1) {
-                mostrarToast('⚠️ Preencha todos os campos obrigatórios');
+                showToast('⚠️ Preencha todos os campos obrigatórios');
                 return;
             }
 
@@ -4915,11 +4915,11 @@
                     if (btn) { btn.textContent = '✅ Salvo!'; btn.style.background = '#27AE60'; }
                     setTimeout(() => fecharModalLancamento(), 800);
                 } else {
-                    mostrarToast('❌ Erro: ' + (res.erro || 'desconhecido'));
+                    showToast('❌ Erro: ' + (res.erro || 'desconhecido'));
                     if (btn) { btn.disabled = false; btn.textContent = '✅ Confirmar'; btn.style.background = ''; }
                 }
             } catch(e) {
-                mostrarToast('❌ Sem conexão — tente novamente');
+                showToast('❌ Sem conexão — tente novamente');
                 console.error('[Lancamento]', e);
                 if (btn) { btn.disabled = false; btn.textContent = '✅ Confirmar'; btn.style.background = ''; }
             }
@@ -8134,7 +8134,7 @@ function carregarComanda() {
 
                 // Busca TODAS as comandas de hoje não encerradas (abertas + pagas)
                 const serverList = await sheetsAPI('getComandasDoDia');
-                if (!serverList) return;
+                if (!Array.isArray(serverList)) return; // timeout ou erro retorna null/objeto — ignora ciclo
 
                 // Mapa chave → comanda do servidor
                 const serverMap = {};
@@ -11635,7 +11635,7 @@ var itens = comanda.itens || [];
             if (!weightService) return;
             // Web Serial não disponível (mobile, Firefox, etc.)
             if (!navigator.serial) {
-                mostrarToast('⚠️ Web Serial não suportado neste navegador');
+                showToast('⚠️ Web Serial não suportado neste navegador');
                 return;
             }
             const provider = weightService._provider;
@@ -11643,10 +11643,10 @@ var itens = comanda.itens || [];
 
             if (provider instanceof SerialWeightProvider) {
                 // Guard: evita chamar requestPort() simultaneamente
-                if (provider._requestPortPending) { mostrarToast('⏳ Aguarde...'); return; }
+                if (provider._requestPortPending) { showToast('⏳ Aguarde...'); return; }
                 // Guard: evita race com auto-connect em andamento
                 // (resetar _connecting durante port.open() causa corrupção de estado)
-                if (provider._connecting) { mostrarToast('⏳ Conectando, aguarde...'); return; }
+                if (provider._connecting) { showToast('⏳ Conectando, aguarde...'); return; }
 
                 let port;
 
@@ -11694,7 +11694,7 @@ var itens = comanda.itens || [];
 
             const timer = setTimeout(() => {
                 if (btn) { btn.disabled = false; btn.textContent = '🔌 Conectar Balança'; }
-                mostrarToast('❌ Timeout — desconecte e reconecte o cabo USB');
+                showToast('❌ Timeout — desconecte e reconecte o cabo USB');
             }, 10000);
 
             try {
@@ -11702,10 +11702,10 @@ var itens = comanda.itens || [];
                     if (btn) btn.textContent = '⏳ ' + msg;
                 });
                 clearTimeout(timer);
-                mostrarToast('✅ Balança conectada!');
+                showToast('✅ Balança conectada!');
             } catch(e) {
                 clearTimeout(timer);
-                mostrarToast('❌ ' + (e.message || 'Erro ao conectar balança'));
+                showToast('❌ ' + (e.message || 'Erro ao conectar balança'));
                 if (btn) { btn.disabled = false; btn.textContent = '🔌 Conectar Balança'; }
             }
         }
@@ -11931,7 +11931,7 @@ var itens = comanda.itens || [];
                 selecionarComandaCheckout(key, comanda);
 
             } else {
-                mostrarToast(`⚠️ Abra a tela Lançar ou Checkout para usar o leitor`);
+                showToast(`⚠️ Abra a tela Lançar ou Checkout para usar o leitor`);
             }
         }
 
@@ -11980,11 +11980,11 @@ var itens = comanda.itens || [];
             if (telaAtiva !== 'lançar') return;
 
             if (!state.comandaAtual) {
-                mostrarToast('Selecione uma comanda antes de bipar um item');
+                showToast('Selecione uma comanda antes de bipar um item');
                 return;
             }
             if (state.modoLeitura) {
-                mostrarToast('Modo consulta — edição desativada');
+                showToast('Modo consulta — edição desativada');
                 return;
             }
 
@@ -11994,7 +11994,7 @@ var itens = comanda.itens || [];
             );
 
             if (!itemEntry) {
-                mostrarToast(`Item não identificado: ${codigoBarras}`);
+                showToast(`Item não identificado: ${codigoBarras}`);
                 return;
             }
 
@@ -12020,7 +12020,7 @@ var itens = comanda.itens || [];
                 atualizarTotalComanda(state.comandaAtual);
                 saveStorage();
                 renderizarListaLançada();
-                mostrarToast(`✅ ${item.nome} lançado`);
+                showToast(`✅ ${item.nome} lançado`);
                 resetIdleTimer();
             } else {
                 // Marmita — abre o modal para seleção de carnes
