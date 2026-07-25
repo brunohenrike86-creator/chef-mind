@@ -7262,6 +7262,7 @@ function carregarComanda() {
         // colunas da impressora térmica nem o alinhamento dos textos).
         const _ESC_ALTURA_DUPLA = '\x1D\x21\x01';
         const _ESC_TAMANHO_NORMAL = '\x1D\x21\x00';
+        const _ESC_CORTE = '\x1D\x56\x00'; // GS V 0 — corte total (Epson ESC/POS)
 
         // Espelha exatamente o agrupamento usado no card do KDS (criarCardPreparo):
         // marmitas + demais itens (bebidas etc.) num pedido único, ordenado pelo
@@ -7340,7 +7341,7 @@ function carregarComanda() {
             // Fonte com altura dobrada no corpo inteiro (pedido do usuário: texto
             // pequeno, difícil de ler). Reset ao final por boa prática, embora o
             // corte do papel já encerre o documento.
-            return _ESC_ALTURA_DUPLA + corpo + rodapeVazio + _ESC_TAMANHO_NORMAL;
+            return _ESC_ALTURA_DUPLA + corpo + rodapeVazio + _ESC_TAMANHO_NORMAL + _ESC_CORTE;
         }
 
         // Dispara o app RawBT (instalado no tablet) via esquema de URL próprio
