@@ -7350,7 +7350,14 @@ function carregarComanda() {
         // impressora; aqui só mandamos texto plano.
         function imprimirViaRawBT(texto) {
             try {
-                window.location.href = 'rawbt:base64,' + _base64UTF8(texto);
+                // Iframe evita que o Chrome perca foco e derrube o fullscreen.
+                // Em alguns dispositivos Android o Intent é disparado sem trazer
+                // o RawBT para frente. Se não funcionar, voltar para location.href.
+                const el = document.createElement('iframe');
+                el.style.display = 'none';
+                el.src = 'rawbt:base64,' + _base64UTF8(texto);
+                document.body.appendChild(el);
+                setTimeout(() => el.remove(), 2000);
             } catch (e) {
                 console.warn('[RawBT] Falha ao disparar impressão:', e);
             }
