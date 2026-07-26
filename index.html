@@ -7262,7 +7262,7 @@ function carregarComanda() {
         // colunas da impressora térmica nem o alinhamento dos textos).
         const _ESC_ALTURA_DUPLA = '\x1D\x21\x01';
         const _ESC_TAMANHO_NORMAL = '\x1D\x21\x00';
-        const _ESC_CORTE = '\x1D\x56\x00'; // GS V 0 — corte total (Epson ESC/POS)
+        const _ESC_CORTE = '\x1D\x56\x41\x00'; // GS V 65 0 — corte total Epson ESC/POS
 
         // Espelha exatamente o agrupamento usado no card do KDS (criarCardPreparo):
         // marmitas + demais itens (bebidas etc.) num pedido único, ordenado pelo
