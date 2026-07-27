@@ -4586,12 +4586,8 @@
             ) || null;
         }
 
-        // Retorna true se o item tem controle de estoque ativo E saldo <= 0.
-        // Usado para bloquear o card/lançamento sem remover o item da tela.
-        function _itemEsgotado(codigo) {
-            const ei = _getEstoqueItemPorCodigo(codigo);
-            return !!ei && (parseFloat(ei.saldo) || 0) <= 0;
-        }
+        // _itemEsgotado removida — estoque zerado/negativo não bloqueia venda.
+        // O saldo fica negativo intencionalmente para rastrear furos de estoque.
 
         // Abre o modal de configuração de estoque a partir do código do cardápio.
         // Funciona tanto para ativar pela primeira vez quanto para editar (ponto de pedido,
@@ -6183,12 +6179,7 @@ function carregarComanda() {
                 return;
             }
 
-            if (_itemEsgotado(codigo)) {
-                showToast('Item sem estoque', 'error');
-                document.getElementById('lançarCodigoItem').value = '';
-                _focusCodigoItem();
-                return;
-            }
+            // Sem bloqueio por estoque zerado — venda permitida, saldo fica negativo.
 
             const item = state.itens[codigo];
 
@@ -6197,17 +6188,7 @@ function carregarComanda() {
             // Bloquear se saldo disponível < 1 unidade (Fixo, Marmita, Quilo)
             // Gramas tem check separado após o prompt de peso
             const _ei = _getEstoqueItemPorCodigo(codigo);
-            if (_ei && item.tipo !== 'Gramas') {
-                const _saldo = parseFloat(_ei.saldo) || 0;
-                const _jaLanc = (comanda.itens || []).filter(i => i.codigo === codigo)
-                    .reduce((s, i) => s + (parseFloat(i.quantidade) || 1), 0);
-                if (_saldo - _jaLanc < 1) {
-                    showToast(`Estoque insuficiente (disponível: ${Math.max(0, _saldo - _jaLanc).toFixed(0)} un)`, 'error');
-                    document.getElementById('lançarCodigoItem').value = '';
-                    _focusCodigoItem();
-                    return;
-                }
-            }
+            // Sem bloqueio por estoque insuficiente — saldo pode ficar negativo.
 
             // REGRA: Se o NOME contém "Quilo" → abre prompt para peso
             if (item.nome.toLowerCase().includes('quilo')) {
@@ -6240,14 +6221,7 @@ function carregarComanda() {
                     }
                     // Bloquear se peso > saldo disponível
                     if (_ei) {
-                        const _saldoG = parseFloat(_ei.saldo) || 0;
-                        const _jaLancG = (comanda.itens || []).filter(i => i.codigo === codigo)
-                            .reduce((s, i) => s + (parseFloat(i.quantidade) || 0), 0);
-                        const _dispG = _saldoG - _jaLancG;
-                        if (pesoNum > _dispG) {
-                            showToast(`Estoque insuficiente (disponível: ${Math.max(0, _dispG).toFixed(3)}kg)`, 'error');
-                            return;
-                        }
+                        // Sem bloqueio por estoque insuficiente — saldo pode ficar negativo.
                     }
                     const total = pesoNum * item.preco;
                     const _itemGramas = {
@@ -6444,16 +6418,15 @@ function carregarComanda() {
             });
 
             itensParaMostrar.forEach(([codigo, item]) => {
-                const esgotado = _itemEsgotado(codigo);
                 const btn = document.createElement('button');
                 btn.className = 'item-cat-btn';
                 btn.style.cssText = `
                     width: 100%;
                     padding: 5px;
                     background: white;
-                    border: 2px solid ${esgotado ? '#C0392B' : 'var(--border)'};
+                    border: 2px solid var(--border);
                     border-radius: 3px;
-                    cursor: ${esgotado ? 'not-allowed' : 'pointer'};
+                    cursor: pointer;
                     text-align: center;
                     transition: all 0.2s;
                     display: flex;
@@ -6461,8 +6434,6 @@ function carregarComanda() {
                     align-items: center;
                     justify-content: center;
                     gap: 2px;
-                    opacity: ${esgotado ? '0.45' : '1'};
-                    pointer-events: ${esgotado ? 'none' : 'auto'};
                     flex-shrink: 0;
                 `;
 
@@ -6475,26 +6446,21 @@ function carregarComanda() {
                     ${fotoHtml}
                     <div class="cat-nome">${item.nome}</div>
                     <div class="cat-cod">#${isNaN(codigo) ? codigo : parseInt(codigo, 10)}</div>
-                    ${esgotado
-                        ? `<div style="font-size:9px; color:#C0392B; font-weight:bold; margin-top:1px;">⛔ Esgotado</div>`
-                        : `<div class="cat-preco">R$ ${item.preco.toFixed(1)}</div>`
-                    }
+                    <div class="cat-preco">R$ ${item.preco.toFixed(1)}</div>
                 `;
 
-                if (!esgotado) {
-                    btn.onmouseover = () => {
-                        btn.style.borderColor = 'var(--primary)';
-                        btn.style.background = 'var(--bg-light)';
-                    };
-                    btn.onmouseout = () => {
-                        btn.style.borderColor = 'var(--border)';
-                        btn.style.background = 'white';
-                    };
-                    btn.onclick = () => lançarItemPorClique(codigo);
-                }
+                btn.onmouseover = () => {
+                    btn.style.borderColor = 'var(--primary)';
+                    btn.style.background = 'var(--bg-light)';
+                };
+                btn.onmouseout = () => {
+                    btn.style.borderColor = 'var(--border)';
+                    btn.style.background = 'white';
+                };
+                btn.onclick = () => lançarItemPorClique(codigo);
 
                 // Long press (mobile): 500ms → abre input de quantidade (só Fixo e Marmita)
-                if (!esgotado && (item.tipo === 'Fixo' || item.tipo === 'Marmita')) {
+                if (item.tipo === 'Fixo' || item.tipo === 'Marmita') {
                     let _lpTimer = null;
                     btn.addEventListener('touchstart', (e) => {
                         _lpTimer = setTimeout(() => {
@@ -6850,9 +6816,12 @@ function carregarComanda() {
             saveStorage();
             // ☁️ SHEETS: registrar pagamento
             const _totalPago = (comanda.itens || []).reduce((s,i)=>s+(i.total||(i.preco*i.quantidade)||0),0);
-            sheets_pagarComanda(comandaCheckoutAtual, _totalPago, formaPagamentoSelecionada, obsAReceber || '');
-            // Recarregar estoque após pagamento (GAS leva ~2s para baixar o saldo)
-            setTimeout(() => carregarEstoque(), 2500);
+            // Recarregar estoque assim que o GAS confirmar o pagamento (elimina race condition
+            // do timeout fixo: _baixarEstoquePorVenda roda dentro de pagarComanda no GAS,
+            // então o saldo negativo já estará gravado quando sheets_pagarComanda resolver).
+            sheets_pagarComanda(comandaCheckoutAtual, _totalPago, formaPagamentoSelecionada, obsAReceber || '')
+                .then(() => carregarEstoque())
+                .catch(() => {});
             
             // FEEDBACK
             showToast('✓ Pagamento confirmado!', 'success');
@@ -10399,11 +10368,14 @@ function carregarComanda() {
 
 
         // ========== IDLE TIMER — auto-limpar comanda ociosa ==========
+        // Ativo apenas nos perfis Balança e Balança Touch (3 min).
+        // Nos demais perfis o timer nunca dispara — resetIdleTimer é no-op.
         let _idleTimer = null;
-        const IDLE_MS = 60 * 1000; // 1 minuto
+        const IDLE_MS_BALANCA = 3 * 60 * 1000; // 3 minutos
 
         function resetIdleTimer() {
             if (!state.comandaAtual) return;
+            if (['Caixa'].includes(state.perfil)) return;
             clearTimeout(_idleTimer);
             _idleTimer = setTimeout(function() {
                 const telaLancar = document.getElementById('screen-lançar');
@@ -10414,8 +10386,8 @@ function carregarComanda() {
                 fecharModalBuffet();
                 fecharModalMarnita();
                 limparComanda();
-                showToast('⏱ Comanda #' + num + ' limpa por inatividade (1 min)', 'warning');
-            }, IDLE_MS);
+                showToast('⏱ Comanda #' + num + ' limpa por inatividade (3 min)', 'warning');
+            }, IDLE_MS_BALANCA);
         }
 
         function cancelIdleTimer() {
