@@ -10152,6 +10152,18 @@ function carregarComanda() {
                 state.itens[itemEmEdicao].foto          = fotoUrl;
                 state.itens[itemEmEdicao].codigo_barras = codigoBarras;
                 state.itens[itemEmEdicao].disponivelOnline = disponivelOnline;
+                // Espelha em state.cardapioAdmin também — é essa a fonte que renderAdminItensComFiltro()
+                // usa quando já carregada (ver função), senão a tela de Itens só reflete a edição
+                // depois de sair e voltar (quando carregarCardapioAdmin() busca tudo de novo do GAS).
+                if (state.cardapioAdmin[itemEmEdicao]) {
+                    state.cardapioAdmin[itemEmEdicao].nome = nome;
+                    state.cardapioAdmin[itemEmEdicao].tipo = tipo;
+                    state.cardapioAdmin[itemEmEdicao].preco = preco;
+                    state.cardapioAdmin[itemEmEdicao].categoria = categoria;
+                    state.cardapioAdmin[itemEmEdicao].foto = fotoUrl;
+                    state.cardapioAdmin[itemEmEdicao].codigo_barras = codigoBarras;
+                    state.cardapioAdmin[itemEmEdicao].disponivelOnline = disponivelOnline;
+                }
                 saveStorage();
                 sheetsAPI('atualizarItemCardapio', { codigo: itemEmEdicao, nome, tipo, preco, categoria, codigo_barras: codigoBarras, disponivel_online: disponivelOnline });
                 showToast(`Item #${itemEmEdicao} atualizado`, 'success');
@@ -10165,6 +10177,19 @@ function carregarComanda() {
                     disponivelOnline,
                     dataCriacao: new Date().toISOString()
                 };
+                // Mesmo motivo do branch de edição acima — só se o cache já estiver carregado
+                // (se ainda não foi carregado, o fallback para state.itens em renderAdminItensComFiltro já resolve)
+                if (Object.keys(state.cardapioAdmin).length > 0) {
+                    state.cardapioAdmin[codigo] = {
+                        nome, tipo, preco, categoria,
+                        icone: '🍽️',
+                        foto: fotoUrl,
+                        codigo_barras: codigoBarras,
+                        disponivelOnline,
+                        ativo: true,
+                        controla_estoque: false
+                    };
+                }
                 saveStorage();
                 sheetsAPI('novoItemCardapio', { codigo, nome, tipo, preco, categoria, codigo_barras: codigoBarras, disponivel_online: disponivelOnline });
                 showToast(`Item #${codigo} cadastrado`, 'success');
@@ -11349,6 +11374,11 @@ var itens = comanda.itens || [];
                 this._MAX_DELTA        = 5;       // gramas
                 this._modalInterval    = null;
                 this._manualOverride   = false;   // true quando usuário digita manualmente
+                // Watchdog de leitura ausente (ver _checkStale): a balança Urano, quando o prato
+                // é retirado, fica em tara negativa e não transmite peso reconhecível — sem isso,
+                // _lastStableWeight ficaria congelado no peso do cliente anterior indefinidamente.
+                this._lastReadingTs    = null;
+                this._STALE_TIMEOUT_MS = 1200; // ~2-3 ciclos de ENQ (500ms) sem leitura = balança vazia
             }
 
             init(provider) {
@@ -11375,6 +11405,7 @@ var itens = comanda.itens || [];
 
             _onReading(grams) {
                 const now = Date.now();
+                this._lastReadingTs = now; // marca que recebemos uma leitura válida agora (ver _checkStale)
                 this._lastWeight = grams;
 
                 // Janela deslizante de 2000ms (cobre 1+ leituras em polling 1.5s)
@@ -11411,8 +11442,28 @@ var itens = comanda.itens || [];
                 }
             }
 
+            // Zera o peso "estável" quando nenhuma leitura chega há _STALE_TIMEOUT_MS.
+            // Motivo: ao retirar o prato, a balança fica em tara negativa e não transmite peso
+            // reconhecível (_parseLine só repassa gramas >= 0) — sem este watchdog, o peso do
+            // cliente anterior ficaria congelado até o próximo prato ser pesado, com risco real
+            // de ser lançado por engano na comanda do cliente seguinte durante esse intervalo.
+            // Roda a cada 300ms via _syncModal, independente da modal estar aberta ou não —
+            // assim _lastStableWeight já está correto (zerado) no instante em que a próxima
+            // modal abrir e chamar fillModal().
+            _checkStale() {
+                if (this._lastReadingTs === null) return; // nunca recebeu leitura — nada a zerar
+                const now = Date.now();
+                if (now - this._lastReadingTs > this._STALE_TIMEOUT_MS && this._lastStableWeight !== 0) {
+                    this._lastStableWeight = 0;
+                    this._lastStableTs     = now;
+                    this._window           = []; // limpa a janela — próxima leitura real começa do zero
+                    console.log('[WeightService] ⏱️ Sem leitura há ' + this._STALE_TIMEOUT_MS + 'ms — peso zerado (prato retirado / balança em tara negativa)');
+                }
+            }
+
             // Injeta peso na modal se estiver aberta e o campo não estiver focado
             _syncModal() {
+                this._checkStale();
                 const modal = document.getElementById('modalBuffetQuilo');
                 if (!modal || modal.style.display === 'none') return;
                 if (this._lastStableWeight === null) return;
