@@ -1778,9 +1778,10 @@
                                 <input type="text" id="lancBuscaInput"
                                        placeholder="🔍 Buscar por nome ou código..."
                                        autocomplete="off"
+                                       disabled
                                        onclick="vkShow('lancBuscaInput','alpha')"
                                        oninput="lancBuscaItem=this.value.toLowerCase().trim(); filtrarPorCategoria(state.categoriaAtual); document.getElementById('lancBuscaClear').style.display=this.value?'flex':'none';"
-                                       style="width:100%; padding:6px 30px 6px 10px; border-radius:6px; border:2px solid var(--border); font-size:11px; font-family:inherit; background:var(--bg-white); color:var(--text-dark); box-sizing:border-box;">
+                                       style="width:100%; padding:6px 30px 6px 10px; border-radius:6px; border:2px solid var(--border); font-size:11px; font-family:inherit; background:var(--bg-white); color:var(--text-dark); box-sizing:border-box; opacity:0.45; cursor:not-allowed;">
                                 <button id="lancBuscaClear"
                                         onclick="document.getElementById('lancBuscaInput').value=''; lancBuscaItem=''; filtrarPorCategoria('Todos'); this.style.display='none'; vkHide();"
                                         style="display:none; position:absolute; right:0; top:0; bottom:0; background:var(--bg-light); border:none; border-left:1px solid var(--border); border-radius:0 6px 6px 0; cursor:pointer; color:var(--gray); font-size:11px; font-weight:bold; padding:0 10px; align-items:center; justify-content:center; line-height:1; white-space:nowrap;">Limpar</button>
@@ -3104,8 +3105,10 @@
                         Object.keys(state.itens).forEach(k => delete state.itens[k]);
                         Object.assign(state.itens, novoItens);
                         console.log('[Sheets] ✅ Cardápio:', Object.keys(novoItens).length, 'itens');
-                        // Re-renderizar Admin > Itens se estiver visível (evita tela stale do localStorage)
-                        if (document.getElementById('adminItensList')) {
+                        // Re-renderizar Admin > Itens SOMENTE se a tela Admin estiver visível
+                        // (adminItensList existe no DOM mesmo quando oculto — checar tela ativa)
+                        const _adminScreen = document.getElementById('screen-admin');
+                        if (_adminScreen && _adminScreen.classList.contains('active')) {
                             gerarFiltrosCategorias();
                             renderAdminItensComFiltro();
                         }
@@ -3887,6 +3890,11 @@
                 if (_bcA) _bcA.style.display = 'none';
                 gerarFiltrosCategorias(); // chama gerarFiltrosRapidos internamente
                 renderAdminItensComFiltro();
+                // Sempre recarregar cardápio completo (ativos + inativos) ao entrar no Admin.
+                // Sem isso, state.cardapioAdmin fica vazio quando o usuário chega via nav
+                // (sem clicar no botão da aba), e renderAdminItensComFiltro cai no fallback
+                // state.itens (só ativos) — itens inativos somem e não podem ser reativados.
+                carregarCardapioAdmin();
                 // Por último: verificar permissões por perfil (Gerente vai p/ Carnes, etc.)
                 atualizarVisibilidadeAbasAdmin();
             } else {
@@ -4900,7 +4908,7 @@
 
             // Validação mínima: campo1 obrigatório em todos os tipos
             if (!payload.campo1) {
-                showToast('⚠️ Preencha todos os campos obrigatórios');
+                showToast('⚠️ Preencha todos os campos obrigatórios', 'warning');
                 return;
             }
 
@@ -5491,6 +5499,9 @@ function carregarComanda() {
                 return;
             }
 
+            // Blur imediato e síncrono — cobre todos os caminhos (Em Preparo, Aberta, Paga, etc.)
+            document.getElementById('lançarComandaNum').blur();
+
             const dataAtual = new Date().toISOString().split('T')[0];
             const numeroNorm = String(parseInt(numero, 10));
             const key = `${numeroNorm}-${dataAtual}`;
@@ -5551,7 +5562,11 @@ function carregarComanda() {
                 // Renderizar itens (sem edição)
                 renderizarListaLançada();
                 renderizarItensDisponiveis();
-                
+
+                // Habilitar busca do cardápio
+                const _bi = document.getElementById('lancBuscaInput');
+                if (_bi) { _bi.disabled = false; _bi.style.opacity = ''; _bi.style.cursor = ''; }
+
                 // Ocultar teclado mobile após carregar consulta
                 document.getElementById('lançarComandaNum').blur();
                 showToast('Comanda em modo consulta (paga)', 'info');
@@ -5589,6 +5604,11 @@ function carregarComanda() {
                 // Renderizar itens
                 renderizarListaLançada();
                 renderizarItensDisponiveis();
+
+                // Habilitar busca do cardápio
+                const _bi2 = document.getElementById('lancBuscaInput');
+                if (_bi2) { _bi2.disabled = false; _bi2.style.opacity = ''; _bi2.style.cursor = ''; }
+
                 resetIdleTimer();
                 showToast(
                     ehOnlineLancar ? '🌐 Pedido online - continue lançando' : '⚡ Comanda com Preparo p/ mesa - continue lançando',
@@ -5632,6 +5652,11 @@ function carregarComanda() {
             // Renderizar itens
             renderizarListaLançada();
             renderizarItensDisponiveis();
+
+            // Habilitar busca do cardápio
+            const _bi3 = document.getElementById('lancBuscaInput');
+            if (_bi3) { _bi3.disabled = false; _bi3.style.opacity = ''; _bi3.style.cursor = ''; }
+
             resetIdleTimer();
 
             // Focus no código (ignorado em modo-mobile)
@@ -5677,10 +5702,10 @@ function carregarComanda() {
             const abaContainer = document.getElementById('abaCategorias');
             if (abaContainer) abaContainer.innerHTML = '';
 
-            // Limpar campo de busca do cardápio
+            // Limpar campo de busca do cardápio e desabilitar (sem comanda ativa)
             lancBuscaItem = '';
             const buscaInput = document.getElementById('lancBuscaInput');
-            if (buscaInput) buscaInput.value = '';
+            if (buscaInput) { buscaInput.value = ''; buscaInput.disabled = true; buscaInput.style.opacity = '0.45'; buscaInput.style.cursor = 'not-allowed'; }
             const buscaClear = document.getElementById('lancBuscaClear');
             if (buscaClear) buscaClear.style.display = 'none';
 
@@ -5726,6 +5751,8 @@ function carregarComanda() {
             document.getElementById('lançarComandaNum').value = numeroNorm;
             const inputCodigo = document.getElementById('lançarCodigoItem');
             if (inputCodigo) { inputCodigo.disabled = false; inputCodigo.style.opacity = '1'; }
+            const _bi4 = document.getElementById('lancBuscaInput');
+            if (_bi4) { _bi4.disabled = false; _bi4.style.opacity = ''; _bi4.style.cursor = ''; }
             atualizarVisibilidadeBotaoAtalho();
             renderizarListaLançada();
             renderizarItensDisponiveis();
@@ -5760,6 +5787,11 @@ function carregarComanda() {
             }
             // Balança Touch: usuário usa scanner ou toca nos cards — oculta VK e não dá foco
             if (state.perfil === 'Balança Touch') { vkHide(); return; }
+            // Desktop Admin/Atendente/Caixa: nenhum campo ativo após criar/carregar comanda
+            if (['Admin', 'Atendente', 'Caixa'].includes(state.perfil)) {
+                if (document.activeElement) document.activeElement.blur();
+                return;
+            }
             const el = document.getElementById('lançarCodigoItem');
             if (el) el.focus();
             vkShow('lançarCodigoItem', 'numeric');
@@ -11643,7 +11675,7 @@ var itens = comanda.itens || [];
             if (!weightService) return;
             // Web Serial não disponível (mobile, Firefox, etc.)
             if (!navigator.serial) {
-                showToast('⚠️ Web Serial não suportado neste navegador');
+                showToast('⚠️ Web Serial não suportado neste navegador', 'warning');
                 return;
             }
             const provider = weightService._provider;
@@ -11651,10 +11683,10 @@ var itens = comanda.itens || [];
 
             if (provider instanceof SerialWeightProvider) {
                 // Guard: evita chamar requestPort() simultaneamente
-                if (provider._requestPortPending) { showToast('⏳ Aguarde...'); return; }
+                if (provider._requestPortPending) { showToast('⏳ Aguarde...', 'info'); return; }
                 // Guard: evita race com auto-connect em andamento
                 // (resetar _connecting durante port.open() causa corrupção de estado)
-                if (provider._connecting) { showToast('⏳ Conectando, aguarde...'); return; }
+                if (provider._connecting) { showToast('⏳ Conectando, aguarde...', 'info'); return; }
 
                 let port;
 
@@ -11710,7 +11742,7 @@ var itens = comanda.itens || [];
                     if (btn) btn.textContent = '⏳ ' + msg;
                 });
                 clearTimeout(timer);
-                showToast('✅ Balança conectada!');
+                showToast('✅ Balança conectada!', 'success');
             } catch(e) {
                 clearTimeout(timer);
                 showToast('❌ ' + (e.message || 'Erro ao conectar balança'));
@@ -11939,7 +11971,7 @@ var itens = comanda.itens || [];
                 selecionarComandaCheckout(key, comanda);
 
             } else {
-                showToast(`⚠️ Abra a tela Lançar ou Checkout para usar o leitor`);
+                showToast(`⚠️ Abra a tela Lançar ou Checkout para usar o leitor`, 'warning');
             }
         }
 
@@ -11988,11 +12020,11 @@ var itens = comanda.itens || [];
             if (telaAtiva !== 'lançar') return;
 
             if (!state.comandaAtual) {
-                showToast('Selecione uma comanda antes de bipar um item');
+                showToast('Selecione uma comanda antes de bipar um item', 'warning');
                 return;
             }
             if (state.modoLeitura) {
-                showToast('Modo consulta — edição desativada');
+                showToast('Modo consulta — edição desativada', 'warning');
                 return;
             }
 
@@ -12002,7 +12034,7 @@ var itens = comanda.itens || [];
             );
 
             if (!itemEntry) {
-                showToast(`Item não identificado: ${codigoBarras}`);
+                showToast(`Item não identificado: ${codigoBarras}`, 'warning');
                 return;
             }
 
@@ -12028,7 +12060,7 @@ var itens = comanda.itens || [];
                 atualizarTotalComanda(state.comandaAtual);
                 saveStorage();
                 renderizarListaLançada();
-                showToast(`✅ ${item.nome} lançado`);
+                showToast(`✅ ${item.nome} lançado`, 'success');
                 resetIdleTimer();
             } else {
                 // Marmita — abre o modal para seleção de carnes
