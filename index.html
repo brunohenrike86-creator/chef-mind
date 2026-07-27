@@ -10171,6 +10171,9 @@ function carregarComanda() {
             }
 
             if (btnSalvar) { btnSalvar.disabled = false; btnSalvar.textContent = 'Salvar'; }
+            // Já foi salvo — não há mais "alteração não salva" a descartar. Zera o snapshot
+            // ANTES de fecharModal() para não disparar à toa o aviso de "descartar alterações?".
+            _modalItemSnapshotInicial = null;
             fecharModal();
             gerarFiltrosCategorias();
             renderAdminItensComFiltro();
@@ -11800,9 +11803,10 @@ var itens = comanda.itens || [];
         }
 
         // ── LEITOR DE CÓDIGO DE BARRAS ───────────────────────────────────────
-        // Prefixo fixo nas comandas: CMD;{numero} (hardcoded — impresso nas comandas físicas).
-        // Se mudar, requer reimpressão das comandas. Configurabilidade aqui seria uma armadilha.
-        const COMANDA_BARCODE_PREFIX = 'CMD;';
+        // Prefixo fixo nas comandas: CMD;{numero} ou CMD-{numero} (hardcoded — impresso nas comandas físicas).
+        // Dois leitores em uso mandam separadores diferentes (";" vs "-") para o mesmo prefixo — aceitos ambos.
+        // Se mudar o prefixo em si (o "CMD"), requer reimpressão das comandas. Configurabilidade aqui seria uma armadilha.
+        const COMANDA_BARCODE_REGEX = /^CMD[;\-](\d+)$/i;
 
         // ── TECLADO VIRTUAL TOUCH ─────────────────────────────────────────────────────
         // Ativo apenas no perfil 'Balança Touch' (body.modo-balanca-touch).
@@ -11977,9 +11981,10 @@ var itens = comanda.itens || [];
 
         function _processBarcode(code) {
             console.log('[Barcode] Lido:', code);
-            // CMD-N (plaquinhas físicas com prefixo explícito)
-            if (code.startsWith(COMANDA_BARCODE_PREFIX)) {
-                const numero = parseInt(code.replace(COMANDA_BARCODE_PREFIX, ''), 10);
+            // CMD;N ou CMD-N (plaquinhas físicas com prefixo explícito — dois leitores, dois separadores)
+            const matchComanda = code.match(COMANDA_BARCODE_REGEX);
+            if (matchComanda) {
+                const numero = parseInt(matchComanda[1], 10);
                 if (!isNaN(numero) && numero > 0) { _onComandaScanned(numero); return; }
             }
             // Número puro (1–5 dígitos, com ou sem zeros à esquerda) → número de comanda
