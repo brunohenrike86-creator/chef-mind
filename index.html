@@ -1779,8 +1779,10 @@
                                        placeholder="🔍 Buscar por nome ou código..."
                                        autocomplete="off"
                                        disabled
+                                       enterkeyhint="search"
                                        onclick="vkShow('lancBuscaInput','alpha')"
                                        oninput="lancBuscaItem=this.value.toLowerCase().trim(); filtrarPorCategoria(state.categoriaAtual); document.getElementById('lancBuscaClear').style.display=this.value?'flex':'none';"
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault(); this.blur(); vkHide();}"
                                        style="width:100%; padding:6px 30px 6px 10px; border-radius:6px; border:2px solid var(--border); font-size:11px; font-family:inherit; background:var(--bg-white); color:var(--text-dark); box-sizing:border-box; opacity:0.45; cursor:not-allowed;">
                                 <button id="lancBuscaClear"
                                         onclick="document.getElementById('lancBuscaInput').value=''; lancBuscaItem=''; filtrarPorCategoria('Todos'); this.style.display='none'; vkHide();"
@@ -2153,7 +2155,9 @@
                         <div style="display:flex; gap:6px; align-items:center;">
                             <div style="position:relative; flex:1;">
                                 <input type="text" id="adminBuscaInput" placeholder="🔍 Buscar por nome, código ou EAN..." autocomplete="off"
+                                       enterkeyhint="search"
                                        oninput="adminFiltroBusca=this.value.toLowerCase().trim(); renderAdminItensComFiltro(); document.getElementById('adminBuscaClear').style.display=this.value?'flex':'none';"
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault(); this.blur();}"
                                        style="width:100%; padding:8px 30px 8px 10px; border-radius:6px; border:2px solid var(--border); font-size:12px; font-family:inherit; background:var(--bg-white); color:var(--text-dark); box-sizing:border-box;">
                                 <button id="adminBuscaClear" onclick="document.getElementById('adminBuscaInput').value=''; adminFiltroBusca=''; adminFiltroCategoria='Todos'; gerarFiltrosCategorias(); renderAdminItensComFiltro(); this.style.display='none'; document.getElementById('adminBuscaInput').focus();"
                                         style="display:none; position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--gray); font-size:14px; padding:0; width:20px; height:20px; align-items:center; justify-content:center; line-height:1;">✕</button>
@@ -2661,8 +2665,11 @@
     <!-- MODAL ITEM -->
     <div id="modalItem" class="modal">
         <div class="modal-content">
-            <div class="modal-header" id="modalTitle">Novo Item</div>
-            
+            <div class="modal-header" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                <span id="modalTitle">Novo Item</span>
+                <button type="button" onclick="fecharModal()" aria-label="Fechar" style="background:none; border:none; font-size:22px; color:var(--gray); cursor:pointer; padding:4px; line-height:1; flex-shrink:0; border-radius:50%;">✕</button>
+            </div>
+
             <div class="modal-field">
                 <div class="modal-label">Código</div>
                 <input type="text" id="modalCodigo" class="modal-input" disabled placeholder="Auto">
@@ -2763,8 +2770,11 @@
     <!-- MODAL SELEÇÃO DE CARNES PARA MARMITA -->
     <div id="modalMarnitaCarnes" class="modal">
         <div class="modal-content">
-            <div class="modal-header">🍛 Escolha as Carnes</div>
-            
+            <div class="modal-header" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                <span>🍛 Escolha as Carnes</span>
+                <button type="button" onclick="fecharModalMarnita()" aria-label="Fechar" style="background:none; border:none; font-size:22px; color:var(--gray); cursor:pointer; padding:4px; line-height:1; flex-shrink:0; border-radius:50%;">✕</button>
+            </div>
+
             <div id="marnitaCarne-container" style="padding: 8px 0;"></div>
 
             <!-- NOME DO CLIENTE -->
@@ -2792,10 +2802,12 @@
             <!-- ✅ CAMPO DE OBSERVAÇÕES -->
             <div style="padding: 10px 8px; background: var(--bg-light); border-radius: 4px; margin: 8px 0;">
                 <label style="font-size: 11px; font-weight: bold; color: var(--text-dark); display: block; margin-bottom: 4px;">📝 Observações (opcional)</label>
+                <div id="marnitaObsChips" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;"></div>
                 <textarea
                     id="marnitaObservacoes"
                     placeholder="Ex: Sem molho, bem temperado, etc..."
                     onclick="vkShow('marnitaObservacoes','alpha')"
+                    oninput="_marnitaSyncObsChips()"
                     style="width: 100%; height: 50px; padding: 6px; border: 1px solid var(--border); border-radius: 3px; font-family: inherit; font-size: 11px; resize: none;"
                 ></textarea>
             </div>
@@ -6012,9 +6024,45 @@ function carregarComanda() {
 
             // ✅ RESETAR TEXTAREA DE OBSERVAÇÕES
             document.getElementById('marnitaObservacoes').value = '';
+            _marnitaRenderObsChips();
 
             document.getElementById('modalMarnitaCarnes').classList.add('active');
             console.log('Modal aberta. Carnes do dia:', carnesDoDia);
+        }
+
+        // ===== Sugestões rápidas de observação (marmita) =====
+        const MARNITA_OBS_SUGESTOES = ['Sem Feijão', 'Sem Macarrão', 'Sem Arroz', 'Sem Salada', 'Bem Passado', 'Molho à Parte', 'Sem Pimenta', 'Pouco Sal'];
+
+        function _marnitaRenderObsChips() {
+            const container = document.getElementById('marnitaObsChips');
+            if (!container) return;
+            container.innerHTML = MARNITA_OBS_SUGESTOES.map(texto => `
+                <button type="button" class="obs-chip" data-obs="${texto}" onclick="_marnitaToggleObsSugestao('${texto.replace(/'/g, "\\'")}')"
+                        style="padding:6px 12px; border-radius:20px; border:2px solid var(--border); background:var(--bg-white); color:var(--text-dark); font-size:11px; font-weight:bold; cursor:pointer; white-space:nowrap;">${texto}</button>
+            `).join('');
+            _marnitaSyncObsChips();
+        }
+
+        function _marnitaToggleObsSugestao(texto) {
+            const ta = document.getElementById('marnitaObservacoes');
+            let partes = ta.value.split(',').map(s => s.trim()).filter(Boolean);
+            const idx = partes.findIndex(p => p.toLowerCase() === texto.toLowerCase());
+            if (idx >= 0) partes.splice(idx, 1);
+            else partes.push(texto);
+            ta.value = partes.join(', ');
+            _marnitaSyncObsChips();
+        }
+
+        function _marnitaSyncObsChips() {
+            const ta = document.getElementById('marnitaObservacoes');
+            if (!ta) return;
+            const partes = ta.value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+            document.querySelectorAll('#marnitaObsChips .obs-chip').forEach(btn => {
+                const ativo = partes.includes((btn.dataset.obs || '').toLowerCase());
+                btn.style.background = ativo ? 'var(--primary)' : 'var(--bg-white)';
+                btn.style.color = ativo ? 'white' : 'var(--text-dark)';
+                btn.style.borderColor = ativo ? 'var(--primary)' : 'var(--border)';
+            });
         }
         function fecharModalMarnita() {
             document.getElementById('modalMarnitaCarnes').classList.remove('active');
@@ -9889,6 +9937,19 @@ function carregarComanda() {
 
         // ========== CONTROLE MODAL ==========
         let itemEmEdicao = null;
+        let _modalItemSnapshotInicial = null;
+
+        function _modalItemSnapshotAtual() {
+            return JSON.stringify({
+                nome: document.getElementById('modalNome').value,
+                tipo: document.getElementById('modalTipo').value,
+                preco: document.getElementById('modalPreco').value,
+                categoria: document.getElementById('modalCategoria').value,
+                codigoBarras: document.getElementById('modalCodigoBarras').value,
+                disponivelOnline: document.getElementById('modalDisponivelOnline').checked,
+                foto: _fotoAtual || null
+            });
+        }
 
         // ========== FOTO DO ITEM ==========
         let _fotoAtual = null;
@@ -9957,6 +10018,7 @@ function carregarComanda() {
             _resetFotoUI();
             document.getElementById('modalItem').classList.add('active');
             setTimeout(() => document.getElementById('modalNome').focus(), 100);
+            _modalItemSnapshotInicial = _modalItemSnapshotAtual();
         }
 
         function abrirModalEditarItem(codigo) {
@@ -9987,6 +10049,7 @@ function carregarComanda() {
 
             document.getElementById('modalItem').classList.add('active');
             document.getElementById('modalNome').focus();
+            _modalItemSnapshotInicial = _modalItemSnapshotAtual();
         }
 
         function selecionarTipo(tipo) {
@@ -9997,8 +10060,10 @@ function carregarComanda() {
             
             const precoUnit = document.getElementById('modalPrecoUnit');
             precoUnit.textContent = tipo === 'Gramas' ? '/kg' : 'un.';
-            
-            // Atualizar categoria automaticamente (sem sobrescrever se usuário já escolheu)
+
+            // Atualizar categoria automaticamente — SOMENTE em cadastro novo (mesma regra do listener de nome, linha ~4131)
+            // Em edição, a categoria já foi carregada com o valor salvo do item em abrirModalEditarItem() — nunca sobrescrever.
+            if (itemEmEdicao) return;
             const nome = document.getElementById('modalNome').value;
             if (nome) {
                 const cat = _normCat(categorizarItem(nome, tipo));
@@ -10006,9 +10071,21 @@ function carregarComanda() {
             }
         }
 
-        function fecharModal() {
+        async function fecharModal() {
+            // Se há alterações não salvas, confirma antes de descartar (X e Cancelar têm o mesmo comportamento)
+            if (_modalItemSnapshotInicial && _modalItemSnapshotAtual() !== _modalItemSnapshotInicial) {
+                const descartar = await confirmarAcao({
+                    icone: '⚠️',
+                    titulo: 'Descartar alterações?',
+                    mensagem: 'Você tem mudanças não salvas neste item. Se sair agora, elas serão perdidas.',
+                    textoConfirmar: 'Descartar',
+                    corPerigo: true
+                });
+                if (!descartar) return;
+            }
             document.getElementById('modalItem').classList.remove('active');
             itemEmEdicao = null;
+            _modalItemSnapshotInicial = null;
         }
 
         function fecharModalViz() {
