@@ -3071,14 +3071,25 @@
                         console.warn('[Sheets] idle_playlist com JSON inválido, rodízio ocioso desativado:', e);
                         state.idlePlaylist = [];
                     }
-                    // Injetar slides de clima e dica entre as telas informativas e os vídeos.
-                    // Verificado por CONTEÚDO (não por flag) porque o config é relido a cada poll
-                    // e reconstruiria a playlist sem os slides injetados se usássemos uma flag.
+                    // Injetar slide de abertura, telas informativas (Buffet antes de Marmitas,
+                    // a pedido do usuário), clima/câmbio/loteria e os 4 tipos de conteúdo entre
+                    // as telas informativas e os vídeos. Verificado por CONTEÚDO (não por flag)
+                    // porque o config é relido a cada poll e reconstruiria a playlist sem os
+                    // slides injetados se usássemos uma flag.
                     if (state.idlePlaylist.length > 0 && !state.idlePlaylist.some(s => s.tipo === 'clima')) {
-                        const _plScreens = state.idlePlaylist.filter(s => s.tipo === 'screen');
+                        const _plScreens = state.idlePlaylist.filter(s => s.tipo === 'screen')
+                            // Buffet antes de Marmitas — ordem fixa no código, independente de
+                            // como as duas telas estão configuradas na planilha (idle_playlist).
+                            .sort((a, b) => (a.valor === 'buffet_precos' ? 0 : 1) - (b.valor === 'buffet_precos' ? 0 : 1));
                         const _plVideos  = state.idlePlaylist.filter(s => s.tipo === 'video');
                         const _plOthers  = state.idlePlaylist.filter(s => s.tipo !== 'screen' && s.tipo !== 'video');
-                        state.idlePlaylist = [..._plScreens, {tipo:'clima'}, {tipo:'dica'}, ..._plVideos, ..._plOthers];
+                        state.idlePlaylist = [
+                            {tipo:'abertura'}, ..._plScreens,
+                            {tipo:'clima'}, {tipo:'cambio'}, {tipo:'loteria'},
+                            {tipo:'dica'}, {tipo:'receita'}, {tipo:'utilidade'}, {tipo:'curiosidade'}, {tipo:'entretenimento'},
+                            {tipo:'vida'}, {tipo:'receita_video'},
+                            ..._plVideos, ..._plOthers,
+                        ];
                     }
                     console.log('[Sheets] ✅ Config carregada');
                 }
@@ -6609,6 +6620,12 @@ function carregarComanda() {
 
         
         function selecionarComandaCheckout(key, comanda) {
+            // Distingue "selecionar uma comanda diferente" de "re-renderizar a mesma comanda
+            // já ativa" (chamado a cada poll de 3s via renderizarCheckout() → renderizarTelaAtual()).
+            // Sem essa distinção, um poll caindo entre o clique na forma de pagamento e o clique
+            // em Confirmar apagava a seleção silenciosamente (ver bloco de reset abaixo) — o
+            // operador via o botão "desselecionar" sozinho e o pagamento falhava com toast vermelho.
+            const mesmaComandaJaAtiva = (key === comandaCheckoutAtual);
             comandaCheckoutAtual = key;
             document.getElementById('checkout-panel-left').classList.add('comanda-ativa');
             const btnLimpar = document.getElementById('btnLimparCheckout');
@@ -6626,14 +6643,17 @@ function carregarComanda() {
                 }
             });
 
-            // ✅ RESETAR FORMA DE PAGAMENTO
-            formaPagamentoSelecionada = null;
-            document.querySelectorAll('.btnPagamento').forEach(btn => {
-                btn.style.background = 'white';
-                btn.style.borderColor = 'var(--border)';
-                btn.style.color = 'var(--text-dark)';
-            });
-            
+            // ✅ RESETAR FORMA DE PAGAMENTO — só ao trocar de comanda de verdade.
+            // Se for refresh da mesma comanda (poll), preserva a seleção em andamento.
+            if (!mesmaComandaJaAtiva) {
+                formaPagamentoSelecionada = null;
+                document.querySelectorAll('.btnPagamento').forEach(btn => {
+                    btn.style.background = 'white';
+                    btn.style.borderColor = 'var(--border)';
+                    btn.style.color = 'var(--text-dark)';
+                });
+            }
+
             document.getElementById('areaVazia').style.display = 'none';
             document.getElementById('areaDetalhes').style.display = 'flex';
             document.getElementById('areaPagamento').style.display = 'block';
@@ -6885,14 +6905,20 @@ function carregarComanda() {
                 document.getElementById('areaDetalhes').style.display = 'none';
                 document.getElementById('areaPagamento').style.display = 'none';
                 document.getElementById('areaVazia').style.display = 'flex';
-                
+
+                // Faltava esconder o botão laranja "Lançar Item" aqui — mesmo gap do cleanup
+                // de renderizarCheckout(), só que disparado no fluxo mais comum (pós-pagamento).
+                const _btnIrLancarPago = document.getElementById('btnIrLancar');
+                if (_btnIrLancarPago) _btnIrLancarPago.style.display = 'none';
+
                 const btnConf = document.getElementById('btnConfirmarPagamento');
                 if (btnConf) {
+                    btnConf.style.display = 'none';
                     btnConf.style.opacity = '0.5';
                     btnConf.style.pointerEvents = 'none';
                     btnConf.style.cursor = 'not-allowed';
                 }
-                
+
                 renderizarCheckout();
             }, 1500);
         }
@@ -7514,34 +7540,52 @@ function carregarComanda() {
         // tela, é so identidade visual no canto.
         const LOGO_RESTAURANTE_B64 = "data:image/jpeg;base64,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";
         let _idleDesde = null;       // timestamp de quando a fila ficou vazia, ou null
-        const IDLE_VIDEO_TIMEOUT_MS = 3 * 60 * 1000; // 3min — valor final de produção (era 20s em teste)
+        const IDLE_VIDEO_TIMEOUT_MS = 10 * 1000; // 10s — TEMPORÁRIO PARA TESTE (produção é 3min, ver Seção 11/8 do Knowledge — lembrar de reverter)
 
         // Estado do rodízio de slides ociosos (telas informativas + vídeo). Tudo em
         // escopo de módulo (Regra 16) — renderizarFullscreen() roda a cada 1s e não
         // pode reconstruir esse estado a cada chamada.
         let _idleRodizioAtivo = false;     // true enquanto o rodízio está rodando (overlay visível)
         let _idleSlideIndex = 0;           // índice do slide atual em state.idlePlaylist
+        // Dica/Receita/Utilidade/Curiosidade têm texto de verdade pra ler (título + 2-3
+        // frases, ~55-60 palavras) — feedback do usuário foi que 20s não davam tempo de
+        // ler com calma. 30s dá margem confortável sem virar uma espera longa demais numa
+        // tela que ainda assim é só uma entre várias no rodízio.
+        const IDLE_SLIDE_LEITURA_MS = 30 * 1000;
         let _idleSlideTimer = null;        // setTimeout dos slides tipo 'screen' (20s)
 
         // ── CLIMA (Open-Meteo, sem API key, CORS ok) ──
-        const _WEATHER_CITIES = [
-            { nome: 'Campina Grande do Sul', estado: 'PR', lat: -25.3006, lon: -49.0575 },
-            { nome: 'Curitiba',              estado: 'PR', lat: -25.4290, lon: -49.2671 },
-            { nome: 'São Paulo',             estado: 'SP', lat: -23.5505, lon: -46.6333 },
-            { nome: 'Brasília',              estado: 'DF', lat: -15.7801, lon: -47.9292 },
-            { nome: 'Salvador',              estado: 'BA', lat: -12.9714, lon: -38.5014 },
-        ];
+        // Redesign (Jul 2026, referência Bild Mídias): antes mostrava 5 cidades distantes ao
+        // mesmo tempo — bonito, mas pouco útil pro cliente do restaurante, que só se importa
+        // com o clima DAQUI. Agora foca só em Campina Grande do Sul, trocando "amplitude" por
+        // "profundidade": hoje detalhado + 3 próximos dias, igual ao padrão observado na foto
+        // de referência (tela "Previsão do Tempo" com uma cidade só).
+        const _WEATHER_CIDADE_LOCAL = { nome: 'Campina Grande do Sul', estado: 'PR', lat: -25.3006, lon: -49.0575 };
         const WEATHER_CACHE_MS = 30 * 60 * 1000; // 30 min
         let _weatherCache = {}; // nomeCidade → { data, fetchedAt }
 
-        // ── DICAS DE SAÚDE (GAS → conteudo_tela) ──
-        let _conteudoTela    = [];   // array de dicas carregadas do Sheets
-        let _conteudoIdx     = 0;   // qual dica mostrar na próxima exibição
+        // ── CÂMBIO (AwesomeAPI, sem API key, CORS ok) ──
+        const CAMBIO_CACHE_MS = 30 * 60 * 1000; // 30 min — cotação não precisa de mais frequência num kiosk de restaurante
+        let _cambioCache = null; // { data, fetchedAt }
+
+        // ── LOTERIA (Caixa, via proxy GAS getLoteria — evita risco de CORS direto do browser) ──
+        const LOTERIA_CACHE_MS = 60 * 60 * 1000; // 1h — resultado só muda após os sorteios (ter/qui/sáb à noite)
+        let _loteriaCache = null; // { data, fetchedAt }
+
+        // ── CONTEÚDO TELA: Dica de Saúde / Receita / Utilidade Pública / Curiosidade (GAS → conteudo_tela) ──
+        let _conteudoTela    = [];   // array com os 4 tipos misturados, carregado do Sheets
+        // Cada tipo tem seu PRÓPRIO ponteiro de rotação — antes era um único _conteudoIdx
+        // compartilhado entre os 4 tipos, então o slide "dica" (hoje 4 slides, um por tipo)
+        // podia mostrar 2x o mesmo tipo em sequência e demorar várias rodadas pra mostrar
+        // os outros. Ver pedido do usuário: "uma de cada tipo sempre em cada rodada".
+        let _conteudoIdxPorTipo = { dica: 0, receita: 0, utilidade: 0, curiosidade: 0, entretenimento: 0 };
         let _conteudoLoadedAt = 0;
         const CONTEUDO_CACHE_MS = 60 * 60 * 1000; // 1 hora
         let _idlePlayer = null;            // instância do YT.Player (criada uma vez, reaproveitada)
         let _idleVideoProgresso = {};      // videoId -> segundos já assistidos, pra retomar de onde parou
         let _ytApiCarregando = false;
+        let _receitaVideoIdAtual = null;   // videoId tocando agora via 'receita_video' (não tem `valor` fixo na playlist, ver _tocarVideoIdle)
+        let _videosReceitaIdx = 0;         // ponteiro round-robin da lista de vídeos do canal Allrecipes Brasil
 
         function abrirFullscreen() {
             const fsElement = document.getElementById('fullscreenPreparo');
@@ -7691,6 +7735,21 @@ function carregarComanda() {
             document.head.appendChild(script);
         }
 
+        // Slide de abertura do rodízio — só logo (grande) + tagline, sem o nome do
+        // restaurante escrito (removido a pedido do usuário — a logo já identifica).
+        // Ajustar a tagline aqui, sem precisar mexer em mais nada.
+        const ABERTURA_TAGLINE = 'Servindo desde 2017';
+        function _renderTelaAbertura() {
+            // Logo maior e sozinha (sem o nome do restaurante escrito por baixo — a pedido
+            // do usuário) + tagline com mais destaque.
+            return `
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:4vh; text-align:center;">
+                    <img src="${LOGO_RESTAURANTE_B64}" alt="" style="height:38vh; max-height:380px; border-radius:16px; box-shadow:0 8px 24px rgba(0,0,0,0.15);">
+                    <div style="font-size:clamp(26px, 4vh, 44px); font-weight:700; color:#888; letter-spacing:1px;">${ABERTURA_TAGLINE}</div>
+                </div>
+            `;
+        }
+
         // Telas informativas do rodízio — texto bem grande e direto (cliente lê de
         // longe, à distância de um balcão/salão, não de perto como num celular).
         function _renderTelaMarmitasCardapio() {
@@ -7721,6 +7780,7 @@ function carregarComanda() {
                     <div style="text-align:center; margin-top:1.5vh; flex-shrink:0;">
                         <div style="font-size:clamp(24px, 3.4vh, 42px); font-weight:900; color:var(--text-dark); margin-bottom:0.8vh;">🥩 Opções de carne para a marmita hoje</div>
                         <div style="font-size:clamp(26px, 3.8vh, 48px); font-weight:700; color:var(--primary-dark);">${carnesHoje.join(' • ')}</div>
+                        <div style="font-size:clamp(16px, 2.2vh, 26px); font-weight:600; color:#888; margin-top:0.6vh;">P: 1 opção de carne · M e G: 2 opções de carne</div>
                     </div>` : ''}
                 </div>
             `;
@@ -7751,6 +7811,9 @@ function carregarComanda() {
                             <div style="font-size:clamp(56px, 9vh, 110px); font-weight:900; color:var(--primary-dark);">R$ ${(quilo.preco || 0).toFixed(2)}</div>
                         </div>
                     </div>` : '<div style="font-size:clamp(24px, 3.5vh, 40px); text-align:center; color:#999;">Item de buffet por quilo (002) indisponível</div>'}
+                    <div style="text-align:center; flex-shrink:0; margin-top:1vh;">
+                        <div style="font-size:clamp(18px, 2.6vh, 30px); font-weight:700; color:#888;">🕐 Atendimento: 11h às 14h30 · Segunda a Sábado</div>
+                    </div>
                 </div>`;
         }
 
@@ -7764,7 +7827,10 @@ function carregarComanda() {
             if (playlist.length === 0) return; // nada configurado na planilha — não faz nada
             if (_idleRodizioAtivo) return; // já está rodando, não reinicia do zero
             _idleRodizioAtivo = true;
-            _idleSlideIndex = 0;
+            // Retoma do slide onde parou (não reinicia do zero a cada interrupção).
+            // Só corrige se a playlist mudou de tamanho enquanto estava parado
+            // (ex: config recarregada) e o índice antigo ficou inválido.
+            if (_idleSlideIndex >= playlist.length) _idleSlideIndex = 0;
             // Pré-carrega dicas de saúde para que o slide "dica" não seja pulado na primeira exibição
             _fetchConteudoTela();
             const overlay = document.getElementById('idleVideoOverlay');
@@ -7775,6 +7841,54 @@ function carregarComanda() {
             _mostrarSlideAtual();
         }
 
+        // Blindagem (Jul 2026, Regra 34): qualquer exceção dentro de um render de slide
+        // (síncrono ou dentro do .then() de um fetch) antes ESTOURAVA e podia deixar o
+        // rodízio travado pra sempre na tela anterior — o _idleSlideTimer do slide
+        // problemático nunca chegava a ser criado. Todo render passa por isto, que captura
+        // o erro, loga no console (única forma de diagnosticar sem acesso à internet real
+        // neste ambiente de dev) e devolve uma mensagem de fallback em vez de deixar a
+        // exceção subir e travar o rodízio. Movida para escopo de módulo (Regra 16) pra
+        // poder ser reaproveitada por _mostrarSlideComFetch() abaixo.
+        function _renderSlideSeguro(nomeSlide, fn) {
+            try { return fn(); }
+            catch (e) {
+                console.error(`[Rodízio] Erro ao renderizar slide '${nomeSlide}' — avançando mesmo assim:`, e);
+                return `<div style="width:100%;height:100%;background:#222;display:flex;align-items:center;justify-content:center;color:white;font-size:20px;font-family:sans-serif;opacity:0.7;">⚠️ Conteúdo indisponível</div>`;
+            }
+        }
+
+        // Slides que dependem de uma fonte externa (Clima, Câmbio, Loteria) tinham um bug:
+        // o timer de avanço (20s) começava a contar JUNTO com o início do fetch, não com o
+        // conteúdo já na tela — se a fonte demorasse mais que isso (visto na Loteria: GAS
+        // com cold start + 2 chamadas sequenciais à API da Caixa), o rodízio avançava pro
+        // próximo slide ANTES do resultado sequer aparecer, dando a impressão de "travou
+        // carregando". Esta função corrige isso: mostra o loading, corre contra um timeout
+        // de segurança (nunca trava o motor — Regra 34), e só começa a contar o tempo de
+        // EXIBIÇÃO depois que o conteúdo (ou o fallback de indisponível) já está na tela.
+        function _mostrarSlideComFetch(elScreen, elPlayer, nomeSlide, msgCarregando, fetchFn, renderFn) {
+            if (elPlayer) elPlayer.style.display = 'none';
+            if (!elScreen) { _idleSlideTimer = setTimeout(_avancarSlide, 0); return; }
+            elScreen.style.display = 'flex';
+            elScreen.innerHTML = msgCarregando;
+            let avancou = false;
+            const avancarUmaVez = () => {
+                if (avancou) return;
+                avancou = true;
+                _avancarSlide();
+            };
+            // Timeout de segurança — se a fonte externa não responder a tempo, avança mesmo
+            // assim em vez de deixar a tela presa em "Carregando..." (o que já aconteceu).
+            const timeoutSeguranca = setTimeout(avancarUmaVez, 12000);
+            fetchFn().then(dados => {
+                clearTimeout(timeoutSeguranca);
+                if (avancou) return; // já avançou pelo timeout de segurança enquanto o fetch corria
+                if (_idleRodizioAtivo && elScreen.style.display !== 'none') {
+                    elScreen.innerHTML = _renderSlideSeguro(nomeSlide, () => renderFn(dados));
+                    _idleSlideTimer = setTimeout(avancarUmaVez, 20000); // exibe o resultado por 20s antes de avançar
+                }
+            }).catch(e => console.error(`[Rodízio] ${nomeSlide} fetch rejeitou:`, e));
+        }
+
         function _mostrarSlideAtual() {
             const playlist = state.idlePlaylist || [];
             if (!_idleRodizioAtivo || playlist.length === 0) return;
@@ -7783,13 +7897,24 @@ function carregarComanda() {
             const elPlayer = document.getElementById('idlePlayerContainer');
             if (_idleSlideTimer) { clearTimeout(_idleSlideTimer); _idleSlideTimer = null; }
 
+            // ── SLIDE DE ABERTURA (logo + mensagem) ──
+            if (slide.tipo === 'abertura') {
+                if (elPlayer) elPlayer.style.display = 'none';
+                if (elScreen) {
+                    elScreen.style.display = 'flex';
+                    elScreen.innerHTML = _renderSlideSeguro('abertura', () => _renderTelaAbertura());
+                }
+                _idleSlideTimer = setTimeout(_avancarSlide, 20000);
+                return;
+            }
+
             if (!slide || slide.tipo === 'screen') {
                 if (elPlayer) elPlayer.style.display = 'none';
                 if (elScreen) {
                     elScreen.style.display = 'flex';
-                    elScreen.innerHTML = slide && slide.valor === 'buffet_precos'
+                    elScreen.innerHTML = _renderSlideSeguro('screen', () => slide && slide.valor === 'buffet_precos'
                         ? _renderTelaBuffetPrecos()
-                        : _renderTelaMarmitasCardapio(); // default também cobre 'marmitas_cardapio'
+                        : _renderTelaMarmitasCardapio()); // default também cobre 'marmitas_cardapio'
                 }
                 _idleSlideTimer = setTimeout(_avancarSlide, 20000);
                 return;
@@ -7797,43 +7922,101 @@ function carregarComanda() {
 
             // ── SLIDE CLIMA ──
             if (slide.tipo === 'clima') {
-                if (elPlayer) elPlayer.style.display = 'none';
-                if (elScreen) {
-                    elScreen.style.display = 'flex';
-                    // Mostra hora atual enquanto carrega (raramente vazio — cache 30min)
-                    elScreen.innerHTML = `<div style="width:100%;height:100%;background:linear-gradient(135deg,#0f2027,#2c5364);display:flex;align-items:center;justify-content:center;color:white;font-size:22px;font-family:sans-serif;opacity:0.7;">🌡️ Carregando previsão...</div>`;
-                    _fetchWeather().then(cidades => {
-                        if (_idleRodizioAtivo && elScreen.style.display !== 'none')
-                            elScreen.innerHTML = _renderTelaClimaSync(cidades);
-                    });
-                }
-                _idleSlideTimer = setTimeout(_avancarSlide, 20000);
+                _mostrarSlideComFetch(elScreen, elPlayer, 'clima',
+                    `<div style="width:100%;height:100%;background:linear-gradient(135deg,#0f2027,#2c5364);display:flex;align-items:center;justify-content:center;color:white;font-size:22px;font-family:sans-serif;opacity:0.7;">🌡️ Carregando previsão...</div>`,
+                    _fetchWeather, _renderTelaClimaSync);
                 return;
             }
 
-            // ── SLIDE DICA DE SAÚDE ──
-            if (slide.tipo === 'dica') {
+            // ── SLIDE CÂMBIO ──
+            if (slide.tipo === 'cambio') {
+                _mostrarSlideComFetch(elScreen, elPlayer, 'cambio',
+                    `<div style="width:100%;height:100%;background:linear-gradient(160deg,#1a2332,#2c3e50);display:flex;align-items:center;justify-content:center;color:white;font-size:22px;font-family:sans-serif;opacity:0.7;">💱 Carregando cotação...</div>`,
+                    _fetchCambio, _renderTelaCambio);
+                return;
+            }
+
+            // ── SLIDE LOTERIA ──
+            if (slide.tipo === 'loteria') {
+                _mostrarSlideComFetch(elScreen, elPlayer, 'loteria',
+                    `<div style="width:100%;height:100%;background:linear-gradient(160deg,#1a2332,#2c3e50);display:flex;align-items:center;justify-content:center;color:white;font-size:22px;font-family:sans-serif;opacity:0.7;">🎱 Carregando resultado...</div>`,
+                    _fetchLoteria, _renderTelaLoteria);
+                return;
+            }
+
+            // ── SLIDE REGISTROS DA VIDA (fotos bonitas via Unsplash) ──
+            if (slide.tipo === 'vida') {
+                _mostrarSlideComFetch(elScreen, elPlayer, 'vida',
+                    `<div style="width:100%;height:100%;background:linear-gradient(160deg,#8E44AD,#E74C3C);display:flex;align-items:center;justify-content:center;color:white;font-size:22px;font-family:sans-serif;opacity:0.7;">📸 Carregando foto...</div>`,
+                    _fetchRegistrosDaVida, _renderTelaRegistrosDaVida);
+                return;
+            }
+
+            // ── SLIDE RECEITA EM VÍDEO (Allrecipes Brasil, automático — sem curadoria manual) ──
+            // Diferente do 'video' comum (URL fixa vinda da planilha idle_playlist), aqui a URL
+            // não é conhecida de antemão — vem de uma lista de vídeos recentes do canal oficial,
+            // buscada com cache (ver _fetchVideosReceitas) e consumida em round-robin
+            // (_videosReceitaIdx), igual ao padrão já usado pros 4 tipos de conteúdo de texto.
+            if (slide.tipo === 'receita_video') {
+                if (elScreen) elScreen.style.display = 'none';
+                if (elPlayer) elPlayer.style.display = 'block';
+                _fetchVideosReceitas().then(videos => {
+                    if (!_idleRodizioAtivo) return; // comanda chegou enquanto buscava
+                    if (!videos || videos.length === 0) {
+                        _idleSlideTimer = setTimeout(_avancarSlide, 0); // canal indisponível/sem vídeos — pula
+                        return;
+                    }
+                    const idx = _videosReceitaIdx % videos.length;
+                    _videosReceitaIdx = idx + 1;
+                    _tocarVideoIdle('https://www.youtube.com/watch?v=' + videos[idx].videoId);
+                }).catch(e => {
+                    console.error('[Rodízio] _fetchVideosReceitas rejeitou:', e);
+                    _idleSlideTimer = setTimeout(_avancarSlide, 0);
+                });
+                return;
+            }
+
+            // ── SLIDES DE CONTEÚDO: Dica de Saúde / Receita / Utilidade Pública / Curiosidade ──
+            // Cada tipo agora é um slot PRÓPRIO na playlist (ver injeção em loadFromSheets),
+            // não um único slide genérico misturando os 4 — garante "uma de cada tipo em
+            // toda rodada" em vez de depender da sorte de um índice compartilhado.
+            if (CONTEUDO_TELA_LABELS.hasOwnProperty(slide.tipo)) {
                 if (elPlayer) elPlayer.style.display = 'none';
-                // Tenta atualizar dicas do servidor (assíncrono, sem bloquear)
-                _fetchConteudoTela();
-                if (_conteudoTela.length === 0) {
-                    // Ainda sem dicas — pula para próximo slide silenciosamente
-                    _avancarSlide();
+                // Tenta atualizar conteúdo do servidor (assíncrono, sem bloquear)
+                _fetchConteudoTela().catch(e => console.error('[Rodízio] _fetchConteudoTela rejeitou:', e));
+                const conteudo = _renderSlideSeguro(slide.tipo, () => _renderTelaDicaSaude(slide.tipo));
+                if (conteudo === null) {
+                    // Ainda sem conteúdo desse tipo — pula para próximo slide silenciosamente
+                    _idleSlideTimer = setTimeout(_avancarSlide, 0);
                     return;
                 }
                 if (elScreen) {
                     elScreen.style.display = 'flex';
-                    elScreen.innerHTML = _renderTelaDicaSaude();
+                    elScreen.innerHTML = conteudo;
                 }
-                _idleSlideTimer = setTimeout(_avancarSlide, 20000);
+                // Estes slides têm texto de verdade pra ler (título + 2-3 frases, ~55-60
+                // palavras) — diferente de Buffet/Marmitas/Abertura, que são só um preço ou
+                // uma logo pra bater o olho. 20s pareciam curtos pra ler com calma (feedback
+                // do usuário); IDLE_SLIDE_LEITURA_MS dá mais tempo só pra estes 4 tipos.
+                _idleSlideTimer = setTimeout(_avancarSlide, IDLE_SLIDE_LEITURA_MS);
                 return;
             }
 
-            // slide.tipo === 'video'
+            // slide.tipo === 'video' (URL manual, curada na planilha idle_playlist)
             if (elScreen) elScreen.style.display = 'none';
             if (elPlayer) elPlayer.style.display = 'block';
-            const videoId = _extrairYoutubeId(slide.valor);
-            if (!videoId) { _avancarSlide(); return; } // URL inválida na planilha — pula pro próximo
+            _tocarVideoIdle(slide.valor);
+        }
+
+        // Extraído do antigo branch inline de 'video' — agora reaproveitado também pelo
+        // 'receita_video' (Allrecipes Brasil, resolvido automaticamente via RSS), que só
+        // difere na origem da URL (planilha vs. round-robin do canal), não em como o vídeo
+        // é tocado. Guarda o videoId em _receitaVideoIdAtual pra _pararRodizioOcioso saber
+        // salvar o progresso mesmo quando o slide não tem `valor` fixo na playlist.
+        function _tocarVideoIdle(url) {
+            const videoId = _extrairYoutubeId(url);
+            if (!videoId) { _idleSlideTimer = setTimeout(_avancarSlide, 0); return; } // URL inválida/vazia — pula pro próximo
+            _receitaVideoIdAtual = videoId;
             const startSeconds = Math.floor(_idleVideoProgresso[videoId] || 0);
 
             _carregarYoutubeApiSeNecessario(() => {
@@ -7868,30 +8051,59 @@ function carregarComanda() {
             _mostrarSlideAtual();
         }
 
+        // Cabeçalho colorido + corpo claro — padrão visual usado por todas as telas de
+        // informação do kiosk (Clima, Câmbio, Loteria, Registros da Vida), inspirado nas fotos
+        // do Bild Mídias que o usuário trouxe como referência: uma faixa de cor de marca no
+        // topo (ícone + título) e o conteúdo em fundo claro abaixo — mais "feed de dados
+        // confiável", menos "pôster degradê escuro". Cada tipo mantém sua própria cor de
+        // cabeçalho (ver chamadas de cada _renderTelaX), o corpo é sempre passado pronto.
+        function _slideComCabecalho(corA, corB, icone, titulo, corpoHtml, corTextoCabecalho) {
+            corTextoCabecalho = corTextoCabecalho || 'white';
+            return `
+                <div style="display:flex; flex-direction:column; height:100%; width:100%; font-family:sans-serif; background:white; overflow:hidden;">
+                    <div style="background:linear-gradient(100deg, ${corA} 0%, ${corB} 100%); padding:clamp(14px,2.2vh,22px) clamp(20px,3vh,32px); display:flex; align-items:center; gap:clamp(10px,1.6vh,16px); flex-shrink:0; box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+                        <span style="font-size:clamp(24px,3.6vh,40px); line-height:1;">${icone}</span>
+                        <span style="font-size:clamp(20px,3vh,34px); font-weight:900; color:${corTextoCabecalho}; letter-spacing:0.5px; text-transform:uppercase;">${titulo}</span>
+                    </div>
+                    <div style="flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden;">
+                        ${corpoHtml}
+                    </div>
+                </div>`;
+        }
+
         // ── CLIMA — fetch com cache 30min ──
         async function _fetchWeather() {
             const now = Date.now();
-            const results = await Promise.all(_WEATHER_CITIES.map(async city => {
-                const cached = _weatherCache[city.nome];
-                if (cached && (now - cached.fetchedAt) < WEATHER_CACHE_MS) return cached.data;
-                try {
-                    const url = `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}` +
-                        `&current=temperature_2m,weathercode,apparent_temperature,relativehumidity_2m` +
-                        `&timezone=America%2FSao_Paulo`;
-                    const r = await fetch(url);
-                    const j = await r.json();
-                    const data = {
-                        nome: city.nome, estado: city.estado,
-                        temp:     Math.round(j.current.temperature_2m),
-                        sensacao: Math.round(j.current.apparent_temperature),
-                        umidade:  j.current.relativehumidity_2m,
-                        code:     j.current.weathercode,
-                    };
-                    _weatherCache[city.nome] = { data, fetchedAt: now };
-                    return data;
-                } catch(_) { return cached ? cached.data : null; }
-            }));
-            return results.filter(Boolean);
+            const city = _WEATHER_CIDADE_LOCAL;
+            const cached = _weatherCache[city.nome];
+            if (cached && (now - cached.fetchedAt) < WEATHER_CACHE_MS) return cached.data;
+            try {
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}` +
+                    `&current=temperature_2m,weathercode,apparent_temperature,relativehumidity_2m` +
+                    // forecast_days=4 → hoje (índice 0) + 3 próximos dias, pra dar a profundidade
+                    // que o usuário pediu depois de ver a referência (hoje/amanhã/próximos dias),
+                    // em vez da amplitude de 5 cidades distantes que tínhamos antes.
+                    `&daily=weathercode,temperature_2m_max,temperature_2m_min&forecast_days=4` +
+                    `&timezone=America%2FSao_Paulo`;
+                const r = await fetch(url);
+                const j = await r.json();
+                const dias = (j.daily && Array.isArray(j.daily.time)) ? j.daily.time.map((data, i) => ({
+                    data,
+                    code: j.daily.weathercode[i],
+                    max: Math.round(j.daily.temperature_2m_max[i]),
+                    min: Math.round(j.daily.temperature_2m_min[i]),
+                })) : [];
+                const data = {
+                    nome: city.nome, estado: city.estado,
+                    temp:     Math.round(j.current.temperature_2m),
+                    sensacao: Math.round(j.current.apparent_temperature),
+                    umidade:  j.current.relativehumidity_2m,
+                    code:     j.current.weathercode,
+                    dias, // dias[0] = hoje, dias[1..3] = próximos dias
+                };
+                _weatherCache[city.nome] = { data, fetchedAt: now };
+                return data;
+            } catch(_) { return cached ? cached.data : null; }
         }
 
         function _weatherIcon(code) {
@@ -7905,46 +8117,320 @@ function carregarComanda() {
             return                        { i: '⛈️',  d: 'Tempestade' };
         }
 
-        function _renderTelaClimaSync(cidades) {
-            const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            const data = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-            const cards = cidades.map(c => {
-                const { i, d } = _weatherIcon(c.code);
-                return `<div style="background:rgba(255,255,255,0.12);backdrop-filter:blur(8px);border-radius:16px;padding:20px 16px;text-align:center;border:1px solid rgba(255,255,255,0.2);">
-                    <div style="font-size:12px;font-weight:700;opacity:0.75;text-transform:uppercase;letter-spacing:1px;line-height:1.3;">${c.nome}<br>${c.estado}</div>
-                    <div style="font-size:48px;margin:10px 0;">${i}</div>
-                    <div style="font-size:38px;font-weight:800;line-height:1;">${c.temp}°C</div>
-                    <div style="font-size:12px;opacity:0.65;margin-top:6px;">${d}</div>
-                    <div style="font-size:11px;opacity:0.5;margin-top:3px;">Sensação ${c.sensacao}° · ${c.umidade}% umidade</div>
+        // Redesign (Jul 2026, referência Bild Mídias): antes eram 5 cards lado a lado, cada um
+        // com sua própria cor de fundo (uma cidade podia estar ensolarada e outra chuvosa ao
+        // mesmo tempo). Com uma cidade só, isso deixa de fazer sentido — agora usa o padrão
+        // "cabeçalho + corpo branco" (_slideComCabecalho) igual às outras telas de informação,
+        // com um cartão verde grande de "Hoje" e uma faixa com os 3 próximos dias ao lado,
+        // espelhando o layout da foto de referência (Hoje em destaque + previsão dos próximos dias).
+        function _renderTelaClimaSync(dados) {
+            if (!dados || !dados.dias || dados.dias.length === 0) {
+                console.warn('[Clima] Sem dados de previsão — provável falha de rede ao chamar Open-Meteo a partir deste dispositivo.');
+                return _slideComCabecalho('#2E86DE', '#54A0FF', '🌦️', 'Previsão do Tempo',
+                    `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#888;font-size:clamp(18px,2.6vh,26px);text-align:center;padding:4vh;">Previsão indisponível no momento<br><span style="font-size:0.7em;opacity:0.8;">Verifique a conexão de internet deste dispositivo</span></div>`);
+            }
+            const hoje = dados.dias[0];
+            const proximos = dados.dias.slice(1); // até 3 próximos dias
+            const { i: iconeHoje, d: descHoje } = _weatherIcon(hoje.code);
+            const cardHoje = `
+                <div style="background:linear-gradient(160deg,#43A047,#2E7D32); border-radius:20px; padding:clamp(20px,3vh,32px); display:flex; flex-direction:column; align-items:center; justify-content:center; color:white; min-width:26vh; gap:clamp(6px,1vh,10px); box-shadow:0 4px 14px rgba(0,0,0,0.2);">
+                    <div style="font-size:clamp(16px,2.2vh,22px); font-weight:800; text-transform:uppercase; letter-spacing:1px;">Hoje</div>
+                    <div style="font-size:clamp(40px,6.5vh,64px); line-height:1;">${iconeHoje}</div>
+                    <div style="font-size:clamp(36px,6vh,60px); font-weight:900; line-height:1;">${dados.temp}°</div>
+                    <div style="font-size:clamp(13px,1.8vh,17px); text-align:center; opacity:0.9;">${descHoje}</div>
+                    <div style="font-size:clamp(11px,1.5vh,14px); opacity:0.8;">Sensação ${dados.sensacao}° · ${dados.umidade}% umidade</div>
                 </div>`;
-            }).join('');
-            return `<div style="width:100%;height:100%;background:linear-gradient(135deg,#0f2027 0%,#203a43 50%,#2c5364 100%);display:flex;flex-direction:column;justify-content:center;align-items:center;padding:32px;box-sizing:border-box;color:white;font-family:sans-serif;">
-                <div style="text-align:center;margin-bottom:28px;">
-                    <div style="font-size:22px;font-weight:300;opacity:0.9;">${hora}</div>
-                    <div style="font-size:15px;opacity:0.55;text-transform:capitalize;margin-top:4px;">${data}</div>
-                </div>
-                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;width:100%;max-width:1140px;">${cards}</div>
-                <div style="margin-top:22px;font-size:11px;opacity:0.35;">Fonte: Open-Meteo · atualizado a cada 30 min</div>
-            </div>`;
+            const cardsProximos = proximos.map(dia => {
+                const { i } = _weatherIcon(dia.code);
+                const rotulo = new Date(dia.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+                return `
+                    <div style="flex:1; text-align:center; padding:clamp(8px,1.2vh,14px);">
+                        <div style="font-size:clamp(13px,1.8vh,17px); font-weight:700; color:#555; margin-bottom:4px; text-transform:capitalize;">${rotulo}</div>
+                        <div style="font-size:clamp(30px,4.6vh,46px); line-height:1;">${i}</div>
+                        <div style="font-size:clamp(16px,2.4vh,24px); font-weight:800; color:#1565C0; margin-top:4px;">${dia.max}°</div>
+                        <div style="font-size:clamp(12px,1.6vh,15px); color:#888;">${dia.min}°</div>
+                    </div>`;
+            }).join('<div style="width:1px;background:#ddd;"></div>');
+            const corpo = `
+                <div style="flex:1; display:flex; flex-direction:column; padding:clamp(16px,2.6vh,28px) clamp(20px,3vh,32px); gap:clamp(14px,2.2vh,22px); min-height:0;">
+                    <div style="font-size:clamp(20px,3vh,32px); font-weight:900; color:#333;">${dados.nome}</div>
+                    <div style="flex:1; display:flex; gap:clamp(16px,2.4vh,24px); min-height:0; align-items:stretch;">
+                        ${cardHoje}
+                        <div style="flex:1; background:#f4f8fc; border-radius:20px; display:flex; align-items:center; padding:0 clamp(8px,1.4vh,16px);">
+                            ${cardsProximos}
+                        </div>
+                    </div>
+                    <div style="font-size:clamp(10px,1.4vh,13px); color:#999; text-align:center;">Fonte: Open-Meteo · atualizado a cada 30 min</div>
+                </div>`;
+            return _slideComCabecalho('#2E86DE', '#54A0FF', '🌦️', 'Previsão do Tempo', corpo, 'white');
+        }
+
+        // ── CÂMBIO — fetch com cache 30min ──
+        async function _fetchCambio() {
+            const now = Date.now();
+            if (_cambioCache && (now - _cambioCache.fetchedAt) < CAMBIO_CACHE_MS) return _cambioCache.data;
+            try {
+                const r = await fetch('https://economia.awesomeapi.com.br/last/USD-BRL,EUR-BRL');
+                const j = await r.json();
+                const data = {
+                    usd: j.USDBRL ? { bid: parseFloat(j.USDBRL.bid), pctChange: parseFloat(j.USDBRL.pctChange) } : null,
+                    eur: j.EURBRL ? { bid: parseFloat(j.EURBRL.bid), pctChange: parseFloat(j.EURBRL.pctChange) } : null,
+                };
+                _cambioCache = { data, fetchedAt: now };
+                return data;
+            } catch (_) {
+                return _cambioCache ? _cambioCache.data : null; // API fora do ar — mantém último valor bom conhecido
+            }
+        }
+
+        function _renderTelaCambio(dados) {
+            // Redesign (Jul 2026, referência Bild Mídias): migrado pro padrão "cabeçalho +
+            // corpo branco" (_slideComCabecalho), o mesmo agora usado por Clima/Loteria/Registros
+            // da Vida — consistência visual entre todas as telas de informação do kiosk, em vez
+            // de cada uma ter seu próprio tratamento de fundo escuro isolado.
+            const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            if (!dados || (!dados.usd && !dados.eur)) {
+                return _slideComCabecalho('#1B4F72', '#2E86DE', '💱', 'Câmbio',
+                    `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#888;font-size:clamp(18px,2.6vh,26px);">Cotação indisponível no momento</div>`);
+            }
+            const cartao = (label, nomeCompleto, icone, corA, corB, info) => {
+                if (!info) return '';
+                const alta = info.pctChange >= 0;
+                const cor = alta ? '#2ECC71' : '#E74C3C';
+                const seta = alta ? '▲' : '▼';
+                return `
+                    <div style="display:flex;flex-direction:column;align-items:center;background:linear-gradient(160deg,${corA} 0%,${corB} 100%);border-radius:24px;padding:clamp(20px,3.4vh,36px) clamp(24px,4.4vh,48px);min-width:26vh;box-shadow:0 4px 14px rgba(0,0,0,0.2);">
+                        <div style="font-size:clamp(30px,4.6vh,54px);line-height:1;">${icone}</div>
+                        <div style="font-size:clamp(15px,2vh,20px);font-weight:700;color:rgba(255,255,255,0.85);margin-top:clamp(6px,1vh,10px);text-transform:uppercase;letter-spacing:1px;">${label}</div>
+                        <div style="font-size:clamp(12px,1.6vh,15px);font-weight:600;color:rgba(255,255,255,0.6);margin-top:2px;">${nomeCompleto}</div>
+                        <div style="font-size:clamp(38px,6vh,72px);font-weight:900;color:white;margin-top:clamp(8px,1.4vh,14px);">R$ ${info.bid.toFixed(2)}</div>
+                        <div style="font-size:clamp(15px,2vh,20px);font-weight:800;color:${cor};margin-top:clamp(6px,1vh,10px);background:rgba(255,255,255,0.9);padding:3px 14px;border-radius:20px;">${seta} ${Math.abs(info.pctChange).toFixed(2)}% hoje</div>
+                    </div>`;
+            };
+            const corpo = `
+                <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:clamp(18px,2.8vh,28px); padding:clamp(16px,2.6vh,28px);">
+                    <div style="font-size:clamp(14px,1.9vh,18px); color:#777;">Cotação de venda · ${hora}</div>
+                    <div style="display:flex;gap:clamp(20px,3.5vh,36px);flex-wrap:wrap;justify-content:center;">
+                        ${cartao('Dólar', 'Estados Unidos', '🇺🇸', '#1B4F72', '#2E86DE', dados.usd)}
+                        ${cartao('Euro', 'União Europeia', '🇪🇺', '#243B6E', '#3949AB', dados.eur)}
+                    </div>
+                    <div style="font-size:clamp(10px,1.4vh,13px); color:#999;">Fonte: AwesomeAPI · atualizado a cada 30 min</div>
+                </div>`;
+            return _slideComCabecalho('#1B4F72', '#2E86DE', '💱', 'Câmbio', corpo, 'white');
+        }
+
+        // ── LOTERIA — fetch com cache 1h (via proxy GAS, ver Seção 11 do Knowledge) ──
+        async function _fetchLoteria() {
+            const now = Date.now();
+            if (_loteriaCache && (now - _loteriaCache.fetchedAt) < LOTERIA_CACHE_MS) return _loteriaCache.data;
+            try {
+                const dados = await sheetsAPI('getLoteria');
+                _loteriaCache = { data: dados, fetchedAt: now };
+                return dados;
+            } catch (_) {
+                return _loteriaCache ? _loteriaCache.data : null; // GAS/API da Caixa fora do ar — mantém último valor bom conhecido
+            }
+        }
+
+        function _renderTelaLoteria(dados) {
+            // Redesign (Jul 2026, referência Bild Mídias): migrado pro padrão "cabeçalho + corpo
+            // branco" (_slideComCabecalho), igual às outras telas de informação. Cada jogo
+            // continua com seu cartão de cor própria (verde Mega-Sena, magenta Quina, azul
+            // Federal) — diferenciação clara entre os jogos — agora sobre fundo claro em vez de
+            // dark mode. Federal adicionado como 3º jogo (bilhetes premiados, não dezenas —
+            // ver nota em chef-mind-api.gs sobre os nomes de campo ainda não confirmados em produção).
+            if (!dados || (!dados.megasena && !dados.quina && !dados.federal)) {
+                return _slideComCabecalho('#1a2332', '#2c3e50', '🎱', 'Resultado da Loteria',
+                    `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#888;font-size:clamp(18px,2.6vh,26px);">Resultado indisponível no momento</div>`);
+            }
+            const formatBRL = v => (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+            const bloco = (nome, icone, corA, corB, jogo) => {
+                if (!jogo) return '';
+                const bolas = (jogo.dezenas || []).map(d => `
+                    <div style="width:clamp(30px,4.4vh,46px);height:clamp(30px,4.4vh,46px);border-radius:50%;background:rgba(255,255,255,0.95);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:clamp(14px,2vh,20px);color:${corB};box-shadow:0 3px 8px rgba(0,0,0,0.2);flex-shrink:0;">${d}</div>
+                `).join('');
+                return `
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:clamp(10px,1.5vh,14px);background:linear-gradient(160deg,${corA} 0%,${corB} 100%);border-radius:24px;padding:clamp(16px,2.6vh,26px) clamp(18px,3vh,30px);box-shadow:0 4px 14px rgba(0,0,0,0.2);">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="font-size:clamp(22px,3.2vh,34px);">${icone}</span>
+                            <div>
+                                <div style="font-size:clamp(17px,2.5vh,26px);font-weight:900;color:white;">${nome}</div>
+                                <div style="font-size:clamp(11px,1.5vh,13px);color:rgba(255,255,255,0.75);font-weight:600;">Concurso ${jogo.concurso}${jogo.data ? ' · ' + jogo.data : ''}</div>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:clamp(6px,1vh,10px);flex-wrap:wrap;justify-content:center;max-width:460px;">${bolas}</div>
+                        <div style="font-size:clamp(12px,1.7vh,16px);font-weight:700;color:white;text-align:center;background:rgba(0,0,0,0.2);padding:5px 14px;border-radius:14px;">
+                            ${jogo.acumulou
+                                ? `Acumulou! Estimativa: <span style="color:#FFD54F;">${formatBRL(jogo.valorAcumulado)}</span>`
+                                : 'Teve ganhador'}
+                        </div>
+                    </div>`;
+            };
+            const blocoFederal = (jogo) => {
+                if (!jogo || !jogo.bilhetes || jogo.bilhetes.length === 0) return '';
+                const linhas = jogo.bilhetes.map(b => `
+                    <div style="display:flex;justify-content:space-between;padding:clamp(4px,0.8vh,8px) clamp(10px,1.6vh,16px);background:rgba(255,255,255,0.12);border-radius:8px;">
+                        <span style="font-weight:700;">${b.posicao ? b.posicao + 'º prêmio' : ''}</span>
+                        <span style="font-weight:900;letter-spacing:1px;">${b.numero}</span>
+                    </div>`).join('');
+                return `
+                    <div style="display:flex;flex-direction:column;gap:clamp(6px,1vh,10px);background:linear-gradient(160deg,#1A3A6B 0%,#2E5FA3 100%);border-radius:24px;padding:clamp(16px,2.6vh,26px) clamp(18px,3vh,30px);box-shadow:0 4px 14px rgba(0,0,0,0.2);color:white;min-width:26vh;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="font-size:clamp(22px,3.2vh,34px);">🎟️</span>
+                            <div>
+                                <div style="font-size:clamp(17px,2.5vh,26px);font-weight:900;">Federal</div>
+                                <div style="font-size:clamp(11px,1.5vh,13px);opacity:0.75;font-weight:600;">Concurso ${jogo.concurso}${jogo.data ? ' · ' + jogo.data : ''}</div>
+                            </div>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:4px;font-size:clamp(12px,1.7vh,16px);">${linhas}</div>
+                    </div>`;
+            };
+            const corpo = `
+                <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:clamp(16px,2.4vh,24px); padding:clamp(16px,2.4vh,24px);">
+                    <div style="display:flex;gap:clamp(14px,2.2vh,22px);flex-wrap:wrap;justify-content:center;">
+                        ${bloco('Mega-Sena', '🍀', '#0B3D22', '#0D8A3E', dados.megasena)}
+                        ${bloco('Quina', '✨', '#3D0A52', '#8A05BE', dados.quina)}
+                        ${blocoFederal(dados.federal)}
+                    </div>
+                    <div style="font-size:clamp(10px,1.4vh,13px); color:#999;">Fonte: Caixa Econômica Federal</div>
+                </div>`;
+            return _slideComCabecalho('#1a2332', '#2c3e50', '🎱', 'Resultado da Loteria', corpo, 'white');
+        }
+
+        // ── REGISTROS DA VIDA — fotos bonitas do mundo via Unsplash (Jul 2026, referência Bild
+        // Mídias: um respiro de "bem-estar" no meio do rodízio). Diferente das Dicas/Receitas/
+        // Utilidade/Curiosidade, este slide NÃO depende do agente de conteúdo semanal — é
+        // puramente decorativo, busca uma foto aleatória direto do navegador a cada troca de
+        // slide, sem precisar de curadoria humana. Mesma chave de acesso do Unsplash já usada
+        // pelo agente (ver SKILL.md do agente de conteúdo), reaproveitada aqui client-side.
+        const UNSPLASH_ACCESS_KEY = 'x7idIyeBzXBbOoAfvgkDHpyumBqONeBjKlevYkvwvzI';
+        const REGISTROS_VIDA_QUERIES = ['nature landscape', 'ocean sunset', 'mountains', 'forest path', 'city architecture', 'travel destination', 'wildlife', 'flowers garden'];
+        const REGISTROS_VIDA_CACHE_MS = 60 * 60 * 1000; // 1h — cota gratuita do Unsplash é 50 req/hora, não dá pra buscar a cada troca de slide
+        let _registrosVidaCache = null; // { data, fetchedAt }
+
+        async function _fetchRegistrosDaVida() {
+            const now = Date.now();
+            if (_registrosVidaCache && (now - _registrosVidaCache.fetchedAt) < REGISTROS_VIDA_CACHE_MS) return _registrosVidaCache.data;
+            try {
+                const query = REGISTROS_VIDA_QUERIES[Math.floor(Math.random() * REGISTROS_VIDA_QUERIES.length)];
+                const r = await fetch(`https://api.unsplash.com/photos/random?query=${encodeURIComponent(query)}&orientation=landscape`, {
+                    headers: { Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}` }
+                });
+                const j = await r.json();
+                const data = {
+                    url:     j && j.urls ? j.urls.regular : null,
+                    credito: j && j.user ? j.user.name : '',
+                    link:    j && j.links ? j.links.html : '',
+                };
+                if (!data.url) throw new Error('sem imagem retornada pelo Unsplash');
+                _registrosVidaCache = { data, fetchedAt: now };
+                return data;
+            } catch (_) {
+                return _registrosVidaCache ? _registrosVidaCache.data : null; // Unsplash fora do ar/cota estourada — mantém última foto boa
+            }
+        }
+
+        function _renderTelaRegistrosDaVida(dados) {
+            if (!dados || !dados.url) {
+                return _slideComCabecalho('#8E44AD', '#E74C3C', '📸', 'Momentos que Inspiram',
+                    `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#888;font-size:clamp(18px,2.6vh,26px);">Sem foto disponível no momento</div>`);
+            }
+            const corpo = `
+                <div style="flex:1; position:relative; min-height:0; background:#000;">
+                    <img src="${dados.url}" style="width:100%;height:100%;object-fit:cover;display:block;">
+                    ${dados.credito ? `<div style="position:absolute; bottom:0; left:0; right:0; background:linear-gradient(0deg,rgba(0,0,0,0.7),transparent); color:white; padding:clamp(10px,1.8vh,20px) clamp(16px,2.4vh,24px) clamp(16px,2.2vh,20px); font-size:clamp(13px,1.8vh,17px);">📷 Foto de ${dados.credito} · Unsplash</div>` : ''}
+                </div>`;
+            return _slideComCabecalho('#8E44AD', '#E74C3C', '📸', 'Momentos que Inspiram', corpo, 'white');
+        }
+
+        // ── VÍDEOS DE RECEITA — canal oficial "Allrecipes Brasil" no YouTube, resolvido
+        // automaticamente via o feed RSS público do canal (proxy no GAS, ver getVideosReceitas
+        // em chef-mind-api.gs — mesmo motivo do proxy de Loteria: navegador não consegue buscar
+        // esse feed direto por CORS). Sem curadoria manual: assim que o canal publica vídeo
+        // novo, ele aparece na lista sozinho, e o round-robin (_videosReceitaIdx, ver
+        // _mostrarSlideAtual) vai consumindo a lista aos poucos a cada passagem do slide.
+        const VIDEOS_RECEITA_CACHE_MS = 24 * 60 * 60 * 1000; // 24h — canal não publica com frequência suficiente pra justificar checar mais rápido
+        let _videosReceitaCache = null; // { data, fetchedAt }
+
+        async function _fetchVideosReceitas() {
+            const now = Date.now();
+            if (_videosReceitaCache && (now - _videosReceitaCache.fetchedAt) < VIDEOS_RECEITA_CACHE_MS) return _videosReceitaCache.data;
+            try {
+                const resp = await sheetsAPI('getVideosReceitas');
+                const videos = (resp && resp.sucesso && Array.isArray(resp.videos)) ? resp.videos : [];
+                _videosReceitaCache = { data: videos, fetchedAt: now };
+                return videos;
+            } catch (_) {
+                return _videosReceitaCache ? _videosReceitaCache.data : []; // feed fora do ar — mantém última lista boa (ou vazia, se nunca buscou)
+            }
         }
 
         // ── DICAS — fetch com cache 1h ──
+        // Rótulo exibido no canto superior do slide, por tipo de conteúdo. O agente de
+        // conteúdo (scheduled task) grava um desses valores no campo `tipo`; qualquer tipo
+        // não mapeado aqui cai no rótulo genérico de "dica" — não quebra o slide.
+        const CONTEUDO_TELA_LABELS = {
+            dica:           '💚 Saúde & Alimentação',
+            receita:        '🍳 Receita Prática',
+            utilidade:      '📋 Utilidade Pública',
+            curiosidade:    '🌍 Curiosidades',
+            entretenimento: '🎭 Entretenimento',
+        };
+        // Quantos itens manter "no ar" no rodízio, no máximo, POR TIPO — o agente roda em
+        // lote semanal (5 por tipo) e a aba conteudo_tela nunca é limpa sozinha, então sem
+        // um teto o pool só cresce; itens de meses atrás continuariam aparecendo lado a lado
+        // com o conteúdo da semana atual, e não fazia sentido "voltar" a planilha inteira a
+        // cada rodízio. 15 por tipo = ~3 lotes semanais (3 semanas) antes de repetir o mais
+        // antigo — dá variedade real sem nunca disparar pra conteúdo muito velho.
+        const CONTEUDO_TELA_MAX_POOL_POR_TIPO = 15;
         async function _fetchConteudoTela() {
             const now = Date.now();
             if (_conteudoTela.length > 0 && (now - _conteudoLoadedAt) < CONTEUDO_CACHE_MS) return;
             try {
                 const dados = await sheetsAPI('getConteudoTela');
+                // Antes só aceitava tipo === 'dica' — com o agente de conteúdo agora gerando
+                // Receita/Utilidade Pública/Curiosidade também (mesma aba, mesmo endpoint),
+                // o frontend precisa exibir todos os tipos conhecidos, não só o primeiro.
                 if (Array.isArray(dados)) {
-                    _conteudoTela = dados.filter(d => d.tipo === 'dica');
+                    let itens = dados.filter(d => Object.prototype.hasOwnProperty.call(CONTEUDO_TELA_LABELS, d.tipo) || !d.tipo);
+                    // Mais recente primeiro — antes a ordem era a da planilha (mais antigo
+                    // primeiro), então conteúdo novo do agente podia levar dias pra aparecer,
+                    // já que o rodízio sempre começava pelo item mais velho (índice 0).
+                    itens.sort((a, b) => new Date(b.criado_em || 0) - new Date(a.criado_em || 0));
+                    // Dedup defensivo por (tipo+título) — protege contra duplicatas geradas por
+                    // retry acidental do agente (já aconteceu, ver Seção 7 do Knowledge).
+                    const vistos = new Set();
+                    itens = itens.filter(d => {
+                        const chave = (d.tipo || 'dica') + '|' + (d.titulo || '');
+                        if (vistos.has(chave)) return false;
+                        vistos.add(chave);
+                        return true;
+                    });
+                    // Teto POR TIPO (não global) — garante que todo tipo sempre tenha seu
+                    // próprio pool de itens recentes, mesmo que um tipo acumule mais conteúdo
+                    // que outro com o tempo.
+                    const contagemPorTipo = {};
+                    itens = itens.filter(d => {
+                        const tipo = d.tipo || 'dica';
+                        contagemPorTipo[tipo] = (contagemPorTipo[tipo] || 0) + 1;
+                        return contagemPorTipo[tipo] <= CONTEUDO_TELA_MAX_POOL_POR_TIPO;
+                    });
+                    _conteudoTela = itens;
                     _conteudoLoadedAt = now;
                 }
             } catch(_) { /* falha silenciosa — usa cache */ }
         }
 
-        function _renderTelaDicaSaude() {
-            if (_conteudoTela.length === 0) return null; // sem dicas — sinal para pular slide
-            const dica = _conteudoTela[_conteudoIdx % _conteudoTela.length];
-            _conteudoIdx++;
+        // Um slide por tipo (dica/receita/utilidade/curiosidade) — cada um com seu próprio
+        // ponteiro de rotação em _conteudoIdxPorTipo, pra garantir "uma de cada tipo sempre
+        // em cada rodada" em vez de um único slide genérico misturando os 4 tipos.
+        function _renderTelaDicaSaude(tipo) {
+            const itensDoTipo = _conteudoTela.filter(d => (d.tipo || 'dica') === tipo);
+            if (itensDoTipo.length === 0) return null; // sem conteúdo desse tipo — sinal para pular slide
+            const idx = _conteudoIdxPorTipo[tipo] || 0;
+            const dica = itensDoTipo[idx % itensDoTipo.length];
+            _conteudoIdxPorTipo[tipo] = idx + 1;
+            const rotulo = CONTEUDO_TELA_LABELS[dica.tipo] || CONTEUDO_TELA_LABELS.dica;
             const dataFonte = dica.fonte_data
                 ? new Date(dica.fonte_data + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })
                 : '';
@@ -7952,7 +8438,7 @@ function carregarComanda() {
                 <div style="position:absolute;inset:0;background:url('${dica.imagem_url}') center/cover no-repeat;"></div>
                 <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.93) 0%,rgba(0,0,0,0.55) 45%,rgba(0,0,0,0.1) 100%);"></div>
                 <div style="position:relative;z-index:1;padding:44px 52px;color:white;max-width:820px;">
-                    <div style="font-size:11px;font-weight:700;letter-spacing:2px;opacity:0.65;text-transform:uppercase;margin-bottom:14px;">💚 Saúde &amp; Alimentação</div>
+                    <div style="font-size:11px;font-weight:700;letter-spacing:2px;opacity:0.65;text-transform:uppercase;margin-bottom:14px;">${rotulo}</div>
                     <div style="font-size:34px;font-weight:800;line-height:1.2;margin-bottom:16px;">${dica.titulo}</div>
                     <div style="font-size:17px;line-height:1.65;opacity:0.88;margin-bottom:22px;">${dica.texto}</div>
                     <div style="font-size:12px;opacity:0.55;">
@@ -7973,8 +8459,11 @@ function carregarComanda() {
             if (_idleSlideTimer) { clearTimeout(_idleSlideTimer); _idleSlideTimer = null; }
             const playlist = state.idlePlaylist || [];
             const slideAtual = playlist[_idleSlideIndex];
-            if (slideAtual && slideAtual.tipo === 'video' && _idlePlayer && _idlePlayer.getCurrentTime) {
-                const videoId = _extrairYoutubeId(slideAtual.valor);
+            if (slideAtual && (slideAtual.tipo === 'video' || slideAtual.tipo === 'receita_video') && _idlePlayer && _idlePlayer.getCurrentTime) {
+                // 'video' tem URL fixa na planilha (slideAtual.valor); 'receita_video' é
+                // resolvido em tempo real (sem `valor`) — usa o videoId guardado por
+                // _tocarVideoIdle em _receitaVideoIdAtual pra não perder o progresso.
+                const videoId = slideAtual.tipo === 'video' ? _extrairYoutubeId(slideAtual.valor) : _receitaVideoIdAtual;
                 if (videoId) _idleVideoProgresso[videoId] = _idlePlayer.getCurrentTime();
                 _idlePlayer.stopVideo();
             }
@@ -10279,6 +10768,13 @@ function carregarComanda() {
                     document.getElementById('areaDetalhes').style.display = 'none';
                     document.getElementById('areaPagamento').style.display = 'none';
                     document.getElementById('areaVazia').style.display = 'flex';
+                    // Mesmo cleanup de limparCheckout() — faltava aqui, deixando o botão
+                    // laranja "Lançar Item" (e o de confirmar pagamento) visíveis mesmo
+                    // sem comanda ativa depois que a comanda selecionada era paga/encerrada.
+                    const _btnIrLancarClean = document.getElementById('btnIrLancar');
+                    if (_btnIrLancarClean) _btnIrLancarClean.style.display = 'none';
+                    const _btnConfirmarClean = document.getElementById('btnConfirmarPagamento');
+                    if (_btnConfirmarClean) _btnConfirmarClean.style.display = 'none';
                 }
             }
 
