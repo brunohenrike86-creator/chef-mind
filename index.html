@@ -11602,7 +11602,9 @@ var itens = comanda.itens || [];
         // Toda implementação deve expor:
         //   connect()         → Promise
         //   disconnect()      → void
-        //   getStatus()       → 'connected' | 'disconnected' | 'error'
+        //   getStatus()       → 'connected' | 'disconnected' | 'error' | 'sem_resposta'
+        //   ('sem_resposta' — só no SerialWeightProvider — porta abriu com sucesso mas
+        //   nenhum byte chegou dentro do timeout do watchdog; ver _handleNoResponse)
         //   onWeightUpdate(cb) → registra callback(gramas: number)
 
         // ── 1. MockWeightProvider ────────────────────────────
@@ -11844,6 +11846,16 @@ var itens = comanda.itens || [];
                 this._pollTimer      = null;
                 this._connecting     = false; // mutex — impede dois connect() simultâneos
                 this._reconnectTimer = null;  // handle do setTimeout de reconexão
+                // Watchdog "sem resposta" (ver _handleNoResponse): o bug real que motivou isso —
+                // trocar o cabo de entrada USB muda o número da porta COM no Windows (o adaptador
+                // CH340 não tem serial number fixo), e o Chrome pode reportar a porta antiga como
+                // aberta com sucesso mesmo sem nenhum dispositivo físico respondendo do outro
+                // lado. Sem essa checagem, status ficava 'connected' pra sempre mesmo com zero
+                // bytes reais chegando — só ENQ sendo enviado, nunca respondido.
+                this._lastRxTs        = null;
+                this._connectedAtTs   = null;
+                this._noResponseTimer = null;
+                this._RX_TIMEOUT_MS   = 8000; // ~16 ciclos de ENQ (500ms) sem 1 byte sequer — folga generosa
             }
 
             async connect(onStep) {
@@ -11901,6 +11913,11 @@ var itens = comanda.itens || [];
                     // Sempre inicia _readLoop — reader stale já foi cancelado acima se havia.
                     // Removido o check readable.locked que impedia start após re-login.
                     this._readLoop();
+                    // Rearma o watchdog "sem resposta" a cada connect() — cobre tanto a primeira
+                    // conexão quanto reconexões (manual ou automática via _scheduleReconnect).
+                    this._lastRxTs = null;
+                    this._connectedAtTs = Date.now();
+                    this._startNoResponseWatchdog();
                 } catch(e) {
                     this._status     = 'error';
                     this._connecting = false;
@@ -11930,6 +11947,44 @@ var itens = comanda.itens || [];
                 }, 500); // ENQ a cada 500ms (antes 1500ms) — reduz latência de pesagem no bufê
             }
 
+            // Roda a cada 2s enquanto status='connected'. Se nenhum byte chegou dentro de
+            // _RX_TIMEOUT_MS (nem RAW, nem parseado — qualquer byte já prova que o link está
+            // vivo), assume que a porta não corresponde mais a nenhum dispositivo físico real
+            // (caso confirmado: cabo trocado de entrada USB → Windows atribui outra porta COM,
+            // mas o Chrome mantém a autorização antiga "abrindo com sucesso" mesmo sem ninguém
+            // respondendo do outro lado) e aciona _handleNoResponse().
+            _startNoResponseWatchdog() {
+                clearInterval(this._noResponseTimer);
+                this._noResponseTimer = setInterval(() => this._checkNoResponse(), 2000);
+            }
+
+            _checkNoResponse() {
+                if (this._status !== 'connected' || !this._alive) return;
+                const baseline = this._lastRxTs || this._connectedAtTs || Date.now();
+                if (Date.now() - baseline > this._RX_TIMEOUT_MS) {
+                    this._handleNoResponse();
+                }
+            }
+
+            // Para o polling/leitura de uma porta que provou estar morta e sinaliza isso
+            // claramente pro operador (badge vermelho + texto específico no botão) em vez de
+            // deixar "conectado" mentindo indefinidamente. NÃO tenta reconectar sozinho aqui —
+            // a correção real (selecionar a porta certa) precisa de um clique do operador
+            // (user gesture, exigido pela Web Serial API pra abrir o seletor); ver
+            // conectarBalancaManual(), que reconhece o status 'sem_resposta' e força um
+            // seletor novo em vez de reusar essa mesma porta morta.
+            _handleNoResponse() {
+                this._debugLog('⚠️ Sem resposta há ' + Math.round(this._RX_TIMEOUT_MS / 1000) + 's — porta pode ter mudado (cabo trocado de entrada USB?)');
+                this._alive = false;
+                clearInterval(this._pollTimer); this._pollTimer = null;
+                clearInterval(this._noResponseTimer); this._noResponseTimer = null;
+                if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+                if (this._reader) { this._reader.cancel().catch(() => {}); }
+                this._status = 'sem_resposta';
+                _updateWeightStatusBadge && _updateWeightStatusBadge();
+                _atualizarBotaoConectarBalanca && _atualizarBotaoConectarBalanca();
+            }
+
             async _readLoop() {
                 if (!this._alive || !this._port || !this._port.readable) return;
                 const decoder = new TextDecoder('latin1');
@@ -11942,6 +11997,7 @@ var itens = comanda.itens || [];
                         const { value, done } = await reader.read();
                         if (done) { this._debugLog('stream done — reiniciando'); break; }
                         if (value && value.byteLength > 0) {
+                            this._lastRxTs = Date.now(); // prova de vida do link — zera o watchdog "sem resposta"
                             const text = decoder.decode(value, { stream: true });
                             this._debugLog('RX: ' + JSON.stringify(text));
                             this._processChunk(text);
@@ -11979,6 +12035,8 @@ var itens = comanda.itens || [];
                     // Limpa polling e fecha porta para limpar estado sujo
                     clearInterval(this._pollTimer);
                     this._pollTimer = null;
+                    clearInterval(this._noResponseTimer);
+                    this._noResponseTimer = null;
                     try { if (this._port) await this._port.close(); } catch(_) {}
                     try { if (this._port) await this._port.close(); } catch(_) {}
                     // _port ainda aponta para o mesmo objeto — open() funciona em porta fechada
@@ -12044,6 +12102,8 @@ var itens = comanda.itens || [];
                 this._status = 'disconnected';
                 clearInterval(this._pollTimer);
                 this._pollTimer = null;
+                clearInterval(this._noResponseTimer);
+                this._noResponseTimer = null;
                 if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
                 // Cancela o reader — _readLoop sai do while e chama releaseLock() no finally.
                 try { if (this._reader) await this._reader.cancel(); } catch(e) {}
@@ -12447,6 +12507,16 @@ var itens = comanda.itens || [];
                 badge.style.color      = '#d97706';
                 badge.style.borderColor = '#fde68a';
                 badge.textContent = '⚖️ Reconectando...';
+            } else if (st === 'sem_resposta') {
+                // Watchdog detectou porta "conectada" sem nenhum dado real chegando — badge
+                // vermelho e explícito, em vez de simplesmente sumir (que era o comportamento
+                // anterior pro status 'error', e escondia exatamente o problema que o usuário
+                // mais precisava ver).
+                badge.style.display    = 'block';
+                badge.style.background = '#fdecea';
+                badge.style.color      = '#c0392b';
+                badge.style.borderColor = '#f5b7b1';
+                badge.textContent = '⚠️ Balança sem resposta';
             } else {
                 badge.style.display = 'none';
             }
@@ -12469,6 +12539,13 @@ var itens = comanda.itens || [];
                 btn.style.background = '#fff8e1';
                 btn.style.color      = '#d97706';
                 btn.disabled = true;
+            } else if (st === 'sem_resposta') {
+                // Texto específico (não o genérico "Conectar Balança") pra deixar claro que
+                // clicar aqui vai abrir o seletor de porta de novo — ver conectarBalancaManual().
+                btn.textContent  = '⚠️ Sem resposta — selecionar porta';
+                btn.style.background = '#fdecea';
+                btn.style.color      = '#c0392b';
+                btn.disabled = false;
             } else {
                 btn.textContent  = '🔌 Conectar Balança';
                 btn.style.background = '';
@@ -12496,11 +12573,25 @@ var itens = comanda.itens || [];
 
                 let port;
 
+                // Se o watchdog marcou 'sem_resposta' (ver _handleNoResponse), a porta
+                // autorizada provavelmente não corresponde mais a nenhum dispositivo físico
+                // real (caso confirmado: cabo trocado de entrada USB → Windows atribui outra
+                // porta COM, mas o Chrome mantinha a autorização antiga "funcionando"). Reusar
+                // essa mesma porta de novo só repetiria o mesmo problema — força um seletor
+                // novo em vez disso. port.forget() (quando suportado) também limpa a
+                // autorização salva no Chrome, então o operador não precisa mais mexer
+                // manualmente em chrome://settings/content/serialPorts.
+                const forcarNovaSelecao = provider._status === 'sem_resposta';
+                if (forcarNovaSelecao && provider._port && typeof provider._port.forget === 'function') {
+                    try { await provider._port.forget(); } catch(e) { /* segue mesmo se falhar — o requestPort() abaixo funciona de qualquer forma */ }
+                }
+
                 // ESTRATÉGIA: reutiliza porta já autorizada (sem abrir picker do OS).
-                // Só chama requestPort() na primeira vez (sem porta autorizada ainda).
+                // Só chama requestPort() na primeira vez (sem porta autorizada ainda) — ou
+                // quando forcarNovaSelecao força a mesma lógica do "primeira vez".
                 // requestPort() escaneia portas COM via OS — sem cabo conectado pode
                 // travar o processo do Chrome inteiro, afetando outras abas também.
-                const existingPorts = await navigator.serial.getPorts();
+                const existingPorts = forcarNovaSelecao ? [] : await navigator.serial.getPorts();
                 if (existingPorts.length > 0) {
                     port = existingPorts[0]; // reusa porta autorizada sem dialog
                 } else {
@@ -12523,10 +12614,12 @@ var itens = comanda.itens || [];
                 }
 
                 // Desconecta conexão anterior se existir antes de trocar a porta
-                if (provider._status === 'connected' || provider._status === 'connecting') {
+                if (provider._status === 'connected' || provider._status === 'connecting' || provider._status === 'sem_resposta') {
                     provider._alive = false;
                     clearInterval(provider._pollTimer);
                     provider._pollTimer = null;
+                    clearInterval(provider._noResponseTimer);
+                    provider._noResponseTimer = null;
                     try { if (provider._reader) await provider._reader.cancel(); } catch(_) {}
                     await new Promise(r => setTimeout(r, 200));
                     try { if (provider._port) await provider._port.close(); } catch(_) {}
