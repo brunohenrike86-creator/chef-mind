@@ -1952,7 +1952,7 @@
                             ⚠️ Ao abrir o caixa, todas as comandas abertas serão resetadas automaticamente para iniciar o dia do zero.
                         </div>
 
-                        <button onclick="abrirCaixaDia()" style="width:100%; padding:18px; background:linear-gradient(135deg,#27AE60 0%,#1E8449 100%); color:white; border:none; border-radius:10px; font-size:18px; font-weight:bold; cursor:pointer; box-shadow:0 4px 12px rgba(39,174,96,0.4);">
+                        <button id="btnAbrirCaixaDia" onclick="abrirCaixaDia()" style="width:100%; padding:18px; background:linear-gradient(135deg,#27AE60 0%,#1E8449 100%); color:white; border:none; border-radius:10px; font-size:18px; font-weight:bold; cursor:pointer; box-shadow:0 4px 12px rgba(39,174,96,0.4);">
                             🟢 Abrir Caixa e Iniciar Dia
                         </button>
 
@@ -2702,7 +2702,7 @@
 
             <div class="modal-field">
                 <div class="modal-label">Nome do Item</div>
-                <input type="text" id="modalNome" class="modal-input" placeholder="Ex: Buffet Livre" autofocus>
+                <input type="text" id="modalNome" class="modal-input" placeholder="Ex: Buffet Livre">
             </div>
 
             <div class="modal-field">
@@ -6472,7 +6472,21 @@ function carregarComanda() {
         }
 
         function renderizarItensDisponiveis() {
-            
+            // Guarda defensiva (bug reportado pelo usuário): sem comanda carregada, essa lista
+            // não deveria mostrar nada — mas essa função pode ser chamada indiretamente sem
+            // esse contexto, por exemplo pelo refresh automático de cardápio a cada 60s
+            // (_processarCardapioRecebido, ver loadFromSheets) quando a tela Lançar já está
+            // marcada como 'active' mesmo sem uma comanda escolhida ainda (ex: logo após login,
+            // se Lançar for a tela padrão do perfil). Antes disso a função assumia que só era
+            // chamada com comanda ativa — verdade na maioria dos call sites, mas não em todos.
+            if (!state.comandaAtual || !state.comandas[state.comandaAtual]) {
+                const abaContainerVazio = document.getElementById('abaCategorias');
+                const listaVazia = document.getElementById('listaItensDisponiveis');
+                if (abaContainerVazio) abaContainerVazio.innerHTML = '';
+                if (listaVazia) listaVazia.innerHTML = '';
+                return;
+            }
+
             console.log('📦 renderizarItensDisponiveis chamado');
             console.log('state.itens:', state.itens);
             const porCategoria = {};
@@ -9196,6 +9210,16 @@ function carregarComanda() {
             });
             if (!okAbrir) return;
 
+            // Loading (feedback do usuário: depois do OK, a chamada demora um pouco e os botões
+            // da tela — inclusive esse mesmo botão — ficavam clicáveis, sem indicação de que já
+            // estava processando). Desabilita botão + input durante o processamento, e sempre
+            // restaura no finally (sucesso navega pra outra tela, mas erro/rede mantém o usuário
+            // aqui — precisa voltar a ficar clicável nesse caso).
+            const btnAbrir = document.getElementById('btnAbrirCaixaDia');
+            const trocoInput = document.getElementById('inputTrocoAbertura');
+            if (btnAbrir) { btnAbrir.disabled = true; btnAbrir.style.opacity = '0.6'; btnAbrir.style.cursor = 'not-allowed'; btnAbrir.textContent = '⏳ Abrindo caixa...'; }
+            if (trocoInput) trocoInput.disabled = true;
+
             showToast('⏳ Abrindo caixa...', 'info');
             try {
                 const res = await sheetsAPI('abrirCaixa', {
@@ -9233,6 +9257,12 @@ function carregarComanda() {
                 // Erro de rede: sincroniza estado real para não ficar preso em tela errada
                 showToast('Erro de conexão ao abrir caixa', 'error');
                 _sincronizarEstadoCaixa();
+            } finally {
+                // Restaura sempre — no sucesso a tela já navegou pra fase "aberto" (o finally
+                // roda depois disso, sem efeito visível), mas no erro o usuário fica na mesma
+                // tela e precisa poder tentar de novo.
+                if (btnAbrir) { btnAbrir.disabled = false; btnAbrir.style.opacity = '1'; btnAbrir.style.cursor = 'pointer'; btnAbrir.textContent = '🟢 Abrir Caixa e Iniciar Dia'; }
+                if (trocoInput) trocoInput.disabled = false;
             }
         }
 
@@ -9836,7 +9866,7 @@ function carregarComanda() {
                     <div style="font-size:20px;margin-bottom:4px;">🍽️</div>
                     Nenhum item lançado ainda
                     ${podeCancelar ? `<div style="margin-top:14px;">
-                        <button onclick="cancelarComandaVazia()"
+                        <button onclick="cancelarComandaVazia(this)"
                             style="background:none;border:none;color:#c0392b;font-size:11px;cursor:pointer;opacity:0.65;text-decoration:underline;padding:4px 8px;"
                             title="Cancelar esta comanda (sem itens)">🗑️ Cancelar comanda</button>
                     </div>` : ''}
@@ -10658,7 +10688,13 @@ function carregarComanda() {
             selecionarTipo('Fixo');
             _resetFotoUI();
             document.getElementById('modalItem').classList.add('active');
-            setTimeout(() => document.getElementById('modalNome').focus(), 100);
+            // Sem foco automático no mobile (pedido do usuário: abrir o modal já ativava o
+            // teclado em cima do campo Nome, sem o usuário ter clicado em nada ainda) — mesmo
+            // guard 'modo-mobile' já usado em limparComanda(). No desktop mantém o foco
+            // automático, que ali não atrapalha (não existe teclado virtual disparando).
+            if (!document.body.classList.contains('modo-mobile')) {
+                setTimeout(() => document.getElementById('modalNome').focus(), 100);
+            }
             _modalItemSnapshotInicial = _modalItemSnapshotAtual();
         }
 
@@ -10689,7 +10725,10 @@ function carregarComanda() {
             }
 
             document.getElementById('modalItem').classList.add('active');
-            document.getElementById('modalNome').focus();
+            // Mesmo guard de abrirModalNovoItem() — sem foco automático no mobile.
+            if (!document.body.classList.contains('modo-mobile')) {
+                document.getElementById('modalNome').focus();
+            }
             _modalItemSnapshotInicial = _modalItemSnapshotAtual();
         }
 
@@ -11150,7 +11189,7 @@ function carregarComanda() {
 
         // ========== CANCELAR COMANDA VAZIA (Admin/Gerente/Caixa) ==========
 
-        async function cancelarComandaVazia() {
+        async function cancelarComandaVazia(btnEl) {
             const chave = state.comandaAtual;
             const comanda = chave ? state.comandas[chave] : null;
             if (!comanda) return;
@@ -11172,6 +11211,15 @@ function carregarComanda() {
             });
             if (!ok) return;
 
+            // Loading (mesmo pedido do usuário que motivou o fix da abertura de caixa: a
+            // chamada demora um pouco e o botão — junto com o resto da tela — ficava clicável
+            // durante o processamento, sem indicação visual de que já estava em andamento).
+            // Recebe o próprio botão via `this` no onclick em vez de buscar por id/seletor,
+            // porque esse botão é recriado a cada render de renderizarListaLançada() — um id
+            // fixo correria risco de referenciar um elemento já substituído no DOM.
+            const textoOriginal = btnEl ? btnEl.textContent : null;
+            if (btnEl) { btnEl.disabled = true; btnEl.style.opacity = '0.4'; btnEl.style.cursor = 'not-allowed'; btnEl.textContent = '⏳ Cancelando...'; }
+
             showToast('⏳ Cancelando comanda...', 'info');
             try {
                 const parts = chave.split('-');
@@ -11190,9 +11238,12 @@ function carregarComanda() {
                     showToast('✅ Comanda cancelada', 'success');
                 } else {
                     showToast(`❌ ${(res && res.erro) || 'Erro ao cancelar'}`, 'error');
+                    // Erro: comanda continua igual, restaura o botão pra poder tentar de novo
+                    if (btnEl) { btnEl.disabled = false; btnEl.style.opacity = '0.65'; btnEl.style.cursor = 'pointer'; btnEl.textContent = textoOriginal; }
                 }
             } catch (e) {
                 showToast('❌ Erro ao cancelar comanda', 'error');
+                if (btnEl) { btnEl.disabled = false; btnEl.style.opacity = '0.65'; btnEl.style.cursor = 'pointer'; btnEl.textContent = textoOriginal; }
             }
         }
 
