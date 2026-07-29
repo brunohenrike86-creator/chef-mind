@@ -2749,7 +2749,15 @@
             <!-- FOTO DO ITEM -->
             <div class="modal-field">
                 <div class="modal-label">Foto</div>
+                <!-- Dois inputs separados (bug corrigido jul/2026): antes só existia UM input
+                     com capture="environment", e tanto o box de preview quanto o botão "Adicionar
+                     foto" apontavam pra ele — capture="environment" força o navegador a abrir a
+                     câmera direto, sem a opção de escolher da galeria. Agora o box de preview
+                     (rotulado "tirar foto") continua abrindo a câmera direto, e o botão "Adicionar
+                     foto" abre um segundo input SEM capture, que deixa o celular mostrar o seletor
+                     nativo (câmera OU galeria/arquivos). -->
                 <input type="file" id="inputFotoItem" accept="image/*" capture="environment" style="display:none" onchange="onFotoSelecionada(this)">
+                <input type="file" id="inputFotoItemGaleria" accept="image/*" style="display:none" onchange="onFotoSelecionada(this)">
                 <div id="fotoPreviewArea" style="width:100%; height:120px; border:2px dashed var(--border); border-radius:8px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:var(--bg-light); cursor:pointer;" onclick="document.getElementById('inputFotoItem').click()">
                     <div id="fotoPlaceholder" style="display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--gray);">
                         <span style="font-size:28px;">📷</span>
@@ -2758,7 +2766,7 @@
                     <img id="fotoPreviewImg" style="display:none; width:100%; height:100%; object-fit:cover;">
                 </div>
                 <div style="display:flex; gap:6px; margin-top:6px;">
-                    <button id="btnAdicionarFoto" type="button" onclick="document.getElementById('inputFotoItem').click()" style="flex:1; padding:8px; background:var(--bg-light); border:1px solid var(--border); border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold; color:var(--primary);">📷 Adicionar foto</button>
+                    <button id="btnAdicionarFoto" type="button" onclick="document.getElementById('inputFotoItemGaleria').click()" style="flex:1; padding:8px; background:var(--bg-light); border:1px solid var(--border); border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold; color:var(--primary);">📷 Adicionar foto</button>
                     <button id="btnRemoverFoto" type="button" onclick="removerFoto()" style="display:none; padding:8px 12px; background:#E74C3C; border:none; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold; color:white;">🗑️</button>
                 </div>
             </div>
@@ -3175,10 +3183,12 @@
                         state.idlePlaylist = [];
                     }
                     // Injetar slide de abertura, telas informativas (Buffet antes de Marmitas,
-                    // a pedido do usuário), clima/câmbio/loteria e os 4 tipos de conteúdo entre
+                    // a pedido do usuário), clima/câmbio e os 5 tipos de conteúdo entre
                     // as telas informativas e os vídeos. Verificado por CONTEÚDO (não por flag)
                     // porque o config é relido a cada poll e reconstruiria a playlist sem os
                     // slides injetados se usássemos uma flag.
+                    // Loteria removida do rodízio (jul/2026, a pedido do usuário — não fazia
+                    // sentido pro ambiente do restaurante); ver Seção 7/11 do Knowledge.
                     if (state.idlePlaylist.length > 0 && !state.idlePlaylist.some(s => s.tipo === 'clima')) {
                         const _plScreens = state.idlePlaylist.filter(s => s.tipo === 'screen')
                             // Buffet antes de Marmitas — ordem fixa no código, independente de
@@ -3188,7 +3198,7 @@
                         const _plOthers  = state.idlePlaylist.filter(s => s.tipo !== 'screen' && s.tipo !== 'video');
                         state.idlePlaylist = [
                             {tipo:'abertura'}, ..._plScreens,
-                            {tipo:'clima'}, {tipo:'cambio'}, {tipo:'loteria'},
+                            {tipo:'clima'}, {tipo:'cambio'},
                             {tipo:'dica'}, {tipo:'receita'}, {tipo:'utilidade'}, {tipo:'curiosidade'}, {tipo:'entretenimento'},
                             {tipo:'vida', slot:0}, {tipo:'vida', slot:1}, {tipo:'receita_video'},
                             ..._plVideos, ..._plOthers,
@@ -7690,10 +7700,6 @@ function carregarComanda() {
         const CAMBIO_CACHE_MS = 30 * 60 * 1000; // 30 min — cotação não precisa de mais frequência num kiosk de restaurante
         let _cambioCache = null; // { data, fetchedAt }
 
-        // ── LOTERIA (Caixa, via proxy GAS getLoteria — evita risco de CORS direto do browser) ──
-        const LOTERIA_CACHE_MS = 60 * 60 * 1000; // 1h — resultado só muda após os sorteios (ter/qui/sáb à noite)
-        let _loteriaCache = null; // { data, fetchedAt }
-
         // ── CONTEÚDO TELA: Dica de Saúde / Receita / Utilidade Pública / Curiosidade (GAS → conteudo_tela) ──
         let _conteudoTela    = [];   // array com os 4 tipos misturados, carregado do Sheets
         // Cada tipo tem seu PRÓPRIO ponteiro de rotação — antes era um único _conteudoIdx
@@ -8063,14 +8069,6 @@ function carregarComanda() {
                 return;
             }
 
-            // ── SLIDE LOTERIA ──
-            if (slide.tipo === 'loteria') {
-                _mostrarSlideComFetch(elScreen, elPlayer, 'loteria',
-                    `<div style="width:100%;height:100%;background:linear-gradient(160deg,#1a2332,#2c3e50);display:flex;align-items:center;justify-content:center;color:white;font-size:22px;font-family:sans-serif;opacity:0.7;">🎱 Carregando resultado...</div>`,
-                    _fetchLoteria, _renderTelaLoteria);
-                return;
-            }
-
             // ── SLIDE REGISTROS DA VIDA (fotos bonitas via Unsplash) ──
             // Duas fotos buscadas numa única chamada (count=2, ver _fetchRegistrosDaVida),
             // mas exibidas em SEQUÊNCIA — 2 slots próprios na playlist (slide.slot 0 e 1),
@@ -8410,84 +8408,6 @@ function carregarComanda() {
                     <div style="font-size:clamp(11px,1.5vh,15px); color:#999;">Fonte: AwesomeAPI · atualizado a cada 30 min</div>
                 </div>`;
             return _slideComCabecalho('#1B4F72', '#2E86DE', '💱', 'Câmbio', corpo, 'white');
-        }
-
-        // ── LOTERIA — fetch com cache 1h (via proxy GAS, ver Seção 11 do Knowledge) ──
-        async function _fetchLoteria() {
-            const now = Date.now();
-            if (_loteriaCache && (now - _loteriaCache.fetchedAt) < LOTERIA_CACHE_MS) return _loteriaCache.data;
-            try {
-                const dados = await sheetsAPI('getLoteria');
-                _loteriaCache = { data: dados, fetchedAt: now };
-                return dados;
-            } catch (_) {
-                return _loteriaCache ? _loteriaCache.data : null; // GAS/API da Caixa fora do ar — mantém último valor bom conhecido
-            }
-        }
-
-        function _renderTelaLoteria(dados) {
-            // Redesign (Jul 2026, referência Bild Mídias): migrado pro padrão "cabeçalho + corpo
-            // branco" (_slideComCabecalho), igual às outras telas de informação. Cada jogo
-            // continua com seu cartão de cor própria (verde Mega-Sena, magenta Quina, azul
-            // Federal) — diferenciação clara entre os jogos — agora sobre fundo claro em vez de
-            // dark mode. Federal adicionado como 3º jogo (bilhetes premiados, não dezenas —
-            // ver nota em chef-mind-api.gs sobre os nomes de campo ainda não confirmados em produção).
-            if (!dados || (!dados.megasena && !dados.quina && !dados.federal)) {
-                return _slideComCabecalho('#1a2332', '#2c3e50', '🎱', 'Resultado da Loteria',
-                    `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#888;font-size:clamp(18px,2.6vh,26px);">Resultado indisponível no momento</div>`);
-            }
-            const formatBRL = v => (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
-            const bloco = (nome, icone, corA, corB, jogo) => {
-                if (!jogo) return '';
-                const bolas = (jogo.dezenas || []).map(d => `
-                    <div style="width:clamp(30px,4.4vh,46px);height:clamp(30px,4.4vh,46px);border-radius:50%;background:rgba(255,255,255,0.95);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:clamp(14px,2vh,20px);color:${corB};box-shadow:0 3px 8px rgba(0,0,0,0.2);flex-shrink:0;">${d}</div>
-                `).join('');
-                return `
-                    <div style="display:flex;flex-direction:column;align-items:center;gap:clamp(10px,1.5vh,14px);background:linear-gradient(160deg,${corA} 0%,${corB} 100%);border-radius:24px;padding:clamp(16px,2.6vh,26px) clamp(18px,3vh,30px);box-shadow:0 4px 14px rgba(0,0,0,0.2);">
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <span style="font-size:clamp(22px,3.2vh,34px);">${icone}</span>
-                            <div>
-                                <div style="font-size:clamp(17px,2.5vh,26px);font-weight:900;color:white;">${nome}</div>
-                                <div style="font-size:clamp(11px,1.5vh,13px);color:rgba(255,255,255,0.75);font-weight:600;">Concurso ${jogo.concurso}${jogo.data ? ' · ' + jogo.data : ''}</div>
-                            </div>
-                        </div>
-                        <div style="display:flex;gap:clamp(6px,1vh,10px);flex-wrap:wrap;justify-content:center;max-width:460px;">${bolas}</div>
-                        <div style="font-size:clamp(12px,1.7vh,16px);font-weight:700;color:white;text-align:center;background:rgba(0,0,0,0.2);padding:5px 14px;border-radius:14px;">
-                            ${jogo.acumulou
-                                ? `Acumulou! Estimativa: <span style="color:#FFD54F;">${formatBRL(jogo.valorAcumulado)}</span>`
-                                : 'Teve ganhador'}
-                        </div>
-                    </div>`;
-            };
-            const blocoFederal = (jogo) => {
-                if (!jogo || !jogo.bilhetes || jogo.bilhetes.length === 0) return '';
-                const linhas = jogo.bilhetes.map(b => `
-                    <div style="display:flex;justify-content:space-between;padding:clamp(4px,0.8vh,8px) clamp(10px,1.6vh,16px);background:rgba(255,255,255,0.12);border-radius:8px;">
-                        <span style="font-weight:700;">${b.posicao ? b.posicao + 'º prêmio' : ''}</span>
-                        <span style="font-weight:900;letter-spacing:1px;">${b.numero}</span>
-                    </div>`).join('');
-                return `
-                    <div style="display:flex;flex-direction:column;gap:clamp(6px,1vh,10px);background:linear-gradient(160deg,#1A3A6B 0%,#2E5FA3 100%);border-radius:24px;padding:clamp(16px,2.6vh,26px) clamp(18px,3vh,30px);box-shadow:0 4px 14px rgba(0,0,0,0.2);color:white;min-width:26vh;">
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <span style="font-size:clamp(22px,3.2vh,34px);">🎟️</span>
-                            <div>
-                                <div style="font-size:clamp(17px,2.5vh,26px);font-weight:900;">Federal</div>
-                                <div style="font-size:clamp(11px,1.5vh,13px);opacity:0.75;font-weight:600;">Concurso ${jogo.concurso}${jogo.data ? ' · ' + jogo.data : ''}</div>
-                            </div>
-                        </div>
-                        <div style="display:flex;flex-direction:column;gap:4px;font-size:clamp(12px,1.7vh,16px);">${linhas}</div>
-                    </div>`;
-            };
-            const corpo = `
-                <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:clamp(16px,2.4vh,24px); padding:clamp(16px,2.4vh,24px);">
-                    <div style="display:flex;gap:clamp(14px,2.2vh,22px);flex-wrap:wrap;justify-content:center;">
-                        ${bloco('Mega-Sena', '🍀', '#0B3D22', '#0D8A3E', dados.megasena)}
-                        ${bloco('Quina', '✨', '#3D0A52', '#8A05BE', dados.quina)}
-                        ${blocoFederal(dados.federal)}
-                    </div>
-                    <div style="font-size:clamp(10px,1.4vh,13px); color:#999;">Fonte: Caixa Econômica Federal</div>
-                </div>`;
-            return _slideComCabecalho('#1a2332', '#2c3e50', '🎱', 'Resultado da Loteria', corpo, 'white');
         }
 
         // ── REGISTROS DA VIDA — fotos bonitas do mundo via Unsplash (Jul 2026, referência Bild
@@ -10708,6 +10628,8 @@ function carregarComanda() {
             _fotoAtual = null;
             const inp = document.getElementById('inputFotoItem');
             if (inp) inp.value = '';
+            const inpGaleria = document.getElementById('inputFotoItemGaleria');
+            if (inpGaleria) inpGaleria.value = '';
             const img = document.getElementById('fotoPreviewImg');
             if (img) { img.src = ''; img.style.display = 'none'; }
             const ph = document.getElementById('fotoPlaceholder');
