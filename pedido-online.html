@@ -20,7 +20,11 @@
         --bg-light: #F9F7F4;
         --bg-white: #FFFFFF;
         --border: #D4A574;
-        --gray: #8B7355;
+        /* Era #8B7355 — contraste baixo (4.49:1 no branco, abaixo do recomendado 4.5:1 pra
+           texto pequeno) e feedback real da pesquisa de teste pedia letra/cor mais legível.
+           Mesma família de tom (marrom quente, combina com --primary), mas mais escuro:
+           6.92:1 no branco — folga confortável acima do mínimo de acessibilidade. */
+        --gray: #6B5642;
     }
     body {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -49,9 +53,9 @@
         box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     }
     .titulo-card { font-size: 15px; font-weight: bold; color: var(--text-dark); margin-bottom: 10px; }
-    .label-secao { font-size: 13px; color: var(--gray); margin: 14px 0 8px; }
+    .label-secao { font-size: 14px; color: var(--gray); margin: 14px 0 8px; }
     .label-secao:first-child { margin-top: 0; }
-    .dica { font-size: 12px; color: var(--gray); margin-top: 6px; }
+    .dica { font-size: 13px; color: var(--gray); margin-top: 6px; }
     .dica.ok { color: var(--success); font-weight: bold; }
     .chips { display:flex; flex-wrap:wrap; gap:8px; }
     .chip {
@@ -123,7 +127,7 @@
     }
     .item-carrinho:last-child { border-bottom:none; }
     .item-nome { font-size: 14px; font-weight:bold; }
-    .item-detalhe { font-size: 12px; color: var(--gray); margin-top:2px; }
+    .item-detalhe { font-size: 13px; color: var(--gray); margin-top:2px; }
     .item-preco { font-size: 13px; font-weight:bold; color: var(--primary); white-space:nowrap; margin-left:10px; }
     .item-lixeira { font-size: 18px; color: var(--danger); cursor:pointer; padding: 4px; }
     .linha-item-dir { display:flex; align-items:center; gap:10px; }
@@ -281,11 +285,17 @@ const HORARIO_FECHAMENTO_MIN = 14 * 60 + 30; // 14:30
 const WHATSAPP_AJUDA = '5541997829474';      // 41 99782-9474, com DDI 55
 const TELEFONE_AJUDA = '+5541997829474';
 
+// MODO TESTE (ativado a pedido do usuário, jul/2026, pra testar/ajustar o pedido online
+// fora do horário real de atendimento) — com true, ignora a janela de horário e a tela
+// "fora do horário" nunca aparece. LEMBRAR DE VOLTAR PRA false antes de divulgar o link
+// pros clientes reais — senão o pedido online fica sempre aberto, mesmo fora do expediente.
+const _TESTE_IGNORAR_HORARIO = true;
+
 function estaDentroDoHorario() {
+    if (_TESTE_IGNORAR_HORARIO) return true;
     const agora = new Date();
-    if (agora.getDay() === 0) return false; // domingo não atende
-    const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
-    return minutosAgora >= HORARIO_ABERTURA_MIN && minutosAgora < HORARIO_FECHAMENTO_MIN;
+    const minutos = agora.getHours() * 60 + agora.getMinutes();
+    return minutos >= HORARIO_ABERTURA_MIN && minutos <= HORARIO_FECHAMENTO_MIN;
 }
 
 // ===== Chamadas à API =====
@@ -375,21 +385,34 @@ let state = {
     obsAberta: false,
     rolarParaPedidoAoRenderizar: false,
     rolarParaConfiguradorAoRenderizar: false,
-    enviando: false
+    enviando: false,
+    // null = configurando marmita nova; número = editando o item desse índice no carrinho
+    // (ver editarItemCarrinho/adicionarAoPedido/cancelarEdicaoItem). Nada é removido do
+    // carrinho até a edição ser de fato confirmada — ver nota no editarItemCarrinho.
+    editandoIndex: null
 };
 
 let view = 'carregando';
 let intervaloPolling = null;
 let pedidoAtual = null; // { comandaId, numero, nome, itens, bebidas, total } — sessão ativa em memória
 
-function erro(msg) {
+let _snackbarTimer = null;
+function _mostrarSnackbar(msg, cor) {
     const el = document.getElementById('snackbar');
     if (!el) return;
     el.textContent = msg;
+    el.style.background = cor;
     el.classList.add('show');
-    clearTimeout(erro._t);
-    erro._t = setTimeout(() => el.classList.remove('show'), 3500);
+    clearTimeout(_snackbarTimer);
+    _snackbarTimer = setTimeout(() => el.classList.remove('show'), 3500);
 }
+
+function erro(msg) { _mostrarSnackbar(msg, 'var(--danger)'); }
+
+// Confirmação visual ao adicionar uma marmita ao pedido (pesquisa de teste: sem isso, não
+// ficava claro que a marmita anterior já tinha sido "fechada" e que o formulário abaixo era
+// uma configuração nova, do zero — parte da mesma confusão do ajuste em "Quantidade").
+function sucesso(msg) { _mostrarSnackbar(msg, 'var(--success)'); }
 
 function mascararWhatsapp(valor) {
     const d = valor.replace(/\D/g, '').slice(0, 11);
@@ -445,14 +468,25 @@ function toggleObsAberta() {
 function adicionarAoPedido() {
     if (!state.tamanho) { erro('Escolha o tamanho da marmita'); return; }
     if (state.carnesSelecionadas.length === 0) { erro('Escolha pelo menos 1 carne'); return; }
-    state.carrinho.push({
+    const _tamanhoAdicionado = state.tamanho;
+    const _qtdAdicionada     = state.qtd;
+    const _estavaEditando    = state.editandoIndex !== null;
+    const novoItem = {
         tamanho: state.tamanho,
         codigo: TAMANHOS[state.tamanho].codigo,
         carnes: [...state.carnesSelecionadas],
         qtd: state.qtd,
         obs: state.obs.trim(),
         precoUnit: TAMANHOS[state.tamanho].preco
-    });
+    };
+    // Editando um item existente (ver editarItemCarrinho): substitui no lugar em vez de
+    // criar uma linha nova — o item original só é de fato alterado agora, na confirmação.
+    if (_estavaEditando) {
+        state.carrinho[state.editandoIndex] = novoItem;
+        state.editandoIndex = null;
+    } else {
+        state.carrinho.push(novoItem);
+    }
     state.tamanho = null;
     state.carnesSelecionadas = [];
     state.qtd = 1;
@@ -460,6 +494,9 @@ function adicionarAoPedido() {
     state.obsAberta = false;
     state.rolarParaPedidoAoRenderizar = true;
     render();
+    sucesso(_estavaEditando
+        ? '✅ Alterações salvas!'
+        : `✅ Marmita ${_tamanhoAdicionado}${_qtdAdicionada > 1 ? ' (' + _qtdAdicionada + 'x)' : ''} adicionada!`);
 }
 
 function removerDoCarrinho(i) {
@@ -467,7 +504,43 @@ function removerDoCarrinho(i) {
     render();
 }
 
+// Reabre o configurador pré-preenchido com os valores desse item (tamanho, carnes,
+// quantidade, observação) SEM removê-lo do carrinho ainda — só marca `editandoIndex`.
+// A substituição de fato só acontece se/quando "+ Adicionar ao pedido" for clicado de novo
+// (ver adicionarAoPedido). Antes, um único toque já removia o item na hora — um toque
+// acidental (comum em celular, usuário com pressa) apagava o pedido sem confirmação
+// nenhuma; agora nada é perdido até a edição ser confirmada, e cancelarEdicaoItem() permite
+// desistir sem alterar nada.
+function editarItemCarrinho(i) {
+    const item = state.carrinho[i];
+    if (!item) return;
+    state.editandoIndex = i;
+    state.tamanho = item.tamanho;
+    state.carnesSelecionadas = [...item.carnes];
+    state.qtd = item.qtd;
+    state.obs = item.obs || '';
+    state.obsAberta = !!item.obs;
+    state.rolarParaConfiguradorAoRenderizar = true;
+    render();
+}
+
+// Desiste da edição em andamento sem alterar o item original no carrinho.
+function cancelarEdicaoItem() {
+    state.editandoIndex = null;
+    state.tamanho = null;
+    state.carnesSelecionadas = [];
+    state.qtd = 1;
+    state.obs = '';
+    state.obsAberta = false;
+    render();
+}
+
 function irParaConfigurador() {
+    // Se havia uma edição em andamento (ver editarItemCarrinho) e o usuário clicou em
+    // "+ Adicionar outra marmita" em vez de salvar/cancelar, entende-se que ele quer uma
+    // marmita NOVA — cancela a edição pendente (o item original no carrinho já está intacto,
+    // nada muda nele) pra não correr o risco de sobrescrevê-lo sem querer no próximo "salvar".
+    if (state.editandoIndex !== null) cancelarEdicaoItem();
     state.rolarParaConfiguradorAoRenderizar = true;
     render();
 }
@@ -583,7 +656,7 @@ function novoPedido() {
         nome: clienteSalvo.nome || '', whatsapp: clienteSalvo.whatsapp || '',
         erro: '', obsAberta: false,
         rolarParaPedidoAoRenderizar: false, rolarParaConfiguradorAoRenderizar: false,
-        enviando: false
+        enviando: false, editandoIndex: null
     };
     view = estaDentroDoHorario() ? 'form' : 'fechado';
     render();
@@ -676,10 +749,12 @@ function renderFormulario() {
         ? `<div class="dica ${state.carnesSelecionadas.length === max ? 'ok' : ''}">${state.carnesSelecionadas.length} de ${max} carnes selecionadas</div>`
         : '';
 
-    const linhasMarmitas = state.carrinho.map((item, i) => `
-        <div class="item-carrinho">
-            <div>
-                <div class="item-nome">Marmita ${item.tamanho}</div>
+    const linhasMarmitas = state.carrinho.map((item, i) => {
+        const emEdicao = state.editandoIndex === i;
+        return `
+        <div class="item-carrinho" style="${emEdicao ? 'background:var(--bg-light); border-radius:8px; padding:10px 8px;' : ''}">
+            <div style="cursor:pointer;" onclick="editarItemCarrinho(${i})" title="Toque pra editar tamanho, carne ou observação">
+                <div class="item-nome">Marmita ${item.tamanho} <span style="font-weight:normal; color:var(--gray); font-size:12px;">${emEdicao ? '✏️ editando...' : '✏️ editar'}</span></div>
                 <div class="item-detalhe">${escapeHtml(item.carnes.join(' + '))}</div>
                 ${item.obs ? `<div class="item-detalhe">↳ ${escapeHtml(item.obs)}</div>` : ''}
             </div>
@@ -692,7 +767,8 @@ function renderFormulario() {
                 </div>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 
     const linhasBebidas = state.bebidas.map(b => `
         <div class="item-carrinho">
@@ -724,10 +800,12 @@ function renderFormulario() {
 
     const total = calcularTotal();
 
+    const emEdicao = state.editandoIndex !== null;
+
     return `
         <div class="card" id="cardConfigurador">
-            <div class="titulo-card">Peça sua marmita</div>
-            <div class="dica" style="margin-bottom:12px;">Acompanha arroz, feijão, macarrão, batata e salada do buffet — você escolhe só o tamanho e a carne.</div>
+            <div class="titulo-card">${emEdicao ? '✏️ Editando marmita' : 'Peça sua marmita'}</div>
+            <div class="dica" style="margin-bottom:12px;">Acompanha arroz, feijão, macarrão, farofa, batata e salada do buffet — você escolhe só o tamanho e a carne.</div>
 
             <div class="label-secao">Tamanho</div>
             <div class="chips">${chipsTamanho}</div>
@@ -737,22 +815,28 @@ function renderFormulario() {
             <div class="chips">${chipsCarne}</div>
             ${dicaCarne}
 
-            <div class="label-secao">Quantidade</div>
+            <!-- Renomeado (pesquisa de teste apontou "Quantidade" como confuso — lia como
+                 "quantidade de carne" por ficar logo abaixo dos chips de carne). Dica reduzida
+                 a uma frase curta a pedido do usuário — texto longo demais era em si um
+                 sintoma de que o controle precisava de um nome melhor, não de mais explicação. -->
+            <div class="label-secao" style="margin-top:22px;">Quantas marmitas iguais a essa?</div>
             <div class="qtd-control">
                 <div class="qtd-btn" onclick="alterarQtd(-1)">−</div>
                 <div class="qtd-valor">${state.qtd}</div>
                 <div class="qtd-btn" onclick="alterarQtd(1)">+</div>
             </div>
+            <div class="dica">Pra outro tamanho ou carne, adicione separado.</div>
 
             ${state.obsAberta
                 ? `<div class="label-secao">Observação (opcional)</div>
-                   <input type="text" placeholder="Ex: sem cebola, não gosto de pimenta" value="${escapeHtml(state.obs)}" oninput="state.obs = this.value">`
+                   <input type="text" placeholder="Ex: Sem feijão, Sem macarrão" value="${escapeHtml(state.obs)}" oninput="state.obs = this.value">`
                 : `<div class="link-discreto" style="margin-top:14px; text-align:left;" onclick="toggleObsAberta()">+ Alguma observação sobre o pedido?</div>`
             }
 
-            <div style="margin-top:16px;">
-                <button class="btn btn-primario" onclick="adicionarAoPedido()">+ Adicionar ao pedido</button>
+            <div style="margin-top:16px; display:flex; gap:8px;">
+                <button class="btn btn-primario" onclick="adicionarAoPedido()">${emEdicao ? '✓ Salvar alterações' : '+ Adicionar ao pedido'}</button>
             </div>
+            ${emEdicao ? `<div class="link-discreto" onclick="cancelarEdicaoItem()">✕ Cancelar edição</div>` : ''}
         </div>
 
         <div class="card" id="cardPedido">
