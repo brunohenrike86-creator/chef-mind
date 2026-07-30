@@ -6106,7 +6106,7 @@ function carregarComanda() {
         }
 
         // ===== Sugestões rápidas de observação (marmita) =====
-        const MARNITA_OBS_SUGESTOES = ['Sem Feijão', 'Sem Macarrão', 'Sem Arroz', 'Sem Salada', 'Bem Passado', 'Molho à Parte', 'Sem Pimenta', 'Pouco Sal'];
+        const MARNITA_OBS_SUGESTOES = ['Sem Feijão', 'Sem Macarrão', 'Sem Arroz', 'Sem Farofa', 'Cliente quer acompanhar'];
 
         function _marnitaRenderObsChips() {
             const container = document.getElementById('marnitaObsChips');
@@ -8776,6 +8776,23 @@ function carregarComanda() {
             _pollWaiters = [];
             console.log('[Poll] ⏹ Parado');
         }
+
+        // SAFETY NET — força um poll imediato assim que a aba/app volta a ficar
+        // visível (ex: tablet do Preparo com a tela bloqueada/"dormindo" por um
+        // tempo, ou o app foi pra segundo plano um instante). setInterval pode ser
+        // suspenso pelo navegador/SO enquanto em segundo plano; ao voltar, o timer
+        // não acelera pra compensar — só retoma no próximo tick de 3s, o que pode
+        // demorar ou, em alguns casos, nunca disparar de forma confiável. Isso bate
+        // com relatos de item que só aparecia na fila de Preparo depois de sair e
+        // entrar de novo no app. Mudança puramente aditiva: só dispara UM poll
+        // extra no momento certo — não altera nada da lógica de sincronização em
+        // si, e o guard `_pollingAtivo` dentro de pollFromSheets() já impede
+        // qualquer execução duplicada/concorrente com o poll do setInterval normal.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && state.user) {
+                pollFromSheets();
+            }
+        });
 
         // Chama fn() quando o próximo poll terminar (seja o atual em andamento ou um novo).
         // Garante re-renderização com dados REALMENTE frescos, sem iniciar poll duplicado.
