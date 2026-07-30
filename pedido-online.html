@@ -285,11 +285,11 @@ const HORARIO_FECHAMENTO_MIN = 14 * 60 + 30; // 14:30
 const WHATSAPP_AJUDA = '5541997829474';      // 41 99782-9474, com DDI 55
 const TELEFONE_AJUDA = '+5541997829474';
 
-// MODO TESTE (ativado a pedido do usuário, jul/2026, pra testar/ajustar o pedido online
-// fora do horário real de atendimento) — com true, ignora a janela de horário e a tela
-// "fora do horário" nunca aparece. LEMBRAR DE VOLTAR PRA false antes de divulgar o link
-// pros clientes reais — senão o pedido online fica sempre aberto, mesmo fora do expediente.
-const _TESTE_IGNORAR_HORARIO = true;
+// MODO TESTE (usado jul/2026 pra testar/ajustar o pedido online fora do horário real
+// de atendimento) — com true, ignora a janela de horário e a tela "fora do horário"
+// nunca aparece. Revertido pra false antes do go-live: a partir daqui a regra de
+// horário de abertura/fechamento volta a valer normalmente pros clientes reais.
+const _TESTE_IGNORAR_HORARIO = false;
 
 function estaDentroDoHorario() {
     if (_TESTE_IGNORAR_HORARIO) return true;
@@ -805,7 +805,7 @@ function renderFormulario() {
     return `
         <div class="card" id="cardConfigurador">
             <div class="titulo-card">${emEdicao ? '✏️ Editando marmita' : 'Peça sua marmita'}</div>
-            <div class="dica" style="margin-bottom:12px;">Acompanha arroz, feijão, macarrão, farofa, batata e salada do buffet — você escolhe só o tamanho e a carne.</div>
+            <div class="dica" style="margin-bottom:12px;">Acompanha arroz, feijão, macarrão, farofa, legumes, uma fritura e salada do buffet — você escolhe só o tamanho e a carne.</div>
 
             <div class="label-secao">Tamanho</div>
             <div class="chips">${chipsTamanho}</div>
