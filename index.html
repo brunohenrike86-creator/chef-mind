@@ -2956,47 +2956,23 @@
             userLogado: null, // ✅ Login atual
             perfil: null,
             _usuariosCarregados: false, // flag: getUsuarios do Sheets já completou?
+            _cardapioCarregado: false, // flag: cardápio REAL do Sheets já chegou? (ver nota em `itens` abaixo)
             caixa: { status: 'fechado', troco: 0, dataAbertura: null, horaAbertura: null, usuario: null },
             usuarios: {
                 'bruno': { nome: 'Bruno', senha: '1986', perfil: 'Admin' }
             },
             comandas: {},
-            itens: {
-                // ✅ BUFFET (Prioridade 1 - Maior giro)
-                '001': { nome: 'Buffet Livre', preco: 34.90, icone: '🥗', categoria: 'Buffet', tipo: 'Fixo' },
-                '002': { nome: 'Buffet p/ Quilo', preco: 56.90, icone: '⚖️', categoria: 'Buffet', tipo: 'Fixo' },
-                '003': { nome: 'Buffet Quilo só Carne', preco: 66.90, icone: '🥩', categoria: 'Buffet', tipo: 'Fixo' },
-                
-                // ✅ MARMITEX (Prioridade 2)
-                '004': { nome: 'Marmitex P', preco: 21, icone: '🍛', categoria: 'Marmitas', tipo: 'Marmita' },
-                '005': { nome: 'Marmitex M', preco: 24, icone: '🍛', categoria: 'Marmitas', tipo: 'Marmita' },
-                '006': { nome: 'Marmitex G', preco: 26, icone: '🍛', categoria: 'Marmitas', tipo: 'Marmita' },
-                
-                // ✅ BEBIDAS (Prioridade 3)
-                '007': { nome: 'Refri Mini', preco: 3.50, icone: '🥤', categoria: 'Bebidas', tipo: 'Fixo' },
-                '008': { nome: 'Refri Lata', preco: 6.50, icone: '🥤', categoria: 'Bebidas', tipo: 'Fixo' },
-                '009': { nome: 'Refri KS', preco: 6.20, icone: '🥤', categoria: 'Bebidas', tipo: 'Fixo' },
-                '010': { nome: 'Refri 600ml', preco: 9.00, icone: '🥤', categoria: 'Bebidas', tipo: 'Fixo' },
-                '011': { nome: 'Refri 1L', preco: 12.00, icone: '🥤', categoria: 'Bebidas', tipo: 'Fixo' },
-                '012': { nome: 'Gasosa', preco: 6.00, icone: '🥤', categoria: 'Bebidas', tipo: 'Fixo' },
-                '013': { nome: 'H2O', preco: 8.00, icone: '💧', categoria: 'Bebidas', tipo: 'Fixo' },
-                '014': { nome: 'Tampico', preco: 7.00, icone: '🥤', categoria: 'Bebidas', tipo: 'Fixo' },
-                '015': { nome: 'Chá', preco: 5.00, icone: '☕', categoria: 'Bebidas', tipo: 'Fixo' },
-                '016': { nome: 'Chá 450ml', preco: 4.00, icone: '☕', categoria: 'Bebidas', tipo: 'Fixo' },
-                '017': { nome: 'Suco Copo', preco: 9.00, icone: '🧃', categoria: 'Bebidas', tipo: 'Fixo' },
-                '018': { nome: 'Suco Jarra 500ml', preco: 15.00, icone: '🧃', categoria: 'Bebidas', tipo: 'Fixo' },
-                '019': { nome: 'Suco Jarra 1L', preco: 26.00, icone: '🧃', categoria: 'Bebidas', tipo: 'Fixo' },
-                '020': { nome: 'Suco Del Vale', preco: 6.50, icone: '🧃', categoria: 'Bebidas', tipo: 'Fixo' },
-                '021': { nome: 'Suco Kapo', preco: 6.00, icone: '🧃', categoria: 'Bebidas', tipo: 'Fixo' },
-                '022': { nome: 'Cerveja Lata', preco: 9.00, icone: '🍺', categoria: 'Bebidas', tipo: 'Fixo' },
-                '023': { nome: 'Cerveja Long Neck', preco: 9.00, icone: '🍺', categoria: 'Bebidas', tipo: 'Fixo' },
-                '024': { nome: 'Energético', preco: 15.00, icone: '⚡', categoria: 'Bebidas', tipo: 'Fixo' },
-                '025': { nome: 'Água 500ml', preco: 4.00, icone: '💧', categoria: 'Bebidas', tipo: 'Fixo' },
-                
-                // ✅ SOBREMESAS (Prioridade 4)
-                '026': { nome: 'Sobremesa', preco: 2.00, icone: '🍰', categoria: 'Sobremesas', tipo: 'Fixo' },
-                '027': { nome: 'Sorvete', preco: 5.00, icone: '🍦', categoria: 'Sobremesas', tipo: 'Fixo' }
-            },
+            // Era um cardápio DEMO hardcoded (27 itens fake: "Buffet Livre", "Marmitex P/M/G"
+            // etc — sobras de quando o app era testado sem backend). Isso causava um bug sério
+            // (jul/2026, relatado pelo usuário): a cada carregamento de página, o app renderizava
+            // e liberava interação com esses itens FALSOS por vários segundos, até
+            // loadFromSheets() terminar de buscar o cardápio real — janela em que editar um
+            // item existente podia salvar dados falsos por cima de uma linha real na planilha.
+            // Agora começa vazio; ver `_cardapioCarregado` (flag, mesmo padrão de
+            // `_usuariosCarregados`) e os guards em renderizarItensDisponiveis()/
+            // renderAdminItensComFiltro() que mostram "carregando" em vez de deixar interagir
+            // com um cardápio incompleto/inexistente.
+            itens: {},
             cardapioAdmin: {},  // { [codigo]: item } — todos os itens (ativos + inativos), carregado lazy na aba Admin > Itens
             estoque: {
                 itens: [],          // [{ id, nome, cardapio_codigo, unidade, ponto_pedido, ativo, saldo, alerta }]
@@ -3107,6 +3083,7 @@
             if (Object.keys(novoItens).length === 0) return;
             Object.keys(state.itens).forEach(k => delete state.itens[k]);
             Object.assign(state.itens, novoItens);
+            state._cardapioCarregado = true; // primeira vez (ou toda vez) que dados REAIS chegam do Sheets
             console.log('[Sheets] ✅ Cardápio:', Object.keys(novoItens).length, 'itens');
             // Re-renderizar SOMENTE as telas que estão visíveis agora — evita re-render
             // desnecessário de tela oculta e, mais importante, evita interromper o meio de
@@ -4390,11 +4367,21 @@
             const itens = Object.entries(fonte).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
 
             if (itens.length === 0) {
-                container.innerHTML = `<div style="text-align:center;color:var(--gray);padding:36px 20px;font-size:12px;">
-                    <div style="font-size:28px;margin-bottom:8px;">📋</div>
-                    Nenhum item cadastrado ainda<br>
-                    <span style="font-size:10px;opacity:.8;">Toque em "+ NOVO ITEM" para começar</span>
-                </div>`;
+                // Distingue "ainda carregando o cardápio real do Sheets" de "cardápio genuinamente vazio"
+                // (ver state._cardapioCarregado — sem isso, este bloco piscava na tela toda vez que o
+                // app abria, e por alguns segundos parecia que não havia itens cadastrados).
+                if (!state._cardapioCarregado) {
+                    container.innerHTML = `<div style="text-align:center;color:var(--gray);padding:36px 20px;font-size:12px;">
+                        <div style="font-size:22px;margin-bottom:6px;">⏳</div>
+                        Carregando cardápio atualizado...
+                    </div>`;
+                } else {
+                    container.innerHTML = `<div style="text-align:center;color:var(--gray);padding:36px 20px;font-size:12px;">
+                        <div style="font-size:28px;margin-bottom:8px;">📋</div>
+                        Nenhum item cadastrado ainda<br>
+                        <span style="font-size:10px;opacity:.8;">Toque em "+ NOVO ITEM" para começar</span>
+                    </div>`;
+                }
                 return;
             }
             
@@ -6484,6 +6471,23 @@ function carregarComanda() {
                 const listaVazia = document.getElementById('listaItensDisponiveis');
                 if (abaContainerVazio) abaContainerVazio.innerHTML = '';
                 if (listaVazia) listaVazia.innerHTML = '';
+                return;
+            }
+
+            // Guarda contra o bug crítico documentado em Section 7 do Knowledge (jul/2026):
+            // state.itens começa vazio até o cardápio REAL chegar do Sheets — sem isso, essa
+            // tela ficaria mostrando "sem itens" silenciosamente (ou, antes do fix, itens
+            // FALSOS de demo) nos primeiros segundos após login, deixando o operador bipar/
+            // lançar em cima de dados que ainda não são reais. Mostra uma mensagem explícita
+            // em vez de renderizar um grid vazio ambíguo.
+            if (!state._cardapioCarregado) {
+                const abaContainerCarregando = document.getElementById('abaCategorias');
+                const listaCarregando = document.getElementById('listaItensDisponiveis');
+                if (abaContainerCarregando) abaContainerCarregando.innerHTML = '';
+                if (listaCarregando) listaCarregando.innerHTML = `<div style="text-align:center;color:var(--gray);padding:24px 10px;font-size:12px;grid-column:1/-1;">
+                    <div style="font-size:22px;margin-bottom:6px;">⏳</div>
+                    Carregando cardápio atualizado...
+                </div>`;
                 return;
             }
 
