@@ -11934,11 +11934,24 @@ var itens = comanda.itens || [];
                     // Sempre inicia _readLoop — reader stale já foi cancelado acima se havia.
                     // Removido o check readable.locked que impedia start após re-login.
                     this._readLoop();
-                    // Rearma o watchdog "sem resposta" a cada connect() — cobre tanto a primeira
-                    // conexão quanto reconexões (manual ou automática via _scheduleReconnect).
                     this._lastRxTs = null;
                     this._connectedAtTs = Date.now();
-                    this._startNoResponseWatchdog();
+                    // DESATIVADO (jul/2026, correção urgente pré-go-live): este watchdog media
+                    // "0 bytes recebidos em 8s" e concluía porta morta — bom pro cenário que o
+                    // motivou (cabo trocado de entrada USB, Windows atribuindo outra porta COM
+                    // sem o Chrome perceber). Só que a balança Urano, em tara negativa (prato
+                    // vazio — a maior parte do tempo em operação real), simplesmente NÃO responde
+                    // ao ENQ, ficando em silêncio de verdade por período indefinido. Os dois
+                    // cenários são indistinguíveis olhando só "chegou byte ou não" — resultado:
+                    // o watchdog disparava em produção durante o uso normal (balança vazia),
+                    // forçando o operador a reautorizar a porta repetidamente. O caso real que
+                    // motivou isso (troca de entrada USB) não é mais um risco operacional — não
+                    // trocamos mais a porta física. Um desconecte de verdade (cabo arrancado) já
+                    // é pego por outros dois caminhos, sem depender deste watchdog:
+                    // navigator.serial 'disconnect' (abaixo) e o erro de leitura em _readLoop()
+                    // que chama _scheduleReconnect(). Método/infra mantidos (não removidos) caso
+                    // precisemos reativar futuramente com uma lógica mais esperta.
+                    // this._startNoResponseWatchdog();
                 } catch(e) {
                     this._status     = 'error';
                     this._connecting = false;
