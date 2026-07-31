@@ -1228,20 +1228,31 @@
             border: 2px solid var(--primary) !important;
         }
         body.modo-caixa .co-hdr-abertas { font-size: 14px !important; padding: 4px 6px !important; margin-bottom: 6px !important; }
-        body.modo-caixa .co-hdr-detalhe { font-size: 18px !important; padding: 8px 10px !important; }
-        body.modo-caixa .co-hdr-itens   { font-size: 12px !important; padding: 6px 8px !important; grid-template-columns: 1fr 56px 76px 76px !important; }
-        body.modo-caixa .co-row         { font-size: 16px !important; padding: 12px 8px !important; grid-template-columns: 1fr 56px 76px 76px !important; }
+        body.modo-caixa .co-hdr-detalhe { font-size: 18px !important; padding: 5px 10px !important; }
+        body.modo-caixa .co-hdr-itens   { font-size: 12px !important; padding: 4px 8px !important; grid-template-columns: 1fr 56px 76px 76px !important; }
+        /* Otimização de espaço (monitor 20" no Caixa, mouse+teclado — não precisa do padding
+           generoso pensado pra touch): padding vertical reduzido de 12px pra 7px por linha.
+           Mantém a fonte 16px (legibilidade do valor/comanda não muda) — só o respiro ao
+           redor encolhe. Cada linha a menos de padding = mais itens visíveis sem rolar. */
+        body.modo-caixa .co-row         { font-size: 16px !important; padding: 7px 8px !important; grid-template-columns: 1fr 56px 76px 76px !important; }
+        body.modo-caixa #totalCheckout { padding: 4px 8px !important; }
         body.modo-caixa #totalCheckout > div:first-child { font-size: 13px !important; letter-spacing: 2px !important; opacity: 1 !important; }
         body.modo-caixa #totalCheckout > div:last-child  { font-size: 32px !important; }
-        body.modo-caixa #areaPagamento > div:first-child { font-size: 13px !important; margin-bottom: 6px !important; }
-        body.modo-caixa #areaPagamento { padding: 8px !important; }
-        body.modo-caixa #areaPagamento > div { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
-        body.modo-caixa .btnPagamento  { padding: 14px 6px !important; font-size: 16px !important; font-weight: bold !important; border-radius: 6px !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; gap: 4px !important; min-height: 80px !important; }
-        body.modo-caixa .btnPagamento .pg-icon  { font-size: 22px !important; line-height: 1 !important; }
-        body.modo-caixa .btnPagamento .pg-nome  { font-size: 15px !important; font-weight: bold !important; }
-        body.modo-caixa .btnPagamento .pg-key   { font-size: 14px !important; font-weight: bold !important; opacity: 0.7 !important; color: var(--primary) !important; }
-        body.modo-caixa #btnConfirmarPagamento { padding: 20px !important; font-size: 16px !important; border-radius: 6px !important; margin-top: 8px !important; }
-        body.modo-caixa #btnIrLancar   { padding: 16px !important; font-size: 14px !important; border-radius: 6px !important; }
+        body.modo-caixa #areaPagamento > div:first-child { font-size: 13px !important; margin-bottom: 4px !important; }
+        body.modo-caixa #areaPagamento { padding: 6px 8px !important; }
+        body.modo-caixa #areaPagamento > div { grid-template-columns: repeat(3, 1fr) !important; gap: 6px !important; }
+        /* Botões de forma de pagamento — o maior consumidor de espaço vertical da tela.
+           Eram 80px de altura mínima com ícone/nome/atalho empilhados em 3 linhas (bom pra
+           touch, onde o alvo precisa ser grande). Nesta estação o mouse já mira com precisão,
+           então trocamos pra layout horizontal (ícone + nome lado a lado, atalho como badge
+           pequeno à direita) numa única linha — de 80px pra ~46px. Em 2 fileiras de 3 botões,
+           isso sozinho devolve mais de 60px de altura pra lista de itens. */
+        body.modo-caixa .btnPagamento  { padding: 8px 6px !important; font-size: 13px !important; font-weight: bold !important; border-radius: 6px !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: center !important; gap: 6px !important; min-height: 46px !important; }
+        body.modo-caixa .btnPagamento .pg-icon  { font-size: 18px !important; line-height: 1 !important; }
+        body.modo-caixa .btnPagamento .pg-nome  { font-size: 13px !important; font-weight: bold !important; }
+        body.modo-caixa .btnPagamento .pg-key   { font-size: 10px !important; font-weight: bold !important; opacity: 0.7 !important; color: var(--primary) !important; }
+        body.modo-caixa #btnConfirmarPagamento { padding: 11px !important; font-size: 15px !important; border-radius: 6px !important; margin-top: 5px !important; }
+        body.modo-caixa #btnIrLancar   { padding: 9px !important; font-size: 13px !important; border-radius: 6px !important; }
         /* Hint panel de atalhos removido — atalhos exibidos inline nos próprios botões */
 
         /* ========== MODO MARMITA — KDS do operador, tablet Samsung A9+ paisagem ========== */
@@ -4977,7 +4988,13 @@
             const cfg = _LANCAMENTO_CONFIG[_lancamentoTipoAtual];
             if (!cfg) return;
 
-            const payload = { tipo: _lancamentoTipoAtual, usuario: state.usuario };
+            // Bug: usava state.usuario (não existe — o campo certo é state.user, ver
+            // state.userLogado || state.user || '' usado em todos os outros call sites do
+            // projeto). JSON.stringify descarta chaves com valor undefined, então o GAS nunca
+            // recebia usuario nenhum — a coluna ficava sempre vazia em todos os 5 tipos de
+            // lançamento (descarte, peso_restos, avaria, nota_gasto, retirada), que passam
+            // todos por este mesmo payload.
+            const payload = { tipo: _lancamentoTipoAtual, usuario: state.userLogado || state.user || '' };
 
             cfg.campos.forEach(c => {
                 const el = document.getElementById(c.id);
@@ -7043,9 +7060,20 @@ function carregarComanda() {
             
             // FEEDBACK
             showToast('✓ Pagamento confirmado!', 'success');
-            
-            // LIMPAR
+
+            // LIMPAR — atrasado de propósito (deixa o operador ver o "✓ Pagamento confirmado!"
+            // e o estado da comanda paga por um instante, em vez de a tela sumir na cara dele
+            // assim que clica/confirma). Guarda QUAL comanda estava sendo paga agora, antes do
+            // delay — se o operador já bipou/selecionou outra comanda nesse meio-tempo (correria
+            // real, scanner é quase instantâneo), comandaCheckoutAtual já vai ter mudado quando
+            // este callback rodar, e a limpeza vira no-op: não mexe na comanda nova, que já foi
+            // corretamente preparada por selecionarComandaCheckout(). Sem essa checagem, esse
+            // cleanup atrasado zerava comandaCheckoutAtual/formaPagamentoSelecionada às cegas,
+            // podendo apagar a seleção que o operador já tinha feito para o próximo cliente
+            // (bug relatado: forma de pagamento da comanda anterior parecendo "grudar" na nova).
+            const _comandaQueFoiPaga = comandaCheckoutAtual;
             setTimeout(() => {
+                if (comandaCheckoutAtual !== _comandaQueFoiPaga) return;
                 comandaCheckoutAtual = null;
                 formaPagamentoSelecionada = null;
                 document.getElementById('checkout-panel-left').classList.remove('comanda-ativa');
@@ -9596,7 +9624,22 @@ function carregarComanda() {
             });
             if (!okFechar) return;
 
-            showToast('⏳ Fechando caixa...', 'info');
+            // Loading — mesmo padrão de abrirCaixaDia(): desabilita botão e campos durante
+            // o processamento, pra não ficar clicável/editável sem feedback nenhum.
+            const btnFechar = document.getElementById('btnConfirmarFechamento');
+            const camposFechamento = [
+                document.getElementById('inputMaquinas'),
+                document.getElementById('inputSangria'),
+                document.getElementById('inputResidual')
+            ];
+            if (btnFechar) {
+                btnFechar.disabled = true;
+                btnFechar.style.opacity = '0.7';
+                btnFechar.style.cursor = 'wait';
+                btnFechar.textContent = '⏳ Fechando caixa...';
+            }
+            camposFechamento.forEach(el => { if (el) el.disabled = true; });
+
             try {
                 const res = await sheetsAPI('fecharCaixa', {
                     valor_maquinas:      maquinas,
@@ -9617,6 +9660,16 @@ function carregarComanda() {
                     state.caixa = { status: 'fechado', troco: 0, dataAbertura: null, horaAbertura: null, usuario: null };
                     state.comandaAtual = null;
                     saveStorage();
+                    // BUG (relatado pelo usuário): fechamento salvava no Sheets mas a tela
+                    // ficava parada na própria tela de fechamento. Causa: renderizarCaixa()
+                    // tem um guard que retorna cedo (sem renderizar nada) sempre que o painel
+                    // #caixa-fase-fechamento está visível — existe de propósito, pra o poll de
+                    // 3s não interromper o operador NO MEIO do preenchimento do fechamento. Só
+                    // que aqui, pós-sucesso, o painel continuava visível (nunca era escondido
+                    // antes de chamar renderizarCaixa()), então o próprio guard bloqueava a
+                    // transição de volta pro estado "Caixa Fechado". Fix: esconder o painel
+                    // explicitamente ANTES de chamar renderizarCaixa(), liberando o guard.
+                    document.getElementById('caixa-fase-fechamento').style.display = 'none';
                     renderizarCaixa();
                     renderizarCheckout();
                     renderizarPreapro();
@@ -9628,6 +9681,17 @@ function carregarComanda() {
                 }
             } catch(e) {
                 showToast('Erro de conexão ao fechar caixa', 'error');
+            } finally {
+                // Sucesso já navegou pra outra tela (painel escondido acima) — restore não
+                // tem efeito visível. Erro/rede mantém o operador na mesma tela, e é aqui que
+                // o restore permite tentar de novo sem precisar dar refresh.
+                if (btnFechar) {
+                    btnFechar.disabled = false;
+                    btnFechar.style.opacity = '1';
+                    btnFechar.style.cursor = 'pointer';
+                    btnFechar.textContent = '✅ Confirmar Fechamento';
+                }
+                camposFechamento.forEach(el => { if (el) el.disabled = false; });
             }
         }
 
@@ -11515,6 +11579,16 @@ var itens = comanda.itens || [];
         }
 
         function abrirModalBaixaAR(id, numero, devedor, valor) {
+            // BLOQUEAR SE CAIXA FECHADO — baixa em dinheiro entra fisicamente na gaveta
+            // (ver Seção 4 do knowledge doc), e o fechamento só soma "Baixas AR" do dia
+            // filtrando por data, não por sessão de caixa aberta. Uma baixa feita com o
+            // caixa fechado nunca teria uma sessão de fechamento pra entrar na composição
+            // do dia — o valor ficaria fora do cálculo. Mesmo padrão já usado para bloquear
+            // criação de comanda com caixa fechado (ver carregarComanda()).
+            if (state.caixa.status !== 'aberto') {
+                showToast('⛔ Abra o caixa antes de dar baixa em A Receber', 'error');
+                return;
+            }
             _baixaCtx  = { id, numero, devedor, valor };
             _baixaLote = null;
             document.getElementById('barComanda').textContent = 'Comanda #' + numero;
@@ -11524,6 +11598,11 @@ var itens = comanda.itens || [];
         }
 
         function abrirModalBaixaTodos() {
+            // BLOQUEAR SE CAIXA FECHADO — mesmo motivo de abrirModalBaixaAR() acima.
+            if (state.caixa.status !== 'aberto') {
+                showToast('⛔ Abra o caixa antes de dar baixa em A Receber', 'error');
+                return;
+            }
             const btn = document.getElementById('arBtnBaixaTodos');
             if (!btn) return;
             let lote = [];
@@ -11558,6 +11637,13 @@ var itens = comanda.itens || [];
         }
 
         async function confirmarBaixaAReceber() {
+            // Reconfirma o caixa aberto na hora de gravar (defesa extra — modal pode ter
+            // ficado aberto enquanto o caixa foi fechado em outra aba/dispositivo).
+            if (state.caixa.status !== 'aberto') {
+                showToast('⛔ Caixa foi fechado — abra o caixa antes de dar baixa', 'error');
+                fecharModalBaixaAR();
+                return;
+            }
             const forma = _baixaForma;
             if (!forma) { showToast('Selecione a forma de recebimento', 'error'); return; }
             const btn = document.getElementById('btnConfirmarBaixaAR');
