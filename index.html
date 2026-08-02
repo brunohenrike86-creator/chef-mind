@@ -7349,6 +7349,20 @@ function carregarComanda() {
             renderBloco(concluidos, '✓ Concluído',   '#27AE60');
         }
 
+        // A observação da marmita é GRAVADA concatenada: "Frango e Porco | Sem feijão"
+        // (ver confirmarMarnitaCarnes — carnes escolhidas + observação livre separadas
+        // por " | "). Para a cozinha, ler tudo numa linha só é ruim: a observação é
+        // justamente a exceção do pedido, o que mais gera erro se passar batido.
+        // Esta função separa as duas partes só na EXIBIÇÃO — o formato gravado no Sheets
+        // continua igual, então comandas antigas e o Pedido Online seguem funcionando
+        // sem nenhuma migração de dado.
+        function _partesObsMarmita(obs) {
+            const txt = String(obs || '').trim();
+            const i = txt.indexOf('|');
+            if (i === -1) return { carnes: txt, extra: '' };
+            return { carnes: txt.slice(0, i).trim(), extra: txt.slice(i + 1).trim() };
+        }
+
         function criarCardPreparo(key, comanda, derivado) {
             derivado = derivado || derivarStatusPreparo(comanda);
             if (!derivado) return null;  // não está em preparo agora — não cria card
@@ -7416,12 +7430,21 @@ function carregarComanda() {
             }
             const itensPedidoHTML = Object.values(gruposPedido)
                 .sort((a, b) => parseInt(a.codigo, 10) - parseInt(b.codigo, 10))
-                .map(g => `
+                .map(g => {
+                    // Carne e observação em linhas separadas (ver _partesObsMarmita).
+                    // A observação ganha peso visual maior que a carne de propósito: ela é
+                    // a exceção do pedido ("sem feijão"), o item que a cozinha não pode
+                    // deixar passar — antes ficava emendada no fim da mesma linha itálica.
+                    const _p = _partesObsMarmita(g.observacao);
+                    const _obsHtml =
+                        (_p.carnes ? `<div style="font-size:14px; color:${corTexto}; opacity:0.85; margin-top:3px; font-style:italic;">↳ ${_p.carnes}</div>` : '') +
+                        (_p.extra  ? `<div style="font-size:14px; color:${corTexto}; margin-top:3px; font-weight:bold;">⚠ ${_p.extra}</div>` : '');
+                    return `
                     <div style="margin: 6px 0; padding: 6px 8px; background: rgba(0,0,0,0.05); border-radius: 4px; border-left: 3px solid ${corBorda};">
                         <div style="font-size:17px; font-weight:bold; color:${corTexto}; line-height:1.2;"><span style="background:${corBorda}; color:white; border-radius:3px; padding:1px 6px; font-size:13px; margin-right:4px;">${g.qty}</span>${g.nome}</div>
-                        ${g.observacao ? `<div style="font-size:14px; color:${corTexto}; opacity:0.85; margin-top:3px; font-style:italic;">↳ ${g.observacao}</div>` : ''}
+                        ${_obsHtml}
                     </div>
-                `).join('');
+                `;}).join('');
 
             card.className = 'kdsCard';
             card.style.cssText = `
@@ -7577,7 +7600,13 @@ function carregarComanda() {
                 .sort((a, b) => parseInt(a.codigo, 10) - parseInt(b.codigo, 10))
                 .forEach(g => {
                     linhas.push(`${g.qty} - ${g.nome}`);
-                    if (g.observacao) linhas.push(`      > ${g.observacao}`);
+                    // Carne e observação em linhas separadas (ver _partesObsMarmita).
+                    // "OBS:" em vez de ">" na segunda linha: na bobina de 58mm, com acento
+                    // removido e tudo em maiúscula, um segundo ">" faria a exceção do
+                    // pedido parecer só mais uma carne. O rótulo deixa explícito.
+                    const _p = _partesObsMarmita(g.observacao);
+                    if (_p.carnes) linhas.push(`      > ${_p.carnes}`);
+                    if (_p.extra)  linhas.push(`      OBS: ${_p.extra}`);
                 });
 
             linhas.push('--------------------------------');
