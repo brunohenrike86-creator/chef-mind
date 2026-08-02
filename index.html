@@ -6967,6 +6967,16 @@ function carregarComanda() {
             }
             const inputCodigo = document.getElementById('lançarCodigoItem');
             if (inputCodigo) { inputCodigo.disabled = false; inputCodigo.style.opacity = '1'; }
+            // BUG (relatado em produção, "campo de busca travado mesmo com comanda
+            // carregada" — impacto direto na fila do Caixa): este era o ÚNICO caminho de
+            // carregamento de comanda que não reabilitava #lancBuscaInput. Os outros
+            // quatro (comanda paga/consulta, Em Preparo, Aberta, criarComandaInline) já
+            // faziam isso. O campo é desabilitado por limparTelaLançar() sempre que não
+            // há comanda ativa; entrando na tela Lançar por aqui (botão "Lançar item
+            // nesta comanda" / F1 no Checkout — o atalho MAIS usado pelo perfil Caixa),
+            // a comanda ficava ativa mas o campo continuava disabled do estado anterior.
+            const _biCheckout = document.getElementById('lancBuscaInput');
+            if (_biCheckout) { _biCheckout.disabled = false; _biCheckout.style.opacity = ''; _biCheckout.style.cursor = ''; }
             atualizarVisibilidadeBotaoAtalho();
             renderizarListaLançada();
             renderizarItensDisponiveis();
