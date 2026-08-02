@@ -3111,6 +3111,59 @@
         }
 
         let _cardapioPollInterval = null;
+        // Timestamp do último salvamento local de carnes (ver _processarCarnesDia).
+        let _carnesEditadasEm = 0;
+
+        // Aplica as carnes do dia vindas de getConfig em state.marnitasDia.
+        // Extraído de dentro de loadFromSheets() pra ser reaproveitado pelo refresh
+        // periódico (ver iniciarPollingCardapio) — antes, `config` só era lido UMA vez
+        // por sessão, no login: o Admin alterava as carnes do dia num device e nenhum
+        // outro via a mudança até alguém dar F5 manualmente (bug real relatado em
+        // produção nos dois primeiros dias de operação — a opção removida continuava
+        // aparecendo na tela do Caixa).
+        function _processarCarnesDia(config) {
+            if (!config || typeof config !== 'object') return;
+            // Guard de edição recente: se as carnes acabaram de ser salvas NESTE device,
+            // ignora o valor do servidor por 30s. Sem isso, um poll disparado na janela
+            // entre o POST e a propagação no Sheets reverteria a edição na tela.
+            // Mesmo padrão do `_editadoEm` já usado para preço de item no polling.
+            if (Date.now() - _carnesEditadasEm < 30000) {
+                console.log('[Carnes] refresh ignorado — edição local há menos de 30s');
+                return;
+            }
+            const diasMap = { seg:0, ter:1, qua:2, qui:3, sex:4, sab:5, dom:6 };
+            let _mudou = false;
+            Object.entries(diasMap).forEach(([sigla, idx]) => {
+                const chave = `carnes_${sigla}`;
+                // hasOwnProperty (e não truthiness): valor vazio é legítimo — significa
+                // "nenhuma carne cadastrada nesse dia" e precisa zerar a lista local.
+                // Com o teste de truthiness anterior, apagar TODAS as carnes de um dia
+                // nunca propagava (string vazia é falsy).
+                if (!Object.prototype.hasOwnProperty.call(config, chave)) return;
+                const valor = config[chave];
+                const nova = String(valor == null ? '' : valor)
+                    .split(',').map(c => c.trim()).filter(Boolean);
+                const antiga = state.marnitasDia[idx] || [];
+                if (antiga.join('|') !== nova.join('|')) {
+                    // Redesenha o textarea do Admin > Carnes se ele estiver mostrando
+                    // justamente o dia que mudou. Sem isso, o campo só é preenchido no
+                    // clique do botão do dia (selecionarDiaMarnita) e ficava eternamente
+                    // com o valor antigo na tela, mesmo com o estado já atualizado —
+                    // exatamente o que dava a impressão de "não atualiza sozinho".
+                    // Só sobrescreve se o que está no campo for idêntico ao valor ANTIGO,
+                    // ou seja, se o usuário não tiver digitado nada ainda: nunca apaga
+                    // uma edição em andamento.
+                    const ta = document.getElementById('marnitasDiaInput');
+                    if (ta && typeof diaMarnitaSelecionado !== 'undefined' && diaMarnitaSelecionado === idx
+                        && ta.value.trim() === antiga.join('\n').trim()) {
+                        ta.value = nova.join('\n');
+                    }
+                    _mudou = true;
+                }
+                state.marnitasDia[idx] = nova;
+            });
+            console.log('[Carnes] refresh do servidor —', _mudou ? 'MUDOU' : 'sem alteração');
+        }
 
         // Refresh periódico do cardápio em background — ver nota em
         // _processarCardapioRecebido sobre o bug que isso corrige. Intervalo de 60s (bem
@@ -3119,13 +3172,43 @@
         // um pedido chegando — 60s já garante que nenhum device fique com cardápio
         // desatualizado por mais que 1 minuto, sem sobrecarregar o GAS com leituras da
         // aba inteira de itens a cada 3s.
+        let _ultimoRefreshCardapio = 0;
+        // Trava anti-repetição: o refresh pode ser disparado por dois gatilhos (timer de
+        // 60s e retorno de visibilidade da aba). Sem isso, alternar entre abas/apps várias
+        // vezes seguidas dispararia uma rajada de getCardapio+getConfig — cada um lê a aba
+        // inteira no GAS, então repetir é caro e desnecessário.
+        const CARDAPIO_REFRESH_MIN_MS = 10000;
+
+        // Ponto único de atualização de cardápio + config (carnes do dia). Usado tanto
+        // pelo timer de 60s quanto pelo retorno de visibilidade — assim os dois gatilhos
+        // compartilham a mesma trava e a mesma lógica.
+        async function _refrescarCardapioEConfig(motivo) {
+            if (!state.user) return;
+            if (Date.now() - _ultimoRefreshCardapio < CARDAPIO_REFRESH_MIN_MS) {
+                console.log('[Refresh] ignorado (trava de 10s) — motivo:', motivo || 'timer');
+                return;
+            }
+            console.log('[Refresh] buscando cardápio + config — motivo:', motivo || 'timer');
+            // Não interrompe uma edição de item em andamento: _processarCardapioRecebido()
+            // reconstrói state.itens do zero e re-renderiza a lista do Admin. Com a modal
+            // de item aberta, isso mexeria no chão embaixo de quem está editando.
+            const _modalItem = document.getElementById('modalItem');
+            if (_modalItem && _modalItem.classList.contains('active')) return;
+            _ultimoRefreshCardapio = Date.now(); // marca ANTES do await — bloqueia chamadas concorrentes
+            // getConfig junto do getCardapio: as carnes do dia moram em `config`
+            // (chaves carnes_seg..carnes_dom), não no cardápio — sem isso elas só
+            // eram lidas no login e nunca propagavam entre devices.
+            const [cardapio, config] = await Promise.all([
+                sheetsAPI('getCardapio'),
+                sheetsAPI('getConfig')
+            ]);
+            if (Array.isArray(cardapio)) _processarCardapioRecebido(cardapio);
+            _processarCarnesDia(config);
+        }
+
         function iniciarPollingCardapio() {
             if (_cardapioPollInterval) return;
-            _cardapioPollInterval = setInterval(async () => {
-                if (!state.user) return;
-                const cardapio = await sheetsAPI('getCardapio');
-                if (Array.isArray(cardapio)) _processarCardapioRecebido(cardapio);
-            }, 60000);
+            _cardapioPollInterval = setInterval(_refrescarCardapioEConfig, 60000);
         }
 
         function pararPollingCardapio() {
@@ -3153,11 +3236,9 @@
 
                 // Processar config
                 if (config) {
-                    const diasMap = { seg:0, ter:1, qua:2, qui:3, sex:4, sab:5, dom:6 };
-                    Object.entries(diasMap).forEach(([sigla, idx]) => {
-                        if (config[`carnes_${sigla}`])
-                            state.marnitasDia[idx] = config[`carnes_${sigla}`].split(',').map(c=>c.trim()).filter(Boolean);
-                    });
+                    // Mesma função usada pelo refresh de 60s — fonte única de verdade
+                    // para "como as carnes do dia entram no state".
+                    _processarCarnesDia(config);
                     // Rodízio de telas ociosas do Fullscreen Cliente — chave genérica na
                     // aba config (idle_playlist), sem precisar de mudança no GAS (getConfig
                     // já é chave|valor livre). Valor é um JSON array de slides, ex.:
@@ -6967,6 +7048,16 @@ function carregarComanda() {
             }
             const inputCodigo = document.getElementById('lançarCodigoItem');
             if (inputCodigo) { inputCodigo.disabled = false; inputCodigo.style.opacity = '1'; }
+            // BUG (relatado em produção, "campo de busca travado mesmo com comanda
+            // carregada" — impacto direto na fila do Caixa): este era o ÚNICO caminho de
+            // carregamento de comanda que não reabilitava #lancBuscaInput. Os outros
+            // quatro (comanda paga/consulta, Em Preparo, Aberta, criarComandaInline) já
+            // faziam isso. O campo é desabilitado por limparTelaLançar() sempre que não
+            // há comanda ativa; entrando na tela Lançar por aqui (botão "Lançar item
+            // nesta comanda" / F1 no Checkout — o atalho MAIS usado pelo perfil Caixa),
+            // a comanda ficava ativa mas o campo continuava disabled do estado anterior.
+            const _biCheckout = document.getElementById('lancBuscaInput');
+            if (_biCheckout) { _biCheckout.disabled = false; _biCheckout.style.opacity = ''; _biCheckout.style.cursor = ''; }
             atualizarVisibilidadeBotaoAtalho();
             renderizarListaLançada();
             renderizarItensDisponiveis();
@@ -7189,6 +7280,10 @@ function carregarComanda() {
             }
             
             state.marnitasDia[diaMarnitaSelecionado] = carnes;
+            // Marca a edição local — o refresh de 60s (_processarCarnesDia) respeita
+            // esse timestamp por 30s pra não reverter o que acabou de ser salvo aqui
+            // enquanto o Sheets ainda não propagou a escrita.
+            _carnesEditadasEm = Date.now();
             saveStorage();
             sheets_salvarCarnesDia(diaMarnitaSelecionado, carnes); // ☁️ SHEETS
             showToast('✓ Carnes salvas!', 'success');
@@ -8816,11 +8911,30 @@ function carregarComanda() {
         // extra no momento certo — não altera nada da lógica de sincronização em
         // si, e o guard `_pollingAtivo` dentro de pollFromSheets() já impede
         // qualquer execução duplicada/concorrente com o poll do setInterval normal.
+        // Sincroniza tudo que é "estado compartilhado" no momento em que este aparelho
+        // volta a ser o que a pessoa está usando. Cardápio + carnes não esperam mais o
+        // ciclo de 60s: o Chrome estrangula timers de aba/app em segundo plano (o mesmo
+        // mecanismo que atrasa o poll no celular), então esperar o timer podia significar
+        // minutos de atraso. A trava de 10s dentro de _refrescarCardapioEConfig() evita
+        // rajada quando se alterna entre abas/janelas várias vezes seguidas.
+        function _sincronizarAoVoltarParaTela(motivo) {
+            if (!state.user) return;
+            pollFromSheets();
+            _refrescarCardapioEConfig(motivo || 'voltou para a tela');
+        }
+
+        // DOIS gatilhos, porque cobrem situações diferentes e nenhum cobre a outra:
+        //  • visibilitychange → aba escondida/reexibida, app em segundo plano no celular,
+        //    janela minimizada. NÃO dispara ao alternar entre duas janelas ambas visíveis.
+        //  • focus (window)   → esta janela virou a ativa, mesmo que nunca tenha ficado
+        //    "escondida" — exatamente o caso de duas janelas lado a lado no desktop, e o
+        //    de voltar pro navegador vindo de outro programa.
+        // Sem o listener de focus, testar/operar com duas janelas visíveis ao mesmo tempo
+        // nunca acionava a sincronização — o comportamento continuava sendo só o de 60s.
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && state.user) {
-                pollFromSheets();
-            }
+            if (document.visibilityState === 'visible') _sincronizarAoVoltarParaTela('aba reexibida');
         });
+        window.addEventListener('focus', () => _sincronizarAoVoltarParaTela('janela em foco'));
 
         // Chama fn() quando o próximo poll terminar (seja o atual em andamento ou um novo).
         // Garante re-renderização com dados REALMENTE frescos, sem iniciar poll duplicado.
@@ -10371,13 +10485,38 @@ function carregarComanda() {
                 };
             }
 
-            localStorage.setItem('michelin-data', JSON.stringify({
+            // ⚠️ localStorage.setItem PODE LANÇAR (QuotaExceededError, modo privado, disco
+            // cheio). Sem try/catch, essa exceção sobe e ABORTA a função que chamou
+            // saveStorage() no meio da execução. Isso é crítico em criarComandaInline(),
+            // onde saveStorage() roda ANTES de sheets_novaComanda(): a comanda ficaria só
+            // no device, e todo item lançado nela depois seria descartado em silêncio por
+            // sheets_addItem() (que desiste quando comanda._id não existe). O mesmo vale
+            // para os fluxos de lançamento de item. Persistir localmente é importante,
+            // mas NUNCA pode impedir a gravação no servidor — o Sheets é a fonte de verdade.
+            const _montarPayload = () => JSON.stringify({
                 comandas: state.comandas,
                 itens: state.itens,
                 usuarios: state.usuarios,
                 marnitasDia: state.marnitasDia,
                 caixa: state.caixa
-            }));
+            });
+            try {
+                localStorage.setItem('michelin-data', _montarPayload());
+            } catch (e) {
+                console.error('[Storage] Falha ao salvar michelin-data:', e);
+                // Recuperação: poda comandas de dias anteriores (histórico já está no
+                // Sheets) e tenta de novo com o estado menor.
+                try {
+                    const _n = _podarComandasAntigas();
+                    localStorage.setItem('michelin-data', _montarPayload());
+                    console.warn('[Storage] Recuperado após podar', _n, 'comanda(s) de dias anteriores');
+                } catch (e2) {
+                    console.error('[Storage] Falha persistente ao salvar:', e2);
+                    if (typeof showToast === 'function') {
+                        showToast('⚠️ Armazenamento local cheio — os lançamentos continuam sendo salvos no servidor', 'warning');
+                    }
+                }
+            }
             // Persiste sessão separadamente — preserva loginAt original para não resetar o TTL a cada save
             if (state.user) {
                 let loginAt = Date.now();
@@ -10385,13 +10524,41 @@ function carregarComanda() {
                     const prev = JSON.parse(localStorage.getItem('michelin-session') || '{}');
                     if (prev.loginAt) loginAt = prev.loginAt; // mantém o tempo original de login
                 } catch(e) {}
-                localStorage.setItem('michelin-session', JSON.stringify({
-                    user:       state.user,
-                    userLogado: state.userLogado,
-                    perfil:     state.perfil,
-                    loginAt
-                }));
+                try {
+                    localStorage.setItem('michelin-session', JSON.stringify({
+                        user:       state.user,
+                        userLogado: state.userLogado,
+                        perfil:     state.perfil,
+                        loginAt
+                    }));
+                } catch (e) {
+                    console.error('[Storage] Falha ao salvar sessão:', e);
+                }
             }
+        }
+
+        // Remove do estado local as comandas de dias anteriores. Nenhum outro ponto do
+        // código faz essa limpeza (o polling só remove comandas encerradas DO DIA), então
+        // state.comandas crescia indefinidamente no localStorage — a cada dia de operação
+        // (200-300 comandas/dia) o payload aumenta, até estourar a cota (~5MB) e fazer
+        // saveStorage() lançar. É seguro podar: o histórico completo vive no Sheets, e
+        // todas as telas que leem state.comandas já filtram por `data === hoje`
+        // (Checkout, Preparo, fechamento de expediente). A Receber lê do servidor
+        // (getAReceber), não daqui.
+        function _podarComandasAntigas() {
+            const hoje = new Date().toISOString().split('T')[0];
+            let removidas = 0;
+            Object.keys(state.comandas).forEach(k => {
+                const c = state.comandas[k];
+                if (c && c.data && c.data !== hoje) {
+                    delete state.comandas[k];
+                    removidas++;
+                }
+            });
+            if (removidas > 0 && state.comandaAtual && !state.comandas[state.comandaAtual]) {
+                state.comandaAtual = null;
+            }
+            return removidas;
         }
 
         function loadStorage() {
@@ -10406,6 +10573,11 @@ function carregarComanda() {
                     state.usuarios = loaded.usuarios || state.usuarios;
                     state.marnitasDia = loaded.marnitasDia || state.marnitasDia;
                     if (loaded.caixa) state.caixa = loaded.caixa;
+                    // Poda comandas de dias anteriores logo na entrada — evita carregar
+                    // (e re-salvar) histórico acumulado de dias passados a cada save.
+                    // Ver _podarComandasAntigas() para o porquê e por que é seguro.
+                    const _podadas = _podarComandasAntigas();
+                    if (_podadas > 0) console.log('🧹 Podadas', _podadas, 'comanda(s) de dias anteriores do estado local');
                     console.log('✅ Dados carregados (itens sempre do padrão)');
                 } catch (e) {
                     console.error('Erro ao carregar dados:', e);
