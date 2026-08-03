@@ -3093,7 +3093,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-02-b';
+        const CHEF_MIND_VERSAO = '2026-08-02-c';
         console.log(
             '%c Chef Mind ' + CHEF_MIND_VERSAO + ' ',
             'background:#D4724F;color:#fff;font-weight:bold;padding:3px 8px;border-radius:3px;font-size:12px;'
@@ -10506,13 +10506,30 @@ function carregarComanda() {
                 };
             }
 
-            localStorage.setItem('michelin-data', JSON.stringify({
-                comandas: state.comandas,
-                itens: state.itens,
-                usuarios: state.usuarios,
-                marnitasDia: state.marnitasDia,
-                caixa: state.caixa
-            }));
+            // ⚠️ localStorage.setItem PODE LANÇAR EXCEÇÃO (cota cheia, disco cheio, modo
+            // privado do navegador). Sem try/catch, essa exceção sobe e ABORTA a função que
+            // chamou saveStorage() no meio da execução — e isso é grave em pontos como
+            // criarComandaInline(), onde saveStorage() roda ANTES de sheets_novaComanda():
+            // a comanda ficaria só no aparelho, nunca seria criada no servidor, e todo item
+            // lançado nela depois seria descartado em silêncio por sheets_addItem() (que
+            // desiste quando comanda._id não existe).
+            // Princípio: persistir localmente é conveniência; gravar no servidor é a
+            // operação que não pode falhar. O local NUNCA pode derrubar o servidor.
+            // Em operação normal este catch jamais executa — o comportamento é idêntico.
+            try {
+                localStorage.setItem('michelin-data', JSON.stringify({
+                    comandas: state.comandas,
+                    itens: state.itens,
+                    usuarios: state.usuarios,
+                    marnitasDia: state.marnitasDia,
+                    caixa: state.caixa
+                }));
+            } catch (e) {
+                console.error('[Storage] Falha ao salvar michelin-data:', e);
+                if (typeof showToast === 'function') {
+                    showToast('⚠️ Armazenamento local cheio — os lançamentos continuam sendo salvos no servidor', 'warning');
+                }
+            }
             // Persiste sessão separadamente — preserva loginAt original para não resetar o TTL a cada save
             if (state.user) {
                 let loginAt = Date.now();
@@ -10520,12 +10537,16 @@ function carregarComanda() {
                     const prev = JSON.parse(localStorage.getItem('michelin-session') || '{}');
                     if (prev.loginAt) loginAt = prev.loginAt; // mantém o tempo original de login
                 } catch(e) {}
-                localStorage.setItem('michelin-session', JSON.stringify({
-                    user:       state.user,
-                    userLogado: state.userLogado,
-                    perfil:     state.perfil,
-                    loginAt
-                }));
+                try {
+                    localStorage.setItem('michelin-session', JSON.stringify({
+                        user:       state.user,
+                        userLogado: state.userLogado,
+                        perfil:     state.perfil,
+                        loginAt
+                    }));
+                } catch (e) {
+                    console.error('[Storage] Falha ao salvar sessão:', e);
+                }
             }
         }
 
