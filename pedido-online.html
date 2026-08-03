@@ -307,6 +307,14 @@ const CHAVE_SESSAO = 'chefMind_pedidoOnline_sessao';
 // Dados do cliente: nome/whatsapp lembrados SEM expiração, pra pré-popular o form na próxima visita
 const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
 
+// ── MARCA DE VERSÃO ───────────────────────────────────────────────────────────
+// ATUALIZAR a cada pacote que for pra produção (data + letra sequencial no dia).
+// Mesmo motivo do index.html: GitHub Pages e navegador servem cópia em cache por um
+// tempo, e sem isso não dá pra saber qual versão está de fato rodando no aparelho —
+// só deduzir por sintoma, que já nos custou horas. O estado da trava de horário
+// aparece junto de propósito: é a diferença mais fácil de confundir entre versões.
+const CHEF_MIND_PEDIDO_VERSAO = '2026-08-02-b';
+
 // Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
 // na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
 // igual ao protótipo validado e revisitar isso só se houver pedido fora de horário na prática.
@@ -319,10 +327,17 @@ const TELEFONE_AJUDA = '+5541997829474';
 // de atendimento) — com true, ignora a janela de horário e a tela "fora do horário"
 // nunca aparece. Revertido pra false antes do go-live: a partir daqui a regra de
 // horário de abertura/fechamento volta a valer normalmente pros clientes reais.
-// ⚠️ LIGADO EM MODO TESTE (ago/2026) — para validar os chips de acompanhamento fora do
-// horário de atendimento. REVERTER PARA false ANTES DE SUBIR PARA PRODUÇÃO: com true, o
-// pedido online fica aberto 24h e um cliente real consegue fazer pedido de madrugada.
-const _TESTE_IGNORAR_HORARIO = true;
+// MODO TESTE — com true, ignora a janela de horário e a tela "fora do horário" nunca
+// aparece. Usado pontualmente para validar mudanças fora do expediente; sempre reverter
+// para false antes de publicar, senão o pedido online fica aberto 24h e um cliente
+// consegue fazer pedido de madrugada. Estado atual: DESLIGADO (trava valendo normal).
+const _TESTE_IGNORAR_HORARIO = false;
+
+console.log(
+    '%c Pedido Online ' + CHEF_MIND_PEDIDO_VERSAO + ' ',
+    'background:#D4724F;color:#fff;font-weight:bold;padding:3px 8px;border-radius:3px;font-size:12px;'
+);
+console.log('[Pedido Online] Trava de horário:', _TESTE_IGNORAR_HORARIO ? '🔓 IGNORADA (modo teste)' : '🔒 ativa');
 
 function estaDentroDoHorario() {
     if (_TESTE_IGNORAR_HORARIO) return true;
