@@ -1263,12 +1263,27 @@
         }
         body.modo-caixa .co-hdr-abertas { font-size: 14px !important; padding: 4px 6px !important; margin-bottom: 6px !important; }
         body.modo-caixa .co-hdr-detalhe { font-size: 18px !important; padding: 5px 10px !important; }
-        body.modo-caixa .co-hdr-itens   { font-size: 12px !important; padding: 4px 8px !important; grid-template-columns: 1fr 56px 76px 76px !important; }
+        /* A tela do Caixa fica virada em parte para o CLIENTE (transparência do que está
+           sendo cobrado), então a lista precisa ser legível de mais longe e de lado —
+           referência: PDVs de mercado. Duas mudanças, nenhuma delas aumentando o
+           componente (o espaço já existe, estava é mal aproveitado):
+           1) Fonte de 16px → 19px no item e colunas numéricas mais largas. Como o nome
+              ocupa `1fr` (todo o resto), alargar qtd/unit/total puxa os números MAIS PARA
+              A ESQUERDA, encurtando o vão entre o nome e o valor — que é o que obrigava a
+              varrer a linha com os olhos da esquerda pra direita.
+           2) Faixa zebrada: linhas alternadas com fundo levemente diferente. É o recurso
+              clássico pra ler tabela larga sem "pular de linha" — o olho segue a faixa em
+              vez de tentar alinhar nome e preço no vazio. */
+        body.modo-caixa .co-hdr-itens   { font-size: 13px !important; padding: 5px 10px !important; grid-template-columns: 1fr 70px 100px 112px !important; }
+        body.modo-caixa .co-row:nth-child(odd) { background: rgba(0,0,0,0.035) !important; }
+        body.modo-caixa .co-nome  { font-weight: 700 !important; }
+        body.modo-caixa .co-unit  { font-size: 17px !important; }
+        body.modo-caixa .co-obs   { font-size: 14px !important; }
         /* Otimização de espaço (monitor 20" no Caixa, mouse+teclado — não precisa do padding
            generoso pensado pra touch): padding vertical reduzido de 12px pra 7px por linha.
            Mantém a fonte 16px (legibilidade do valor/comanda não muda) — só o respiro ao
            redor encolhe. Cada linha a menos de padding = mais itens visíveis sem rolar. */
-        body.modo-caixa .co-row         { font-size: 16px !important; padding: 7px 8px !important; grid-template-columns: 1fr 56px 76px 76px !important; }
+        body.modo-caixa .co-row         { font-size: 19px !important; padding: 8px 10px !important; grid-template-columns: 1fr 70px 100px 112px !important; }
         body.modo-caixa #totalCheckout { padding: 4px 8px !important; }
         body.modo-caixa #totalCheckout > div:first-child { font-size: 13px !important; letter-spacing: 2px !important; opacity: 1 !important; }
         body.modo-caixa #totalCheckout > div:last-child  { font-size: 32px !important; }
@@ -1316,7 +1331,29 @@
         #btnFullscreenPreparo { display: none !important; }
 
         /* Grid mais espaçoso e cards/botões maiores para toque rápido em paisagem */
-        body.modo-marmita #areaPreparando { padding: 14px !important; }
+        /* BUG (tablet A9+ deitado): a fila rolava só "pela metade" e o botão CONCLUÍDO dos
+           cards de baixo ficava inalcançável — com pedidos nas três colunas de status, o
+           operador simplesmente não conseguia fechar a marmita.
+           Causa: #areaPreparando é um filho flex com `flex:1` e `overflow-y:auto`, mas sem
+           `min-height:0`. O padrão do flexbox é `min-height:auto`, que impede o item de
+           encolher abaixo da altura do próprio conteúdo — então, em vez de virar uma área
+           rolável de altura fixa, ele CRESCIA junto com os cards e vazava pra fora da tela.
+           A barra de rolagem existia, mas só cobria o pedaço que coube na viewport.
+           `min-height:0` libera o item a encolher, e aí o overflow passa a valer de verdade.
+           Erro comum e não óbvio: sem ele o scroll "quase" funciona, que foi o que confundiu.
+           padding-bottom generoso: o último card precisa de folga pro botão não encostar
+           na borda inferior do tablet, onde o dedo esbarra na barra de gestos do Android. */
+        body.modo-marmita #areaPreparando {
+            padding: 14px 14px 90px !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch;
+        }
+        body.modo-marmita #screen-preparo.active {
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
         body.modo-marmita .kdsGrid {
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
             gap: 14px !important;
@@ -3056,7 +3093,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-02-a';
+        const CHEF_MIND_VERSAO = '2026-08-02-b';
         console.log(
             '%c Chef Mind ' + CHEF_MIND_VERSAO + ' ',
             'background:#D4724F;color:#fff;font-weight:bold;padding:3px 8px;border-radius:3px;font-size:12px;'
