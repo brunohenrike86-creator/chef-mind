@@ -407,6 +407,40 @@
             animation: slideUp 0.3s ease-out;
         }
 
+        /* Modal de marmita mais larga em tela grande (monitor 20" do Caixa e touch 15,6"
+           da Balança). Ela concentra muito controle — carnes do dia, 8 chips de
+           observação, nome do cliente, quantidade e o campo de texto: a 400px tudo quebra
+           em várias linhas e o operador precisa ROLAR no meio do atendimento, com fila.
+           Só a partir de 900px de largura, então no celular nada muda (lançar marmita
+           pelo celular é caso raro). Escopado só nesta modal — as outras continuam
+           estreitas de propósito, são formulários simples. */
+        @media (min-width: 900px) {
+            #modalMarnitaCarnes .modal-content { max-width: 780px; }
+            /* Só alargar não bastou pra matar a rolagem: os blocos (nome, qtd, obs,
+               preparo p/ mesa) continuavam empilhados um sob o outro. Em duas colunas,
+               Nome e Qtd — que são baixinhos — dividem a mesma faixa, encurtando a modal
+               em uma altura de bloco inteira. Observações e "Preparo p/ mesa" ficam na
+               largura toda (.marnita-campo-largo): a primeira tem 8 chips + textarea, e a
+               segunda é uma linha só que fica estranha espremida em meia largura. */
+            #marnitaCamposGrid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 0 10px;
+                align-items: start;
+            }
+            #marnitaCamposGrid > .marnita-campo-largo { grid-column: 1 / -1; }
+            /* Com a modal larga os 8 chips cabem em ~2 linhas, então a caixa de texto
+               não precisa mais de 50px de altura reservados. */
+            #modalMarnitaCarnes #marnitaObservacoes { height: 38px; }
+            /* Enxugamento de altura: o gargalo não é a largura, é a ALTURA da tela.
+               Num notebook (~768px de altura útil) 85vh dá pouco mais de 600px e ainda
+               sobra rolagem; num monitor de 20" (900-1080px) o mesmo layout cabe folgado.
+               Estes ajustes tiram ~40px sem apertar nada visualmente: menos respiro
+               interno da modal, blocos mais justos e teto de altura um pouco maior. */
+            #modalMarnitaCarnes .modal-content { padding: 16px; max-height: 90vh; }
+            #marnitaCamposGrid > div { margin: 5px 0 !important; padding: 8px !important; }
+        }
+
         @keyframes slideUp {
             from { transform: translateY(50px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
@@ -2821,6 +2855,10 @@
 
             <div id="marnitaCarne-container" style="padding: 8px 0;"></div>
 
+            <!-- Wrapper só para virar grid de 2 colunas em tela grande (ver CSS
+                 #marnitaCamposGrid). No celular continua empilhado, sem mudança. -->
+            <div id="marnitaCamposGrid">
+
             <!-- NOME DO CLIENTE -->
             <div style="padding: 10px 8px; background: var(--bg-light); border-radius: 4px; margin: 8px 0;">
                 <label style="font-size: 11px; font-weight: bold; color: var(--text-dark); display: block; margin-bottom: 4px;">👤 Nome do cliente (opcional)</label>
@@ -2844,7 +2882,7 @@
             </div>
 
             <!-- ✅ CAMPO DE OBSERVAÇÕES -->
-            <div style="padding: 10px 8px; background: var(--bg-light); border-radius: 4px; margin: 8px 0;">
+            <div class="marnita-campo-largo" style="padding: 10px 8px; background: var(--bg-light); border-radius: 4px; margin: 8px 0;">
                 <label style="font-size: 11px; font-weight: bold; color: var(--text-dark); display: block; margin-bottom: 4px;">📝 Observações (opcional)</label>
                 <div id="marnitaObsChips" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;"></div>
                 <textarea
@@ -2857,14 +2895,16 @@
             </div>
 
             <!-- ✅ CHECKBOX PREPARO JÁ - TOGGLE CLICÁVEL -->
-            <div id="containerPreparoJa" style="padding: 12px 8px; background: var(--bg-light); border-radius: 4px; margin: 8px 0; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 10px;" onclick="togglePreparoJa()">
+            <div id="containerPreparoJa" class="marnita-campo-largo" style="padding: 12px 8px; background: var(--bg-light); border-radius: 4px; margin: 8px 0; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 10px;" onclick="togglePreparoJa()">
                 <div id="togglePreparoJa" style="width: 24px; height: 24px; border: 2px solid var(--primary); border-radius: 4px; display: flex; align-items: center; justify-content: center; background: white; transition: all 0.2s;">
                     <span id="toggleIcon" style="font-size: 14px;">☐</span>
                 </div>
                 <span style="font-size: 12px; font-weight: bold; color: var(--text-dark);">⚡ Preparo p/ mesa (sem esperar pagamento)</span>
                 <input type="hidden" id="checkboxPreparoJa" value="false">
             </div>
-            
+
+            </div><!-- /#marnitaCamposGrid -->
+
             <div class="modal-buttons">
                 <button class="modal-btn-secondary" onclick="fecharModalMarnita()">Cancelar</button>
                 <button class="modal-btn-primary" onclick="confirmarMarnitaCarnes()">Confirmar</button>
@@ -3009,6 +3049,19 @@
         // Ambiente de homologação: ao testar localmente contra a planilha de
         // staging, troque APENAS a linha abaixo para 'staging'. NUNCA commitar
         // com USAR_AMBIENTE = 'staging' — produção é sempre o padrão.
+        // ── MARCA DE VERSÃO ───────────────────────────────────────────────────────
+        // ATUALIZAR a cada pacote que for pra produção (data + letra sequencial no dia).
+        // Existe pra responder em 2 segundos "qual versão está rodando NESTE aparelho?"
+        // sem precisar deduzir por sintoma. Motivo real: tanto o GitHub Pages quanto o
+        // navegador (inclusive em file://) servem cópia em cache por um tempo — já
+        // perseguimos um bug que não existia mais no código publicado, porque o Chrome
+        // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
+        const CHEF_MIND_VERSAO = '2026-08-02-a';
+        console.log(
+            '%c Chef Mind ' + CHEF_MIND_VERSAO + ' ',
+            'background:#D4724F;color:#fff;font-weight:bold;padding:3px 8px;border-radius:3px;font-size:12px;'
+        );
+
         const USAR_AMBIENTE = 'producao'; // 'producao' | 'staging'
 
         const SHEETS_API_URL_PROD = 'https://script.google.com/macros/s/AKfycbwAaSxDyP5NC8HlJ9AgMVWOV0CzjFfbr1DLNwSIp3BgEymvHGaYb2VLz5gY58dgOTg98w/exec';
@@ -6123,7 +6176,13 @@ function carregarComanda() {
         }
 
         // ===== Sugestões rápidas de observação (marmita) =====
-        const MARNITA_OBS_SUGESTOES = ['Sem Feijão', 'Sem Macarrão', 'Sem Arroz', 'Sem Farofa', 'Cliente quer acompanhar'];
+        // Um chip por acompanhamento que a marmita leva (mesma lista descrita ao cliente
+        // no pedido online: arroz, feijão, macarrão, farofa, legumes, fritura e salada),
+        // na mesma ordem, seguidos do único caso que não é remoção. Manter estes textos
+        // IDÊNTICOS aos chips do pedido-online.html: os dois fluxos gravam na mesma coluna
+        // `observacao` e aparecem na mesma fila do Preparo — divergir a grafia faz a
+        // cozinha ler "Sem Feijão" e "sem feijao" como coisas diferentes.
+        const MARNITA_OBS_SUGESTOES = ['Sem Arroz', 'Sem Feijão', 'Sem Macarrão', 'Sem Farofa', 'Sem Legumes', 'Sem Fritura', 'Sem Salada', 'Cliente quer acompanhar'];
 
         function _marnitaRenderObsChips() {
             const container = document.getElementById('marnitaObsChips');
