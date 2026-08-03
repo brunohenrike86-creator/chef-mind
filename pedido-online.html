@@ -81,6 +81,36 @@
         opacity: 0.4;
         cursor: not-allowed;
     }
+    /* Seção expansível (usada em "Quer tirar algum acompanhamento?").
+       Deliberadamente SEM borda de 2px e SEM negrito pesado: com aqueles, a faixa
+       competia visualmente com os chips e com os campos de input, parecendo mais um
+       controle a preencher. Aqui ela é só um bloco de fundo claro — lê como "seção que
+       abre", não como campo. O chevron é um quadradinho fixo, alinhado ao centro
+       vertical, então não fica "voando" solto ao lado do texto. */
+    .secao-expansivel {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        background: var(--bg-light);
+        border-radius: 10px;
+        padding: 12px 14px;
+        cursor: pointer;
+        user-select: none;
+        margin-top: 20px;
+    }
+    .secao-expansivel .se-titulo { font-size: 14px; color: var(--text-dark); }
+    .secao-expansivel .se-resumo { font-size: 13px; color: var(--gray); margin-top: 3px; }
+    .secao-expansivel .se-resumo.tem-selecao { color: var(--primary); font-weight: bold; }
+    .secao-expansivel .se-seta {
+        flex-shrink: 0;
+        width: 26px; height: 26px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 50%;
+        background: var(--bg-white);
+        color: var(--gray);
+        font-size: 12px;
+        transition: transform 0.18s ease;
+    }
+    .secao-expansivel.aberta .se-seta { transform: rotate(180deg); }
+
     .qtd-control { display:flex; align-items:center; gap:16px; }
     .qtd-btn {
         width: 40px; height: 40px;
@@ -289,7 +319,10 @@ const TELEFONE_AJUDA = '+5541997829474';
 // de atendimento) — com true, ignora a janela de horário e a tela "fora do horário"
 // nunca aparece. Revertido pra false antes do go-live: a partir daqui a regra de
 // horário de abertura/fechamento volta a valer normalmente pros clientes reais.
-const _TESTE_IGNORAR_HORARIO = false;
+// ⚠️ LIGADO EM MODO TESTE (ago/2026) — para validar os chips de acompanhamento fora do
+// horário de atendimento. REVERTER PARA false ANTES DE SUBIR PARA PRODUÇÃO: com true, o
+// pedido online fica aberto 24h e um cliente real consegue fazer pedido de madrugada.
+const _TESTE_IGNORAR_HORARIO = true;
 
 function estaDentroDoHorario() {
     if (_TESTE_IGNORAR_HORARIO) return true;
@@ -383,6 +416,7 @@ let state = {
     whatsapp: '',
     erro: '',
     obsAberta: false,
+    acompAberto: false, // seção "Quer tirar algum acompanhamento?" expandida (ver blocoAcompanhamentos)
     rolarParaPedidoAoRenderizar: false,
     rolarParaConfiguradorAoRenderizar: false,
     enviando: false,
@@ -457,6 +491,33 @@ function toggleCarne(nome) {
 
 function alterarQtd(delta) {
     state.qtd = Math.max(1, state.qtd + delta);
+    render();
+}
+
+// Um chip por acompanhamento da marmita, na mesma ordem em que aparecem no texto
+// descritivo do topo. Todos começam com "Sem": a própria gramática limita o que o
+// cliente pode pedir — dá pra RETIRAR um acompanhamento, nunca pedir a mais, trocar
+// ou inventar. Antes o único caminho era um campo de texto livre escondido atrás de um
+// link discreto, que praticamente ninguém percebia: quem queria tirar feijão não avisava,
+// a marmita saía errada e era refeita (prejuízo + demora pro cliente).
+// ATENÇÃO: manter estes textos IDÊNTICOS a MARNITA_OBS_SUGESTOES do index.html — os dois
+// fluxos gravam na mesma coluna `observacao` e caem na mesma fila do Preparo.
+const OBS_SUGESTOES = ['Sem Arroz', 'Sem Feijão', 'Sem Macarrão', 'Sem Farofa', 'Sem Legumes', 'Sem Fritura', 'Sem Salada'];
+
+// Mesma mecânica dos chips do operador (_marnitaToggleObsSugestao no index.html):
+// os chips e o campo de texto escrevem no MESMO state.obs, separados por vírgula.
+// Assim o que o cliente digita e o que ele toca convivem sem campo duplicado.
+function toggleObsSugestao(texto) {
+    const partes = String(state.obs || '').split(',').map(s => s.trim()).filter(Boolean);
+    const idx = partes.findIndex(p => p.toLowerCase() === texto.toLowerCase());
+    if (idx >= 0) partes.splice(idx, 1);
+    else partes.push(texto);
+    state.obs = partes.join(', ');
+    render();
+}
+
+function toggleAcompAberto() {
+    state.acompAberto = !state.acompAberto;
     render();
 }
 
@@ -554,6 +615,10 @@ function adicionarBebida(codigo, nome, preco) {
     const existente = state.bebidas.find(b => b.codigo === codigo);
     if (existente) existente.qtd++;
     else state.bebidas.push({ codigo, nome, preco, qtd: 1 });
+    // Confirmação imediata: a lista do pedido fica ACIMA das opções de bebida, então
+    // sem isso o cliente toca e não vê nada acontecer sem rolar a tela de volta.
+    const _q = existente ? existente.qtd : 1;
+    sucesso(`✅ ${nome}${_q > 1 ? ` (${_q}×)` : ''} adicionada!`);
     render();
 }
 
@@ -654,7 +719,7 @@ function novoPedido() {
         tamanho: null, carnesSelecionadas: [], qtd: 1, obs: '', carrinho: [],
         bebidaAberta: false, bebidas: [],
         nome: clienteSalvo.nome || '', whatsapp: clienteSalvo.whatsapp || '',
-        erro: '', obsAberta: false,
+        erro: '', obsAberta: false, acompAberto: false,
         rolarParaPedidoAoRenderizar: false, rolarParaConfiguradorAoRenderizar: false,
         enviando: false, editandoIndex: null
     };
@@ -749,6 +814,38 @@ function renderFormulario() {
         ? `<div class="dica ${state.carnesSelecionadas.length === max ? 'ok' : ''}">${state.carnesSelecionadas.length} de ${max} carnes selecionadas</div>`
         : '';
 
+    // Chip marcado quando o texto correspondente já está em state.obs (comparação
+    // case-insensitive, porque o cliente pode ter digitado à mão no campo livre).
+    const _obsPartes = String(state.obs || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    const chipsObs = OBS_SUGESTOES.map(o => {
+        const sel = _obsPartes.includes(o.toLowerCase());
+        return `<div class="chip ${sel ? 'selecionado' : ''}" onclick="toggleObsSugestao('${o.replace(/'/g,"\\'")}')">${sel ? '✓ ' : ''}${escapeHtml(o)}</div>`;
+    }).join('');
+
+    // Acompanhamentos ficam FECHADOS por padrão: são 7 chips de exceção ocupando meia
+    // tela num pedido onde a maioria não quer tirar nada. O que resolve a visibilidade
+    // (o problema original: ninguém achava o campo) não é ter tudo aberto — é a PERGUNTA
+    // estar em destaque e no lugar certo. Por isso o gatilho aqui é uma faixa larga,
+    // com borda e seta, logo depois da Carne — e não o link apagado no rodapé de antes.
+    // Abre automaticamente se já houver algo marcado (ex: cliente editando um item do
+    // carrinho), e o resumo do que está marcado aparece na faixa mesmo fechada, pra
+    // escolha nenhuma sumir de vista.
+    const _obsMarcadas = OBS_SUGESTOES.filter(o => _obsPartes.includes(o.toLowerCase()));
+    const _acompAberto = state.acompAberto || _obsMarcadas.length > 0;
+    const _temSelecao = _obsMarcadas.length > 0;
+    const blocoAcompanhamentos = `
+        <div class="secao-expansivel ${_acompAberto ? 'aberta' : ''}" onclick="toggleAcompAberto()">
+            <div>
+                <div class="se-titulo">Quer tirar algum acompanhamento?</div>
+                <div class="se-resumo ${_temSelecao ? 'tem-selecao' : ''}">${
+                    _temSelecao ? escapeHtml(_obsMarcadas.join(', ')) : 'Opcional'
+                }</div>
+            </div>
+            <div class="se-seta">▾</div>
+        </div>
+        ${_acompAberto ? `<div class="chips" style="margin-top:10px;">${chipsObs}</div>` : ''}
+    `;
+
     const linhasMarmitas = state.carrinho.map((item, i) => {
         const emEdicao = state.editandoIndex === i;
         return `
@@ -790,11 +887,19 @@ function renderFormulario() {
         ? `<div class="vazio">Adicione marmitas ou bebidas ao seu pedido acima</div>`
         : linhasMarmitas + linhasBebidas;
 
+    // O chip da bebida mostra a quantidade já adicionada e fica marcado.
+    // Motivo: as opções ficam ABAIXO do resumo "Seu pedido", então a bebida adicionada
+    // aparece numa lista ACIMA de onde o dedo está — o cliente tocava e não via
+    // confirmação nenhuma sem rolar de volta pra cima. Com o estado no próprio chip, a
+    // resposta acontece exatamente onde ele está olhando, sem precisar navegar.
     const listaBebidasDisponiveis = state.bebidaAberta
         ? (BEBIDAS_CARDAPIO.length > 0
-            ? `<div class="chips" style="margin-top:10px;">${BEBIDAS_CARDAPIO.map(b => `
-                <div class="chip" onclick="adicionarBebida(${b.codigo}, '${b.nome.replace(/'/g,"\\'")}', ${b.preco})">${escapeHtml(b.nome)} · R$ ${b.preco.toFixed(2)}</div>
-              `).join('')}</div>`
+            ? `<div class="chips" style="margin-top:10px;">${BEBIDAS_CARDAPIO.map(b => {
+                const _noCarrinho = state.bebidas.find(x => x.codigo === b.codigo);
+                const _qtd = _noCarrinho ? _noCarrinho.qtd : 0;
+                return `<div class="chip ${_qtd > 0 ? 'selecionado' : ''}" onclick="adicionarBebida(${b.codigo}, '${b.nome.replace(/'/g,"\\'")}', ${b.preco})">${_qtd > 0 ? `✓ ${_qtd}× ` : ''}${escapeHtml(b.nome)} · R$ ${b.preco.toFixed(2)}</div>`;
+              }).join('')}</div>
+              <div class="dica">Toque de novo para adicionar mais uma.</div>`
             : `<div class="dica" style="margin-top:10px;">Sem bebidas disponíveis agora</div>`)
         : '';
 
@@ -815,6 +920,14 @@ function renderFormulario() {
             <div class="chips">${chipsCarne}</div>
             ${dicaCarne}
 
+            <!-- Remoção de acompanhamentos — posicionado aqui de propósito, logo após a
+                 Carne: é parte de "o que vem na marmita", junto com tamanho e carne.
+                 Antes só existia como campo de texto no rodapé, depois da quantidade e
+                 escondido atrás de um link — invisível na prática. O rótulo é uma PERGUNTA
+                 ("Quer tirar...?") e não um nome de campo ("Observação"): pergunta pede
+                 resposta, rótulo de campo é ignorado. -->
+            ${blocoAcompanhamentos}
+
             <!-- Renomeado (pesquisa de teste apontou "Quantidade" como confuso — lia como
                  "quantidade de carne" por ficar logo abaixo dos chips de carne). Dica reduzida
                  a uma frase curta a pedido do usuário — texto longo demais era em si um
@@ -827,10 +940,16 @@ function renderFormulario() {
             </div>
             <div class="dica">Pra outro tamanho ou carne, adicione separado.</div>
 
+            <!-- Campo livre mantido, mas continua discreto e fechado por padrão: os chips
+                 acima cobrem o caso comum (remover acompanhamento) de forma padronizada.
+                 O texto do link mudou de "Alguma observação sobre o pedido?" (genérico,
+                 convidava a pedir qualquer coisa) para deixar claro que é complemento do
+                 que já foi marcado, não um canal aberto de customização. O campo edita o
+                 MESMO state.obs dos chips — por isso mostra o que já está marcado. -->
             ${state.obsAberta
-                ? `<div class="label-secao">Observação (opcional)</div>
-                   <input type="text" placeholder="Ex: Sem feijão, Sem macarrão" value="${escapeHtml(state.obs)}" oninput="state.obs = this.value">`
-                : `<div class="link-discreto" style="margin-top:14px; text-align:left;" onclick="toggleObsAberta()">+ Alguma observação sobre o pedido?</div>`
+                ? `<div class="label-secao" style="margin-top:14px;">Outra observação</div>
+                   <input type="text" placeholder="Ex: Sem cebola" value="${escapeHtml(state.obs)}" oninput="state.obs = this.value">`
+                : `<div class="link-discreto" style="margin-top:12px; text-align:left;" onclick="toggleObsAberta()">+ Outra observação</div>`
             }
 
             <div style="margin-top:16px; display:flex; gap:8px;">
