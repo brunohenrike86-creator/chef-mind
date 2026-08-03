@@ -3093,7 +3093,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-02-c';
+        const CHEF_MIND_VERSAO = '2026-08-02-d';
         console.log(
             '%c Chef Mind ' + CHEF_MIND_VERSAO + ' ',
             'background:#D4724F;color:#fff;font-weight:bold;padding:3px 8px;border-radius:3px;font-size:12px;'
@@ -10526,8 +10526,24 @@ function carregarComanda() {
                 }));
             } catch (e) {
                 console.error('[Storage] Falha ao salvar michelin-data:', e);
-                if (typeof showToast === 'function') {
-                    showToast('⚠️ Armazenamento local cheio — os lançamentos continuam sendo salvos no servidor', 'warning');
+                // Recuperação: poda comandas de dias anteriores (o histórico completo vive
+                // no Sheets) e tenta de novo com o estado menor. Se ainda assim falhar,
+                // avisa e segue — gravar no servidor nunca pode ser impedido pelo local.
+                try {
+                    const _n = _podarComandasAntigas();
+                    localStorage.setItem('michelin-data', JSON.stringify({
+                        comandas: state.comandas,
+                        itens: state.itens,
+                        usuarios: state.usuarios,
+                        marnitasDia: state.marnitasDia,
+                        caixa: state.caixa
+                    }));
+                    console.warn('[Storage] Recuperado após podar', _n, 'comanda(s) de dias anteriores');
+                } catch (e2) {
+                    console.error('[Storage] Falha persistente ao salvar:', e2);
+                    if (typeof showToast === 'function') {
+                        showToast('⚠️ Armazenamento local cheio — os lançamentos continuam sendo salvos no servidor', 'warning');
+                    }
                 }
             }
             // Persiste sessão separadamente — preserva loginAt original para não resetar o TTL a cada save
@@ -10550,6 +10566,32 @@ function carregarComanda() {
             }
         }
 
+        // Remove do estado local as comandas de dias anteriores. Nenhum outro ponto do
+        // código faz essa limpeza — o polling só remove comandas encerradas DO DIA — então
+        // state.comandas cresce indefinidamente no localStorage: a ~250 comandas/dia, em
+        // 3-4 semanas o payload estoura a cota (~5MB) e o setItem passa a lançar exceção.
+        // É seguro podar: o histórico completo vive no Sheets, e TODAS as telas que leem
+        // state.comandas já filtram por `data === hoje` (Checkout, Preparo, fechamento de
+        // expediente). A Receber lê do servidor (getAReceber), não daqui.
+        function _podarComandasAntigas() {
+            const hoje = new Date().toISOString().split('T')[0];
+            let removidas = 0;
+            Object.keys(state.comandas).forEach(k => {
+                const c = state.comandas[k];
+                if (c && c.data && c.data !== hoje) {
+                    delete state.comandas[k];
+                    removidas++;
+                }
+            });
+            // Segurança: se a comanda ativa era de outro dia (aparelho aberto desde ontem),
+            // ela acabou de sumir do estado — limpar a referência evita tela apontando
+            // para uma comanda que não existe mais.
+            if (removidas > 0 && state.comandaAtual && !state.comandas[state.comandaAtual]) {
+                state.comandaAtual = null;
+            }
+            return removidas;
+        }
+
         function loadStorage() {
             const saved = localStorage.getItem('michelin-data');
             if (saved) {
@@ -10562,6 +10604,10 @@ function carregarComanda() {
                     state.usuarios = loaded.usuarios || state.usuarios;
                     state.marnitasDia = loaded.marnitasDia || state.marnitasDia;
                     if (loaded.caixa) state.caixa = loaded.caixa;
+                    // Poda logo na entrada — evita carregar e re-salvar histórico de dias
+                    // passados a cada save. Ver _podarComandasAntigas() para o porquê.
+                    const _podadas = _podarComandasAntigas();
+                    if (_podadas > 0) console.log('🧹 Podadas', _podadas, 'comanda(s) de dias anteriores do estado local');
                     console.log('✅ Dados carregados (itens sempre do padrão)');
                 } catch (e) {
                     console.error('Erro ao carregar dados:', e);
