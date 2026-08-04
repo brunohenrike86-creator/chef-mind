@@ -313,7 +313,7 @@ const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
 // tempo, e sem isso não dá pra saber qual versão está de fato rodando no aparelho —
 // só deduzir por sintoma, que já nos custou horas. O estado da trava de horário
 // aparece junto de propósito: é a diferença mais fácil de confundir entre versões.
-const CHEF_MIND_PEDIDO_VERSAO = '2026-08-04-a';
+const CHEF_MIND_PEDIDO_VERSAO = '2026-08-04-b';
 
 // Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
 // na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
@@ -1273,13 +1273,26 @@ function renderErroCarregamento() {
 }
 
 async function inicializar() {
-    await carregarOpcoes();
-
     // ?novo=1 = aba aberta via "Fazer novo pedido" (ver novoPedidoEmNovaAba) — ignora a
     // sessão ativa de propósito, pra essa aba abrir no formulário mesmo com um pedido em
     // andamento salvo no localStorage (a aba original continua acompanhando esse pedido).
     const pularSessao = new URLSearchParams(location.search).get('novo') === '1';
     const sessaoAtiva = pularSessao ? null : lerSessaoAtiva();
+
+    // ⚠️ NÃO carregar o cardápio quando ele não vai ser usado.
+    //
+    // Antes, inicializar() chamava carregarOpcoes() como primeira linha, sempre. Um
+    // cliente que abrisse o link fora do horário esperava as DUAS tentativas de 12s
+    // (24s de espera) para ver a tela "Fora do horário" — que não usa marmita, carne
+    // nem bebida. renderStatus() também não usa nada disso.
+    //
+    // Não é só desperdício de espera: cada chamada ao GAS é uma aposta na cauda de
+    // 10-30s do transporte (ver plano emergencial). Chamada que não precisa existir é
+    // ficha jogada fora na loteria — e, no horário de pico, ficha tirada de quem
+    // realmente precisa.
+    const precisaDoCardapio = !sessaoAtiva && estaDentroDoHorario();
+    if (precisaDoCardapio) await carregarOpcoes();
+
     if (sessaoAtiva && sessaoAtiva.comandaId) {
         pedidoAtual = sessaoAtiva;
         view = 'status';
