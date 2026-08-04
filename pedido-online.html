@@ -759,29 +759,77 @@ function novoPedidoEmNovaAba() {
     window.open(location.pathname + '?novo=1', '_blank');
 }
 
-// Polling do status real — a cada 3s, conforme o plano (QA exige refletir em até ~3s).
-// Só fica ativo enquanto a tela de status está visível.
+// ===== Polling do status (ponto 10 do plano emergencial) =====
+//
+// Era 3s. O intervalo veio do QA original ("refletir em até ~3s"), pensado quando
+// isto era protótipo — mas cada cliente com pedido aberto é mais um aparelho
+// martelando o servidor, DE FORA do restaurante. Dez clientes esperando ao meio-dia
+// era mais carga que todos os aparelhos internos somados, e o pior: escala com o
+// sucesso do canal. Quanto melhor o pedido online funciona, mais ele se afoga.
+//
+// 15s não muda nada para o cliente (ele está esperando comida, não uma cotação de
+// bolsa) e corta a carga do canal em 5×.
+const _POLL_INTERVALO_MS = 15000;
+
+// Piso entre duas consultas, para o gatilho de visibilidade abaixo. Sem ele, um
+// cliente alternando entre apps dispararia uma chamada a cada troca — trocaríamos
+// um problema de carga por outro.
+//
+// É IGUAL ao intervalo do poll, e não um número menor solto, porque a pergunta
+// certa não é "faz quanto tempo da última chamada?" e sim "o dado que já tenho
+// está velho?". Se o cliente voltou 6s depois, o status na tela tem 6s de idade —
+// está fresco, buscar de novo não acrescenta nada. Só vale reconsultar quando a
+// aba ficou oculta tempo suficiente para o dado envelhecer.
+//
+// Efeito colateral bom: por construção, NENHUMA sequência de alternâncias consegue
+// gerar mais chamadas que o poll normal. Com um piso menor (tentei 5s antes), um
+// cliente trocando de app a cada 6s geraria 10 chamadas/min contra as 4/min do
+// poll — o gatilho viraria a fonte de carga que ele deveria evitar.
+const _POLL_MIN_ENTRE_CHAMADAS_MS = _POLL_INTERVALO_MS;
+
+let _ultimaConsulta = 0;
+let _pollEncerrado  = false;   // pedido pronto/concluído: acabou o que consultar
+
 function iniciarPolling() {
     pararPolling();
+    _pollEncerrado = false;    // pedido novo reabre o ciclo
     consultarStatus();
-    intervaloPolling = setInterval(consultarStatus, 3000);
+    intervaloPolling = setInterval(consultarStatus, _POLL_INTERVALO_MS);
 }
 
 function pararPolling() {
     if (intervaloPolling) { clearInterval(intervaloPolling); intervaloPolling = null; }
 }
 
+// Celular no bolso não precisa consultar nada. Ao voltar, consulta NA HORA em vez
+// de esperar os 15s — senão o cliente abre o telefone e vê status velho, que é
+// justamente quando ele mais quer a informação.
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        pararPolling();
+    } else if (pedidoAtual && view === 'status' && !_pollEncerrado) {
+        iniciarPolling();
+    }
+});
+
 async function consultarStatus() {
     if (!pedidoAtual || view !== 'status') { pararPolling(); return; }
+
+    const agora = Date.now();
+    if (agora - _ultimaConsulta < _POLL_MIN_ENTRE_CHAMADAS_MS) return;
+    _ultimaConsulta = agora;
+
     try {
         const resultado = await apiGet('getStatusPedidoOnline', { comandaId: pedidoAtual.comandaId });
         if (resultado && !resultado.erro) {
             pedidoAtual.status = resultado.status;
             pedidoAtual.total = resultado.total;
             render();
-            // Pedido concluído: para de fazer polling (não precisa mais consultar)
-            // A sessão expira naturalmente em 12h — cliente ainda pode ver o status se voltar no mesmo dia
-            if (resultado.status === 'concluido') {
+            // 'pronto' já é a notícia que o cliente estava esperando — daí em diante
+            // ele vem buscar, e continuar consultando só gera carga. A sessão expira
+            // em 12h, então ele ainda vê o status se voltar no mesmo dia.
+            if (resultado.status === 'pronto' || resultado.status === 'concluido') {
+                _pollEncerrado = true;
                 pararPolling();
             }
         }
