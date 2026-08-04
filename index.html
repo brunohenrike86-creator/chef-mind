@@ -3100,7 +3100,35 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-04-b';
+        const CHEF_MIND_VERSAO = '2026-08-04-d';
+
+        // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
+        //
+        // O módulo foi construído mas nunca entrou em operação, e estava cobrando pedágio
+        // nos dois momentos mais sensíveis do sistema:
+        //   · login    — 1 das 6 chamadas paralelas do boot (entrou junto com o Go Live)
+        //   · pagamento — 1 chamada no frontend + 2 leituras de aba inteira no GAS
+        //
+        // Com `false`: some a aba Admin > Estoque, o botão 📦 no card do item e o filtro
+        // rápido. Nada é apagado — é só um interruptor. Religar aqui E em
+        // ESTOQUE_BAIXA_AUTOMATICA no chef-mind-api.gs quando o módulo for usar de verdade.
+        const ESTOQUE_ATIVO = false;
+
+        // Esconde por CSS, não por JS.
+        //
+        // A primeira tentativa mexia em `btn.style.display` dentro de um listener de
+        // DOMContentLoaded e NÃO funcionou em produção. Regra de CSS injetada aqui não
+        // depende de o DOM estar pronto, não depende de ordem de execução, e o
+        // `!important` sobrevive a qualquer código que mexa em estilo inline dos botões
+        // (`setupAdminTabs` reescreve background/color/border das abas a cada clique).
+        //
+        // Esconde os DOIS: o botão da aba e o conteúdo dela — assim, mesmo que algo
+        // navegue para a aba por código, não aparece nada quebrado.
+        if (!ESTOQUE_ATIVO) {
+            const _estilo = document.createElement('style');
+            _estilo.textContent = '[data-admin-tab="estoque"], #admin-estoque { display: none !important; }';
+            document.head.appendChild(_estilo);
+        }
         console.log(
             '%c Chef Mind ' + CHEF_MIND_VERSAO + ' ',
             'background:#D4724F;color:#fff;font-weight:bold;padding:3px 8px;border-radius:3px;font-size:12px;'
@@ -3251,21 +3279,33 @@
         async function loadFromSheets() {
             console.log('[Sheets] Carregando dados em paralelo...');
             try {
-                // ── Batch 1: 6 chamadas independentes em paralelo ──────────
-                const [config, cardapio, usuarios, comandas, caixaStatus, estoqueItens] = await Promise.all([
+                // ── Batch 1: 5 chamadas independentes em paralelo ──────────
+                //
+                // ⚠️ ERAM 6. `getEstoqueItens` saiu daqui em 04/08 (ponto 7 do plano
+                // emergencial) — e a investigação dos backups mostrou que ele tinha ENTRADO
+                // no boot entre 17/jul e 02/ago, junto com o Go Live:
+                //
+                //   22/jun: 5 chamadas · 17/jul: 5 chamadas · 02/ago: 6 chamadas
+                //   timeout do sheetsAPI: 20s, INALTERADO desde o início do projeto
+                //
+                // O login é o momento mais frágil do sistema justamente por disparar tudo
+                // isto em paralelo. Com container frio (10-32s por chamada, medido em 04/08)
+                // contra um timeout de 20s, um login frio está condenado por construção —
+                // e basta UM aparelho. Foi a primeira coisa a quebrar em 03/08, antes mesmo
+                // de a operação começar.
+                //
+                // O comentário antigo dizia "necessário para bloqueio de lançamento por
+                // saldo". Essa regra NÃO EXISTE MAIS — ver `_itemEsgotado removida`: estoque
+                // zerado não bloqueia venda, o saldo fica negativo de propósito para rastrear
+                // furo. Ou seja, a chamada era obrigatória no boot por um motivo que já não
+                // valia. O estoque agora carrega sob demanda, ao abrir Admin > Estoque.
+                const [config, cardapio, usuarios, comandas, caixaStatus] = await Promise.all([
                     sheetsAPI('getConfig'),
                     sheetsAPI('getCardapio'),
                     sheetsAPI('getUsuarios'),
                     sheetsAPI('getComandasDoDia'),
-                    sheetsAPI('getCaixaStatus'),
-                    sheetsAPI('getEstoqueItens') // necessário para bloqueio de lançamento por saldo
+                    sheetsAPI('getCaixaStatus')
                 ]);
-
-                // Processar estoque (necessário para bloqueio de lançamento em todos os perfis)
-                if (Array.isArray(estoqueItens)) {
-                    state.estoque.itens = estoqueItens;
-                    state.estoque._carregado = true;
-                }
 
                 // Processar config
                 // _respostaValida: com timeout, `config` é o objeto de erro (verdadeiro), e
@@ -4481,11 +4521,15 @@
             const defs = [
                 { label: '✅ Ativos',  ativo: adminFiltroStatus === 'ativos',
                   fn: () => { adminFiltroStatus = adminFiltroStatus === 'ativos' ? 'todos' : 'ativos'; gerarFiltrosRapidos(); renderAdminItensComFiltro(); } },
-                { label: '📦 Estoque', ativo: adminFiltroEstoque,
-                  fn: () => { adminFiltroEstoque = !adminFiltroEstoque; gerarFiltrosRapidos(); renderAdminItensComFiltro(); } },
                 { label: '🌐 Online',  ativo: adminFiltroOnline,
                   fn: () => { adminFiltroOnline = !adminFiltroOnline; gerarFiltrosRapidos(); renderAdminItensComFiltro(); } },
             ];
+            // Filtro de estoque só aparece com o módulo ligado — sem os dados carregados no
+            // boot ele retornaria vazio sempre, o que pareceria bug em vez de recurso off.
+            if (ESTOQUE_ATIVO) {
+                defs.splice(1, 0, { label: '📦 Estoque', ativo: adminFiltroEstoque,
+                  fn: () => { adminFiltroEstoque = !adminFiltroEstoque; gerarFiltrosRapidos(); renderAdminItensComFiltro(); } });
+            }
             // Limpa apenas os filhos diretos do container (display:contents, sem innerHTML)
             while (container.firstChild) container.removeChild(container.firstChild);
             defs.forEach(d => {
@@ -4631,6 +4675,10 @@
                         <button onclick="visualizarItem('${codigo}')" style="flex: 1; padding: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--primary); font-weight: bold;">👁️ Ver</button>
                         <button onclick="abrirModalEditarItem('${codigo}')" style="flex: 1; padding: 6px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--primary); font-weight: bold;">✏️ Editar</button>
                         ${(function() {
+                            // Módulo desligado → nem renderiza o botão 📦. Sem os dados do
+                            // boot ele apareceria sempre no estado "não configurado", o que
+                            // convida o operador a ativar estoque item por item sem querer.
+                            if (!ESTOQUE_ATIVO) return '';
                             const ei = _getEstoqueItemPorCodigo(codigo);
                             if (ei) {
                                 const saldo = parseFloat(ei.saldo) || 0;
@@ -7336,8 +7384,11 @@ function carregarComanda() {
                         falhas.push(c.numero);
                     }
                 }
-                // Recarrega estoque só depois de todas (baixa roda dentro de pagarComanda no GAS)
-                carregarEstoque().catch(() => {});
+                // Estoque NÃO é mais recarregado aqui (ponto 7, 04/08). A baixa automática
+                // foi desligada no GAS (ESTOQUE_BAIXA_AUTOMATICA), então não há saldo novo
+                // para buscar — era uma chamada por pagamento sem nenhum efeito. O pagamento
+                // é o momento mais sensível da operação; cada chamada a menos aqui conta.
+                // Religar junto com ESTOQUE_BAIXA_AUTOMATICA quando o módulo entrar em uso.
                 if (falhas.length > 0) {
                     // Reverte localmente só as que falharam, pra elas voltarem à lista de
                     // abertas e o operador conseguir tentar de novo — em vez de sumirem da
