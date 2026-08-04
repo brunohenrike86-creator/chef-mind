@@ -354,9 +354,9 @@ function estaDentroDoHorario() {
 // ===== Chamadas à API =====
 // Regra 9: GETs usam AbortController com timeout de 20s.
 // cache: 'no-store' evita que o browser sirva resposta cacheada no polling de status.
-async function apiGet(action, params) {
+async function apiGet(action, params, timeoutMs) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs || 20000);
     const qs = new URLSearchParams(Object.assign({ action, _t: Date.now() }, params || {})).toString();
     try {
         const resp = await fetch(`${SHEETS_API_URL}?${qs}`, { signal: controller.signal, cache: 'no-store' });
@@ -1110,10 +1110,13 @@ function renderEnviando() {
 function render() {
     const app = document.getElementById('app');
     if (state.enviando) { app.innerHTML = renderEnviando(); return; }
-    if (view === 'carregando') app.innerHTML = '<div class="loading-spinner">Carregando opções do dia...</div>';
+    if (view === 'carregando') app.innerHTML = '<div class="loading-spinner">' +
+        (_tentandoDeNovo ? 'Demorando um pouco mais que o normal — tentando de novo...'
+                         : 'Carregando opções do dia...') + '</div>';
     else if (view === 'confirmacao') app.innerHTML = renderConfirmacao();
     else if (view === 'status') app.innerHTML = renderStatus();
     else if (view === 'fechado') app.innerHTML = renderFechado();
+    else if (view === 'erro_carregamento') app.innerHTML = renderErroCarregamento();
     else app.innerHTML = renderFormulario();
 
     if (state.rolarParaPedidoAoRenderizar) {
@@ -1136,27 +1139,98 @@ function _letraTamanho(nomeMarmita) {
     return partes[partes.length - 1].toUpperCase();
 }
 
-async function inicializar() {
-    try {
-        const opcoes = await apiGet('getOpcoesPedidoOnline');
-        if (!opcoes || opcoes.erro) throw new Error((opcoes && opcoes.erro) || 'Falha ao carregar opções');
+// ===== Carregamento das opções do dia (ponto 10b do plano emergencial) =====
+//
+// ⚠️ O bug que isto corrige: o catch antigo zerava TAMANHOS/CARNES/BEBIDAS e caía
+// na mesma tela de "Sem marmitas disponíveis agora — Volte mais tarde". Ou seja,
+// uma falha NOSSA (servidor não respondeu em 20s) era apresentada ao cliente como
+// "o restaurante não tem comida hoje". O cliente ia almoçar em outro lugar e o
+// restaurante nunca ficava sabendo. Falha de carregamento e cardápio vazio são
+// coisas diferentes e precisam de telas diferentes.
 
-        TAMANHOS = {};
-        (opcoes.marmitas || []).forEach(m => {
-            const letra = _letraTamanho(m.nome);
-            TAMANHOS[letra] = {
-                label: letra,
-                preco: m.preco,
-                codigo: m.codigo,
-                maxCarnes: MAX_CARNES_POR_LETRA[letra] || 2
-            };
-        });
-        CARNES_DO_DIA = opcoes.carnes || [];
-        // Bebida sem preço cadastrado não pode quebrar o cálculo do total — oculta da lista online.
-        BEBIDAS_CARDAPIO = (opcoes.bebidas || []).filter(b => b.preco > 0);
-    } catch (e) {
-        TAMANHOS = {}; CARNES_DO_DIA = []; BEBIDAS_CARDAPIO = [];
+let _falhaCarregamento = false;   // true = não conseguimos carregar (≠ carregou vazio)
+let _tentandoDeNovo    = false;   // alimenta a mensagem do spinner na 2ª tentativa
+
+// Duas tentativas de 12s em vez de uma de 20s: o orçamento total de espera do
+// cliente fica parecido (~25s), mas ele ganha DUAS chances. A maioria das falhas
+// é pico transitório de fila — na segunda tentativa, 1,2s depois, costuma passar.
+const _CARREGAMENTO_TENTATIVAS = 2;
+const _CARREGAMENTO_TIMEOUT_MS = 12000;
+
+function _registrarFalhaCarregamento() {
+    // Contador local para o Painel de Saúde (ponto 8): hoje não temos NENHUMA
+    // medida de quantos clientes bateram na porta e não conseguiram entrar.
+    try {
+        const reg = JSON.parse(localStorage.getItem('cm_pedido_falhas') || '{"total":0}');
+        reg.total = (reg.total || 0) + 1;
+        reg.ultima = new Date().toISOString();
+        localStorage.setItem('cm_pedido_falhas', JSON.stringify(reg));
+    } catch (e) { /* localStorage cheio ou bloqueado nunca pode quebrar a tela */ }
+}
+
+async function carregarOpcoes() {
+    for (let tentativa = 1; tentativa <= _CARREGAMENTO_TENTATIVAS; tentativa++) {
+        try {
+            const opcoes = await apiGet('getOpcoesPedidoOnline', null, _CARREGAMENTO_TIMEOUT_MS);
+            if (!opcoes || opcoes.erro) throw new Error((opcoes && opcoes.erro) || 'Resposta inválida');
+
+            TAMANHOS = {};
+            (opcoes.marmitas || []).forEach(m => {
+                const letra = _letraTamanho(m.nome);
+                TAMANHOS[letra] = {
+                    label: letra,
+                    preco: m.preco,
+                    codigo: m.codigo,
+                    maxCarnes: MAX_CARNES_POR_LETRA[letra] || 2
+                };
+            });
+            CARNES_DO_DIA = opcoes.carnes || [];
+            // Bebida sem preço cadastrado não pode quebrar o cálculo do total — oculta da lista online.
+            BEBIDAS_CARDAPIO = (opcoes.bebidas || []).filter(b => b.preco > 0);
+
+            _falhaCarregamento = false;
+            _tentandoDeNovo    = false;
+            return true;
+        } catch (e) {
+            console.warn('[Pedido Online] Falha ao carregar opções (tentativa ' +
+                         tentativa + '/' + _CARREGAMENTO_TENTATIVAS + '):', e.message);
+            if (tentativa < _CARREGAMENTO_TENTATIVAS) {
+                _tentandoDeNovo = true;
+                if (view === 'carregando') render();   // avisa o cliente que ainda estamos tentando
+                await new Promise(r => setTimeout(r, 1200));
+            }
+        }
     }
+
+    TAMANHOS = {}; CARNES_DO_DIA = []; BEBIDAS_CARDAPIO = [];
+    _falhaCarregamento = true;
+    _tentandoDeNovo    = false;
+    _registrarFalhaCarregamento();
+    return false;
+}
+
+// Botão "Tentar de novo" da tela de erro. Global porque o HTML é montado por string.
+async function tentarCarregarNovamente() {
+    view = 'carregando';
+    render();
+    const ok = await carregarOpcoes();
+    view = ok ? (estaDentroDoHorario() ? 'form' : 'fechado') : 'erro_carregamento';
+    render();
+}
+
+function renderErroCarregamento() {
+    return `
+        <div class="card tela-centro">
+            <div class="titulo-card">Não conseguimos carregar o cardápio</div>
+            <div class="dica">O problema é do nosso lado, não do seu pedido. Normalmente resolve na segunda tentativa.</div>
+            <button class="btn btn-primario" style="margin-top:18px;" onclick="tentarCarregarNovamente()">Tentar de novo</button>
+            ${renderAjuda()}
+        </div>
+    `;
+}
+
+async function inicializar() {
+    await carregarOpcoes();
 
     // ?novo=1 = aba aberta via "Fazer novo pedido" (ver novoPedidoEmNovaAba) — ignora a
     // sessão ativa de propósito, pra essa aba abrir no formulário mesmo com um pedido em
@@ -1175,7 +1249,15 @@ async function inicializar() {
     state.nome = clienteSalvo.nome || '';
     state.whatsapp = clienteSalvo.whatsapp || '';
 
-    view = estaDentroDoHorario() ? 'form' : 'fechado';
+    // Ordem de prioridade das telas, e o porquê de cada uma:
+    // 1. Fora do horário vence a falha de carregamento — "estamos fechados" é uma
+    //    informação mais útil e mais verdadeira do que "não carregou".
+    // 2. Falha de carregamento vira tela de erro com retry — NUNCA a tela de
+    //    "sem marmitas", que manda o cliente embora por um problema NOSSO.
+    // 3. Carregou de verdade e não tem marmita → aí sim "Sem marmitas disponíveis".
+    if (!estaDentroDoHorario())  view = 'fechado';
+    else if (_falhaCarregamento) view = 'erro_carregamento';
+    else                         view = 'form';
     render();
 }
 
