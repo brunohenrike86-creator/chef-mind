@@ -1942,8 +1942,15 @@
                     <div id="checkout-panel-right" style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
                         <!-- SEÇÃO 2: DETALHES DA COMANDA -->
                         <div id="areaDetalhes" style="display: none; flex: 0 1 auto; flex-direction: column; gap: 0; background: white; border: 1px solid var(--border); border-radius: 2px; border-left: 3px solid var(--primary); overflow: hidden;">
-                            <div class="co-hdr-detalhe">
-                                🧾 Comanda <span id="numComandaSelecionada">-</span>
+                            <!-- Cabeçalho vira linha flex: número da comanda à esquerda,
+                                 controles de pagamento em grupo à direita. Antes o grupo
+                                 tinha uma faixa própria abaixo, consumindo uma linha inteira
+                                 de uma tela onde cada pixel de altura conta (a lista de itens
+                                 é o que precisa de espaço). Aqui ele aproveita o vazio que
+                                 já existia à direita do "🧾 Comanda #12". -->
+                            <div class="co-hdr-detalhe" style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                                <span>🧾 Comanda <span id="numComandaSelecionada">-</span></span>
+                                <span id="checkoutGrupoBarra" style="display:none; align-items:center; gap:5px; flex-wrap:wrap;"></span>
                             </div>
                             <div class="co-hdr-itens">
                                 <div>ITEM</div>
@@ -3093,7 +3100,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-02-d';
+        const CHEF_MIND_VERSAO = '2026-08-04-a';
         console.log(
             '%c Chef Mind ' + CHEF_MIND_VERSAO + ' ',
             'background:#D4724F;color:#fff;font-weight:bold;padding:3px 8px;border-radius:3px;font-size:12px;'
@@ -3141,6 +3148,25 @@
                 console.warn(`[Sheets] Erro em "${action}":`, msg);
                 return { sucesso: false, erro: msg };
             }
+        }
+
+        // ⚠️ REGRA CRÍTICA — validar resposta por FORMATO, nunca por verdadeiro/falso.
+        //
+        // sheetsAPI() NÃO lança exceção: qualquer falha (timeout, rede, erro do GAS) volta
+        // como `{ sucesso:false, erro:'...' }` — um OBJETO, que em JavaScript é VERDADEIRO.
+        // Ou seja, `if (resposta)` passa mesmo quando a chamada falhou, e o código segue
+        // como se tivesse recebido dado bom.
+        //
+        // Isso causou o bug crítico de 03/08: com getCaixaStatus estourando, o `if` passava,
+        // `caixaStatus.status` era undefined, caía no else e o sistema SOBRESCREVIA o estado
+        // correto com "caixa fechado" — e ainda persistia no localStorage. Como cada refresh
+        // repetia o timeout e regravava, o operador ficava preso: a planilha dizia "aberto",
+        // a tela dizia "fechado", e criar comanda ficava bloqueado por regra de negócio.
+        //
+        // O princípio: uma chamada que falha deve deixar o estado ANTERIOR intacto. Falha de
+        // leitura nunca pode ser interpretada como "o dado mudou".
+        function _respostaValida(r) {
+            return !!r && !r.erro && r.sucesso !== false;
         }
 
         // Aplica um array de itens do Sheets (getCardapio) em state.itens — extraído de
@@ -3242,7 +3268,13 @@
                 }
 
                 // Processar config
-                if (config) {
+                // _respostaValida: com timeout, `config` é o objeto de erro (verdadeiro), e
+                // `config['idle_playlist']` seria undefined → a linha abaixo ZERAVA a
+                // playlist do rodízio ocioso da TV. Mesmo padrão do bug do caixa.
+                if (!_respostaValida(config)) {
+                    console.warn('[Sheets] ⚠️ getConfig falhou — mantendo carnes e rodízio anteriores | erro:', config && config.erro);
+                }
+                if (_respostaValida(config)) {
                     const diasMap = { seg:0, ter:1, qua:2, qui:3, sex:4, sab:5, dom:6 };
                     Object.entries(diasMap).forEach(([sigla, idx]) => {
                         if (config[`carnes_${sigla}`])
@@ -3363,7 +3395,13 @@
                 // ATENÇÃO: usar data LOCAL (não UTC) para comparar com caixaStatus.data que
                 // vem do GAS em timezone local. toISOString() retorna UTC — após 21h BRT
                 // (= 00h UTC) isso dá a data de amanhã e o caixa some como "fechado".
-                if (caixaStatus) {
+                // _respostaValida (e não `if (caixaStatus)`): com timeout, a resposta é um
+                // objeto de erro VERDADEIRO — o `if` passava, `status` vinha undefined, caía
+                // no else e SOBRESCREVIA o caixa como "fechado", persistindo no localStorage.
+                // Refresh não resolvia porque repetia o timeout e regravava. Resultado em
+                // produção (03/08): planilha "aberto", tela "CAIXA FECHADO", criação de
+                // comanda bloqueada. Agora, falha de leitura mantém o estado anterior.
+                if (_respostaValida(caixaStatus)) {
                     const _dh = new Date();
                     const dataHoje = _dh.getFullYear() + '-' + String(_dh.getMonth()+1).padStart(2,'0') + '-' + String(_dh.getDate()).padStart(2,'0');
                     if (caixaStatus.status === 'aberto' && caixaStatus.data === dataHoje) {
@@ -3379,6 +3417,11 @@
                     }
                     saveStorage();
                     console.log('[Sheets] ✅ Caixa:', state.caixa.status);
+                } else {
+                    // Mantém o estado anterior de propósito. Aviso explícito no console pra
+                    // que "o caixa não atualizou" seja diagnosticável, e não silencioso.
+                    console.warn('[Sheets] ⚠️ getCaixaStatus falhou — MANTENDO estado anterior do caixa:',
+                        state.caixa && state.caixa.status, '| erro:', caixaStatus && caixaStatus.erro);
                 }
 
                 console.log('[Sheets] ✅ Carregamento completo!');
@@ -3455,8 +3498,13 @@
 
         async function sheets_pagarComanda(chave, total, forma, obs) {
             const comanda = state.comandas[chave];
-            if (!comanda || !comanda._id) return;
-            await sheetsAPI('pagarComanda', {
+            // Antes esta função não RETORNAVA nada — quem chamava não tinha como saber se
+            // a gravação deu certo. Passou a devolver o resultado para o pagamento em grupo
+            // conseguir verificar comanda por comanda (ver confirmarPagamentoFinal).
+            // Sem _id a comanda nunca foi criada no servidor: isso é falha, não sucesso.
+            if (!comanda) return { erro: 'Comanda não encontrada no estado local' };
+            if (!comanda._id) return { erro: 'Comanda ainda não foi criada no servidor' };
+            return await sheetsAPI('pagarComanda', {
                 comanda_id: comanda._id, total,
                 forma_pagamento: forma || '',
                 observacao: obs || '',
@@ -6015,6 +6063,9 @@ function carregarComanda() {
         function limparCheckout() {
             comandaCheckoutAtual = null;
             formaPagamentoSelecionada = null;
+            _limparGrupo(); // pagamento em grupo nunca sobrevive a um "Limpar"
+            const _bg = document.getElementById('checkoutGrupoBarra');
+            if (_bg) { _bg.innerHTML = ''; _bg.style.display = 'none'; }
             document.getElementById('checkout-panel-left').classList.remove('comanda-ativa');
             const btnLimpar = document.getElementById('btnLimparCheckout');
             if (btnLimpar) btnLimpar.style.display = 'none';
@@ -6881,8 +6932,64 @@ function carregarComanda() {
         let formaPagamentoSelecionada = null;
         let comandaCheckoutAtual = null;
 
-        
+        // ── PAGAMENTO EM GRUPO (várias comandas, uma forma de pagamento) ──────────────
+        // Cenário real (visto nos primeiros dias de operação): mesa com 2-3 pessoas em que
+        // UMA paga tudo. Antes: somar na calculadora e baixar uma por uma — lento na fila e
+        // com risco de esquecer uma comanda aberta.
+        // DESENHO: `comandaCheckoutAtual` continua sendo a comanda principal e NADA muda
+        // enquanto o grupo está vazio — o fluxo de pagamento unitário (95% dos casos) é
+        // byte a byte o mesmo. O grupo é só um array extra, opcional.
+        let _grupoComandas = [];   // chaves ADICIONAIS (não inclui a principal)
+        let _modoSomar     = false; // true = próximo clique/bipe SOMA em vez de trocar
+
+        // Todas as comandas do pagamento atual, principal primeiro. Com grupo vazio
+        // devolve só a principal — por isso o resto do código não precisa saber que
+        // pagamento em grupo existe.
+        function _comandasDoGrupo() {
+            return [comandaCheckoutAtual, ..._grupoComandas]
+                .filter(k => k && state.comandas[k]);
+        }
+
+        function toggleModoSomar() {
+            if (!comandaCheckoutAtual) { showToast('Selecione a primeira comanda', 'warning'); return; }
+            _modoSomar = !_modoSomar;
+            const c = state.comandas[comandaCheckoutAtual];
+            if (c) selecionarComandaCheckout(comandaCheckoutAtual, c);
+        }
+
+        // Remove uma comanda do grupo (X no chip). Nunca remove a principal — pra isso
+        // existe o "Limpar", que zera tudo.
+        function removerDoGrupo(key) {
+            _grupoComandas = _grupoComandas.filter(k => k !== key);
+            const c = state.comandas[comandaCheckoutAtual];
+            if (c) selecionarComandaCheckout(comandaCheckoutAtual, c);
+        }
+
+        function _limparGrupo() {
+            _grupoComandas = [];
+            _modoSomar = false;
+        }
+
         function selecionarComandaCheckout(key, comanda) {
+            // MODO SOMAR: o clique no card e o bipe do leitor passam os dois por aqui, então
+            // interceptar neste ponto cobre as duas formas de seleção de uma vez só.
+            if (_modoSomar && comandaCheckoutAtual && key !== comandaCheckoutAtual) {
+                if (comanda && (comanda.paid || comanda.encerramento)) {
+                    showToast(`⚠️ Comanda #${comanda.numero} já encerrada`, 'warning');
+                    return;
+                }
+                if (!_grupoComandas.includes(key)) {
+                    _grupoComandas.push(key);
+                    showToast(`➕ Comanda #${comanda.numero} somada`, 'success');
+                }
+                _modoSomar = false; // volta ao normal — somar de novo exige tocar no botão outra vez
+                const principal = state.comandas[comandaCheckoutAtual];
+                if (principal) selecionarComandaCheckout(comandaCheckoutAtual, principal);
+                return;
+            }
+            // Trocar de comanda principal desmonta o grupo — evita arrastar comanda de outro
+            // cliente por engano quando o operador simplesmente seleciona outra plaquinha.
+            if (key !== comandaCheckoutAtual) _limparGrupo();
             // Distingue "selecionar uma comanda diferente" de "re-renderizar a mesma comanda
             // já ativa" (chamado a cada poll de 3s via renderizarCheckout() → renderizarTelaAtual()).
             // Sem essa distinção, um poll caindo entre o clique na forma de pagamento e o clique
@@ -6925,7 +7032,43 @@ function carregarComanda() {
             const btnConfirmar = document.getElementById('btnConfirmarPagamento');
             if (btnConfirmar) btnConfirmar.style.display = comanda && !comanda.paid ? 'block' : 'none';
 
+            // COMANDA VIRTUAL: com grupo ativo, monta um objeto que junta os itens de todas
+            // as comandas e entrega pra MESMA lógica de renderização usada no caso unitário.
+            // Assim o agrupamento de itens, o cálculo do total e o HTML da lista continuam
+            // exatamente como estavam — nenhuma linha daquele bloco precisou mudar, o que
+            // reduz muito o risco numa tela crítica.
+            const _keysGrupo = _comandasDoGrupo();
+            if (_keysGrupo.length > 1) {
+                comanda = {
+                    numero: _keysGrupo.map(k => state.comandas[k].numero).join(' + '),
+                    itens:  _keysGrupo.flatMap(k => state.comandas[k].itens || []),
+                    paid:   false,
+                    _virtual: true
+                };
+            }
+
             document.getElementById('numComandaSelecionada').textContent = `#${comanda.numero}`;
+
+            // Barra do grupo: chips com cada comanda somada (X remove) + botão de somar.
+            // Fica escondida quando não há grupo E nenhuma comanda selecionada — quem paga
+            // uma comanda só vê apenas um botão discreto a mais.
+            const _barra = document.getElementById('checkoutGrupoBarra');
+            if (_barra) {
+                const _chips = _grupoComandas.map(k => {
+                    const c = state.comandas[k];
+                    return c ? `<span style="display:inline-flex; align-items:center; gap:5px; background:var(--primary); color:white; border-radius:12px; padding:2px 7px 2px 9px; font-size:12px; font-weight:bold;">#${c.numero}<span onclick="removerDoGrupo('${k}')" style="cursor:pointer; opacity:.85; font-size:15px;" title="Tirar do grupo">✕</span></span>` : '';
+                }).join('');
+                _barra.innerHTML = `
+                    <button type="button" onclick="toggleModoSomar()"
+                        style="padding:3px 10px; border-radius:12px; cursor:pointer; font-size:12px; font-weight:bold; white-space:nowrap; line-height:1.5;
+                               border:2px solid ${_modoSomar ? 'var(--primary)' : 'var(--border)'};
+                               background:${_modoSomar ? 'var(--primary)' : 'white'};
+                               color:${_modoSomar ? 'white' : 'var(--primary)'};">
+                        ${_modoSomar ? '⏳ bipe a próxima' : '➕ somar comanda'}
+                    </button>
+                    ${_chips}`;
+                _barra.style.display = 'flex';
+            }
 
             const containerItens = document.getElementById('listaCheckoutItens');
             containerItens.innerHTML = '';
@@ -7137,35 +7280,88 @@ function carregarComanda() {
                 return;
             }
             
-            const comanda = state.comandas[comandaCheckoutAtual];
-            if (!comanda || !comanda.itens || comanda.itens.length === 0) {
-                showToast('Comanda sem itens', 'error');
+            const _keysPagar = _comandasDoGrupo();
+            const _semItens = _keysPagar.filter(k => {
+                const c = state.comandas[k];
+                return !c || !c.itens || c.itens.length === 0;
+            });
+            if (_semItens.length > 0) {
+                showToast(_keysPagar.length > 1 ? 'Há comanda sem itens no grupo' : 'Comanda sem itens', 'error');
                 return;
             }
-            
-            // MARCAR COMO PAGA
-            comanda.paid = true;
-            comanda.formaPagamento = formaPagamentoSelecionada;
-            comanda.dataPagamento = new Date().toISOString();
-            if (obsAReceber) comanda.obsAReceber = obsAReceber;
-            
-            // Jornada de preparo: marmitas vão para fila ao pagar (card do KDS aparece
-            // sozinho via derivarStatusPreparo; aqui só ajustamos o status alto-nível)
-            const temMarmita = comanda.itens.some(item => item.tipo === 'Marmita');
-            comanda.status = temMarmita ? 'Em Preparo' : 'Fechada/Paga';
-            
+
+            // Marca localmente TODAS as comandas do pagamento (grupo com 1 = comportamento
+            // idêntico ao de antes) e dispara a gravação no servidor.
+            _keysPagar.forEach(k => {
+                const c = state.comandas[k];
+                c.paid = true;
+                c.formaPagamento = formaPagamentoSelecionada;
+                c.dataPagamento = new Date().toISOString();
+                if (obsAReceber) c.obsAReceber = obsAReceber;
+                // Jornada de preparo: marmitas vão para fila ao pagar (card do KDS aparece
+                // sozinho via derivarStatusPreparo; aqui só ajustamos o status alto-nível)
+                const temMarmita = c.itens.some(item => item.tipo === 'Marmita');
+                c.status = temMarmita ? 'Em Preparo' : 'Fechada/Paga';
+            });
+
             saveStorage();
-            // ☁️ SHEETS: registrar pagamento
-            const _totalPago = (comanda.itens || []).reduce((s,i)=>s+(i.total||(i.preco*i.quantidade)||0),0);
-            // Recarregar estoque assim que o GAS confirmar o pagamento (elimina race condition
-            // do timeout fixo: _baixarEstoquePorVenda roda dentro de pagarComanda no GAS,
-            // então o saldo negativo já estará gravado quando sheets_pagarComanda resolver).
-            sheets_pagarComanda(comandaCheckoutAtual, _totalPago, formaPagamentoSelecionada, obsAReceber || '')
-                .then(() => carregarEstoque())
-                .catch(() => {});
-            
+
+            // ☁️ SHEETS: uma comanda por vez, VERIFICANDO cada resposta antes de seguir.
+            // Sequencial de propósito, apesar de mais lento (~1-2s por comanda):
+            //  • paralelo somaria requisições simultâneas justamente no problema de saturação
+            //    de conexões que estamos investigando;
+            //  • e, principalmente, uma falha silenciosa aqui deixaria o cliente pagando 3
+            //    comandas e uma continuando aberta — exatamente o "esquecimento de encerrar"
+            //    que esta feature existe pra eliminar, só que causado pelo sistema e sem
+            //    ninguém perceber. Por isso o resultado de cada gravação é conferido.
+            // BUG (relatado em teste): a partir da SEGUNDA comanda a forma de pagamento
+            // chegava vazia no servidor. Causa: o loop abaixo é assíncrono e lê
+            // `formaPagamentoSelecionada`, que é uma variável GLOBAL — e o cleanup agendado
+            // com setTimeout(1500ms) zera essa variável. Como cada gravação leva ~1-2s, na
+            // segunda volta do loop a global já tinha virado null. O estado LOCAL ficava
+            // certo (setado de forma síncrona antes), por isso a tela parecia correta e só
+            // a planilha saía errada. Fix: congelar os valores em constantes locais ANTES
+            // de entrar no trecho assíncrono — nada aqui pode depender de global mutável.
+            const _formaPg = formaPagamentoSelecionada;
+            const _obsPg   = obsAReceber || '';
+            ;(async () => {
+                const falhas = [];
+                for (const k of _keysPagar) {
+                    const c = state.comandas[k];
+                    const _tot = (c.itens || []).reduce((s,i)=>s+(i.total||(i.preco*i.quantidade)||0),0);
+                    try {
+                        const res = await sheets_pagarComanda(k, _tot, _formaPg, _obsPg);
+                        if (res && res.erro) falhas.push(c.numero);
+                    } catch (e) {
+                        falhas.push(c.numero);
+                    }
+                }
+                // Recarrega estoque só depois de todas (baixa roda dentro de pagarComanda no GAS)
+                carregarEstoque().catch(() => {});
+                if (falhas.length > 0) {
+                    // Reverte localmente só as que falharam, pra elas voltarem à lista de
+                    // abertas e o operador conseguir tentar de novo — em vez de sumirem da
+                    // tela dando a impressão de que foram pagas.
+                    falhas.forEach(num => {
+                        const k = _keysPagar.find(x => state.comandas[x] && state.comandas[x].numero === num);
+                        if (k) {
+                            const c = state.comandas[k];
+                            c.paid = false;
+                            c.status = 'Aberta';
+                            c.formaPagamento = null;
+                            c.dataPagamento = null;
+                        }
+                    });
+                    saveStorage();
+                    renderizarCheckout();
+                    showToast(`⚠️ NÃO foi possível pagar a(s) comanda(s) #${falhas.join(', #')} — refaça o pagamento delas`, 'error');
+                }
+            })();
+
             // FEEDBACK
-            showToast('✓ Pagamento confirmado!', 'success');
+            showToast(_keysPagar.length > 1
+                ? `✓ ${_keysPagar.length} comandas pagas!`
+                : '✓ Pagamento confirmado!', 'success');
 
             // LIMPAR — atrasado de propósito (deixa o operador ver o "✓ Pagamento confirmado!"
             // e o estado da comanda paga por um instante, em vez de a tela sumir na cara dele
@@ -7182,6 +7378,9 @@ function carregarComanda() {
                 if (comandaCheckoutAtual !== _comandaQueFoiPaga) return;
                 comandaCheckoutAtual = null;
                 formaPagamentoSelecionada = null;
+                _limparGrupo();
+                const _bgPago = document.getElementById('checkoutGrupoBarra');
+                if (_bgPago) { _bgPago.innerHTML = ''; _bgPago.style.display = 'none'; }
                 document.getElementById('checkout-panel-left').classList.remove('comanda-ativa');
                 const _btnLimpar = document.getElementById('btnLimparCheckout');
                 if (_btnLimpar) _btnLimpar.style.display = 'none';
@@ -9453,7 +9652,12 @@ function carregarComanda() {
         async function _sincronizarEstadoCaixa() {
             try {
                 const s = await sheetsAPI('getCaixaStatus');
-                if (!s || s.erro) return;
+                // Já validava corretamente antes do Ponto 9 (era o único lugar que fazia
+                // isso); padronizado no helper para a regra ficar em um só lugar.
+                if (!_respostaValida(s)) {
+                    console.warn('[Caixa] getCaixaStatus falhou — mantendo estado anterior');
+                    return;
+                }
                 if (s.status === 'aberto') {
                     state.caixa = {
                         status:       'aberto',
@@ -11240,6 +11444,9 @@ function carregarComanda() {
                 if (foiEncerrada) {
                     comandaCheckoutAtual = null;
                     formaPagamentoSelecionada = null;
+                    _limparGrupo();
+                    const _bgEnc = document.getElementById('checkoutGrupoBarra');
+                    if (_bgEnc) { _bgEnc.innerHTML = ''; _bgEnc.style.display = 'none'; }
                     document.getElementById('checkout-panel-left').classList.remove('comanda-ativa');
                     const _btnLimpar = document.getElementById('btnLimparCheckout');
                     if (_btnLimpar) _btnLimpar.style.display = 'none';
