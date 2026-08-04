@@ -3100,7 +3100,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-04-a';
+        const CHEF_MIND_VERSAO = '2026-08-04-b';
         console.log(
             '%c Chef Mind ' + CHEF_MIND_VERSAO + ' ',
             'background:#D4724F;color:#fff;font-weight:bold;padding:3px 8px;border-radius:3px;font-size:12px;'
@@ -9120,22 +9120,52 @@ function carregarComanda() {
             }
         }
 
-        // ========== POLLING 3s — SINCRONIZAÇÃO MULTI-DEVICE ==========
+        // ========== POLLING — INTERVALO POR PERFIL (ponto 3 do plano emergencial) ==========
+        //
+        // Era 3s para todo mundo — valor escolhido quando isto era protótipo com planilha
+        // vazia. A medição de 04/08 (log de execuções do Apps Script) mostrou o custo real:
+        // cada getComandasDoDia leva ~2s. Um ÚNICO aparelho a cada 3s ocupa o servidor
+        // ~66% do tempo, continuamente, enquanto a aba estiver aberta. Cinco aparelhos
+        // = ~330% = fila = timeout. Foi exatamente assim que a operação de 03/08 caiu.
+        //
+        // Os intervalos abaixo saem de quanto cada perfil precisa ver mudança feita em
+        // OUTRO aparelho — não de quanto ele mesmo age. Quem age já re-renderiza na hora,
+        // e entrar em Checkout/Preparo/Caixa/A Receber já força um poll na hora via
+        // reRenderAposPoll(). O poll de fundo é rede de segurança, não a via principal.
+        const POLL_INTERVALO_POR_PERFIL = {
+            'Caixa':          5000,   // vê comanda chegar da balança e dos celulares — o mais sensível
+            'Marmita':        5000,   // fila de preparo: item novo tem que aparecer rápido
+            'Balança':       10000,   // lança o tempo todo, quase não consome mudança alheia
+            'Balança Touch': 10000,
+            'Atendente':     10000,   // celular: lança e acompanha a própria comanda
+            'TV':            10000,   // rodízio roda na própria tela, não depende do poll
+            'Admin':         10000,
+            'Gerente':       10000
+        };
+        const POLL_INTERVALO_PADRAO = 10000;   // perfil desconhecido → o mais conservador
 
-        let _pollingInterval = null;
-        let _pollingAtivo    = false;
-        let _pollWaiters     = [];   // callbacks a chamar quando o próximo poll terminar
+        let _pollingInterval    = null;
+        let _pollingAtivo       = false;
+        let _pollWaiters        = [];   // callbacks a chamar quando o próximo poll terminar
+        let _pollIntervaloAtual = null; // ms em uso, para detectar troca de perfil
 
         function iniciarPolling() {
-            if (_pollingInterval) return;
-            _pollingInterval = setInterval(pollFromSheets, 3000);
-            console.log('[Poll] ✅ Iniciado (3s)');
+            const ms = POLL_INTERVALO_POR_PERFIL[state.perfil] || POLL_INTERVALO_PADRAO;
+            // Já rodando no intervalo certo → nada a fazer. Mas se o PERFIL mudou (troca de
+            // usuário sem recarregar a página), é preciso reiniciar: com o `return` seco de
+            // antes, o aparelho continuaria no intervalo do perfil anterior para sempre.
+            if (_pollingInterval && _pollIntervaloAtual === ms) return;
+            if (_pollingInterval) clearInterval(_pollingInterval);
+            _pollIntervaloAtual = ms;
+            _pollingInterval = setInterval(pollFromSheets, ms);
+            console.log('[Poll] ✅ Iniciado — perfil ' + (state.perfil || '?') + ' · ' + (ms / 1000) + 's');
         }
 
         function pararPolling() {
             if (_pollingInterval) { clearInterval(_pollingInterval); _pollingInterval = null; }
             _pollingAtivo = false;
             _pollWaiters = [];
+            _pollIntervaloAtual = null;
             console.log('[Poll] ⏹ Parado');
         }
 
