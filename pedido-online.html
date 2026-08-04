@@ -313,7 +313,7 @@ const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
 // tempo, e sem isso não dá pra saber qual versão está de fato rodando no aparelho —
 // só deduzir por sintoma, que já nos custou horas. O estado da trava de horário
 // aparece junto de propósito: é a diferença mais fácil de confundir entre versões.
-const CHEF_MIND_PEDIDO_VERSAO = '2026-08-02-b';
+const CHEF_MIND_PEDIDO_VERSAO = '2026-08-04-TESTE-NAO-PUBLICAR';
 
 // Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
 // na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
@@ -330,8 +330,13 @@ const TELEFONE_AJUDA = '+5541997829474';
 // MODO TESTE — com true, ignora a janela de horário e a tela "fora do horário" nunca
 // aparece. Usado pontualmente para validar mudanças fora do expediente; sempre reverter
 // para false antes de publicar, senão o pedido online fica aberto 24h e um cliente
-// consegue fazer pedido de madrugada. Estado atual: DESLIGADO (trava valendo normal).
-const _TESTE_IGNORAR_HORARIO = false;
+// consegue fazer pedido de madrugada.
+//
+// ⚠️ ESTADO ATUAL: LIGADO (04/08, madrugada) — aberto SÓ para validar o cache do
+// ponto 2 fora do expediente. O marcador de versão foi trocado para
+// 'TESTE-NAO-PUBLICAR' de propósito: se este console aparecer na URL de produção,
+// a build errada foi publicada e o pedido está aberto 24h. REVERTER ANTES DE PUBLICAR.
+const _TESTE_IGNORAR_HORARIO = true;
 
 console.log(
     '%c Pedido Online ' + CHEF_MIND_PEDIDO_VERSAO + ' ',
