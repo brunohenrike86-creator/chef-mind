@@ -3100,7 +3100,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-04-d';
+        const CHEF_MIND_VERSAO = '2026-08-04-e';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -3299,12 +3299,30 @@
                 // zerado não bloqueia venda, o saldo fica negativo de propósito para rastrear
                 // furo. Ou seja, a chamada era obrigatória no boot por um motivo que já não
                 // valia. O estoque agora carrega sob demanda, ao abrir Admin > Estoque.
+                // TIMEOUT DE 45s AQUI, e só aqui (ponto 14 do plano emergencial).
+                //
+                // O padrão do sheetsAPI é 20s, e NUNCA mudou desde o início do projeto.
+                // Só que uma chamada em container frio custa 10 a 32 SEGUNDOS (medido em
+                // 04/08). Ou seja: um login frio estava condenado por construção — o
+                // timeout garantia a falha antes de o servidor ter chance de responder.
+                // Foi a primeira coisa a quebrar em 03/08, antes de a operação começar, e
+                // com um único aparelho.
+                //
+                // 45s é feio como espera, mas a alternativa não é "login rápido" — é
+                // "login impossível". Rede de segurança, não solução: quem resolve de
+                // verdade é o ponto 12 (aquecimento, evita o container frio) e o ponto 1
+                // (5 chamadas viram 1).
+                //
+                // ⚠️ NÃO subir o padrão do sheetsAPI. O poll DEVE desistir em 20s e tentar
+                // no ciclo seguinte — poll pendurado por 45s empilha requisição e recria a
+                // saturação que estamos combatendo.
+                const _TIMEOUT_BOOT = 45000;
                 const [config, cardapio, usuarios, comandas, caixaStatus] = await Promise.all([
-                    sheetsAPI('getConfig'),
-                    sheetsAPI('getCardapio'),
-                    sheetsAPI('getUsuarios'),
-                    sheetsAPI('getComandasDoDia'),
-                    sheetsAPI('getCaixaStatus')
+                    sheetsAPI('getConfig',        {}, _TIMEOUT_BOOT),
+                    sheetsAPI('getCardapio',      {}, _TIMEOUT_BOOT),
+                    sheetsAPI('getUsuarios',      {}, _TIMEOUT_BOOT),
+                    sheetsAPI('getComandasDoDia', {}, _TIMEOUT_BOOT),
+                    sheetsAPI('getCaixaStatus',   {}, _TIMEOUT_BOOT)
                 ]);
 
                 // Processar config
