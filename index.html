@@ -3100,7 +3100,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-04-e';
+        const CHEF_MIND_VERSAO = '2026-08-05-l';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -3167,7 +3167,26 @@
                     });
                 }
                 const json = await resp.json();
-                if (json.erro) throw new Error(json.erro);
+
+                // ⚠️ NÃO LANÇAR EXCEÇÃO AQUI.
+                //
+                // Antes era `if (json.erro) throw new Error(json.erro)`. O catch abaixo
+                // montava um objeto NOVO — `{sucesso:false, erro}` — e no caminho se perdiam
+                // todos os outros campos da resposta.
+                //
+                // Isso matava sinalizações semânticas do GAS. A pior: `novaComanda` devolve
+                // `{erro:'Comanda já aberta', jaAberta:true}`, e o `jaAberta` era destruído.
+                // O ramo que carregava a comanda existente NUNCA rodou — era código morto
+                // desde sempre, e o resultado era comanda fantasma criada só na tela.
+                // Mesmo caso do `cancelada`.
+                //
+                // Devolver o objeto inteiro não afrouxa nada: `_respostaValida` continua
+                // reprovando qualquer resposta com `.erro`, então quem checa validade segue
+                // vendo falha. A diferença é que quem precisa do MOTIVO agora o recebe.
+                if (json && json.erro) {
+                    console.warn(`[Sheets] Erro em "${action}":`, json.erro);
+                    return json;
+                }
                 return json;
             } catch (err) {
                 const msg = err.name === 'AbortError'
@@ -3263,13 +3282,61 @@
         // um pedido chegando — 60s já garante que nenhum device fique com cardápio
         // desatualizado por mais que 1 minuto, sem sobrecarregar o GAS com leituras da
         // aba inteira de itens a cada 3s.
+        // Intervalo de 60s → 5 MINUTOS (ponto 1, decisão de 04/08).
+        //
+        // Os 60s vinham de conservadorismo, não de necessidade: cardápio muda ~uma vez por
+        // dia, fora do rush. A 1 chamada/min × 5 aparelhos, era 12% de todo o tráfego para
+        // um dado praticamente estático.
+        //
+        // Passa a trazer a CONFIG junto (carnes do dia). A config fica de fora do poll
+        // rápido de propósito: ela não precisa de 5s, e mandá-la lá reintroduziria o cenário
+        // de 02/08 — o poll trazendo config antiga por cima do que o Admin acabou de salvar.
+        //
+        // Atraso máximo das carnes: 5 min. Não é 5min de cache + 5min de poll, porque salvar
+        // pelo Admin INVALIDA o cache do GAS na hora (ponto 2). E o cliente do pedido online
+        // não é afetado — a página dele busca fresco a cada visita.
+        const CARDAPIO_POLL_MS = 5 * 60 * 1000;
+
         function iniciarPollingCardapio() {
             if (_cardapioPollInterval) return;
             _cardapioPollInterval = setInterval(async () => {
                 if (!state.user) return;
-                const cardapio = await sheetsAPI('getCardapio');
-                if (Array.isArray(cardapio)) _processarCardapioRecebido(cardapio);
-            }, 60000);
+                const r = await sheetsAPI('getCardapioEConfig');
+                if (!_respostaValida(r)) {
+                    console.warn('[Sheets] ⚠️ getCardapioEConfig falhou — mantendo cardápio e carnes anteriores');
+                    return;
+                }
+                if (Array.isArray(r.cardapio)) _processarCardapioRecebido(r.cardapio);
+                if (r.config) _aplicarConfigCarnes(r.config);
+            }, CARDAPIO_POLL_MS);
+        }
+
+        // ══ PROTEÇÕES DAS CARNES (checklist B do ponto 1) ══
+        //
+        // Reconstruídas a partir do incidente de 02/08: o Admin salvava as carnes no celular,
+        // o POST estava a caminho, e o poll DO PRÓPRIO APARELHO trazia a config antiga —
+        // a tela revertia sozinha o que acabara de ser salvo. O cache do GAS não protege
+        // disso: é corrida entre a escrita e a leitura do mesmo device.
+        let _carnesEditadasEm = 0;
+        function marcarCarnesEditadas() { _carnesEditadasEm = Date.now(); }
+
+        function _aplicarConfigCarnes(config) {
+            // Trava de edição recente: 30s após salvar, o poll não mexe nas carnes.
+            if (Date.now() - _carnesEditadasEm < 30000) {
+                console.log('[Config] carnes editadas há pouco — poll ignorado');
+                return;
+            }
+            const diasMap = { seg:0, ter:1, qua:2, qui:3, sex:4, sab:5, dom:6 };
+            Object.entries(diasMap).forEach(([sigla, idx]) => {
+                const chave = 'carnes_' + sigla;
+                // hasOwnProperty, NÃO teste de verdadeiro/falso: valor vazio é legítimo
+                // (significa "nenhuma carne nesse dia") e precisa ZERAR a lista local.
+                // Com truthiness, apagar todas as carnes de um dia nunca propagaria.
+                if (!Object.prototype.hasOwnProperty.call(config, chave)) return;
+                const bruto = config[chave];
+                state.marnitasDia[idx] = String(bruto || '')
+                    .split(',').map(c => c.trim()).filter(Boolean);
+            });
         }
 
         function pararPollingCardapio() {
@@ -3316,14 +3383,45 @@
                 // ⚠️ NÃO subir o padrão do sheetsAPI. O poll DEVE desistir em 20s e tentar
                 // no ciclo seguinte — poll pendurado por 45s empilha requisição e recria a
                 // saturação que estamos combatendo.
+                // ══ PONTO 1 — ENDPOINT DE ABERTURA: 5 chamadas viraram UMA ══
+                //
+                // `boot=1` faz o getEstadoOperacional devolver também cardápio, config e
+                // usuários — os três saem do cache do GAS (ponto 2), então custam quase
+                // nada a mais. E as comandas já vêm com os ITENS aninhados, o que elimina
+                // o segundo lote (ver adiante).
+                //
+                // Login antes:  5 chamadas em paralelo + N de itens
+                // Login agora:  1
+                //
+                // Por que isso importa mais que a economia: 5 requisições paralelas contra
+                // um timeout fixo, num container frio, é uma aposta que se perde fácil —
+                // basta UMA passar do limite para o login falhar inteiro. Com uma só, ou
+                // vai ou não vai, e o retry tem chance real.
                 const _TIMEOUT_BOOT = 45000;
-                const [config, cardapio, usuarios, comandas, caixaStatus] = await Promise.all([
-                    sheetsAPI('getConfig',        {}, _TIMEOUT_BOOT),
-                    sheetsAPI('getCardapio',      {}, _TIMEOUT_BOOT),
-                    sheetsAPI('getUsuarios',      {}, _TIMEOUT_BOOT),
-                    sheetsAPI('getComandasDoDia', {}, _TIMEOUT_BOOT),
-                    sheetsAPI('getCaixaStatus',   {}, _TIMEOUT_BOOT)
-                ]);
+                const _boot = await sheetsAPI('getEstadoOperacional', { boot: '1' }, _TIMEOUT_BOOT);
+
+                // ⚠️ GUARDA DE FALHA (checklist A do ponto 1). Antes, cada consumidor
+                // recebia sua própria resposta e checava com _respostaValida. Agora todos
+                // dependem de UMA chamada — se ela falhar, cada um precisa continuar
+                // recebendo algo que _respostaValida reconheça como ERRO, e nunca um valor
+                // vazio que passaria por dado bom e apagaria o estado local.
+                const _bootFalhou = !_respostaValida(_boot);
+                const _bootErro   = { sucesso: false,
+                                      erro: (_boot && _boot.erro) || 'Falha no endpoint de abertura' };
+                if (_bootFalhou) {
+                    console.warn('[Sheets] ⚠️ getEstadoOperacional(boot) falhou — nada será sobrescrito |',
+                                 _bootErro.erro);
+                }
+
+                // Boot bem-sucedido também alimenta o piso da Regra 48: o dado que ele
+                // trouxe é o MESMO do poll (mesmo endpoint), então conta como sincronização.
+                if (!_bootFalhou) _ultimoEstadoEm = Date.now();
+
+                const config      = _bootFalhou ? _bootErro : (_boot.config   || {});
+                const cardapio    = _bootFalhou ? _bootErro : (_boot.cardapio || []);
+                const usuarios    = _bootFalhou ? _bootErro : (_boot.usuarios || []);
+                const caixaStatus = _bootFalhou ? _bootErro : (_boot.caixa    || _bootErro);
+                const comandas    = _bootFalhou ? _bootErro : (_boot.comandas || []);
 
                 // Processar config
                 // _respostaValida: com timeout, `config` é o objeto de erro (verdadeiro), e
@@ -3333,11 +3431,11 @@
                     console.warn('[Sheets] ⚠️ getConfig falhou — mantendo carnes e rodízio anteriores | erro:', config && config.erro);
                 }
                 if (_respostaValida(config)) {
-                    const diasMap = { seg:0, ter:1, qua:2, qui:3, sex:4, sab:5, dom:6 };
-                    Object.entries(diasMap).forEach(([sigla, idx]) => {
-                        if (config[`carnes_${sigla}`])
-                            state.marnitasDia[idx] = config[`carnes_${sigla}`].split(',').map(c=>c.trim()).filter(Boolean);
-                    });
+                    // Mesma função do poll — o `hasOwnProperty` mora lá, num lugar só.
+                    // O laço anterior usava `if (config['carnes_seg'])`, teste de verdadeiro/
+                    // falso: apagar TODAS as carnes de um dia nunca propagava, porque string
+                    // vazia caía fora do if e a lista local ficava com o valor velho.
+                    _aplicarConfigCarnes(config);
                     // Rodízio de telas ociosas do Fullscreen Cliente — chave genérica na
                     // aba config (idle_playlist), sem precisar de mudança no GAS (getConfig
                     // já é chave|valor livre). Valor é um JSON array de slides, ex.:
@@ -3378,7 +3476,10 @@
                 // Processar cardápio (extraído para _processarCardapioRecebido — reaproveitado
                 // também pelo refresh periódico em background, ver Seção 7 do Knowledge:
                 // bug crítico de cardápio desatualizado/cache).
-                _processarCardapioRecebido(cardapio);
+                // Array.isArray: com o boot falhando, `cardapio` é o objeto de erro. Sem
+                // esta guarda, o cardápio inteiro seria zerado por uma falha de rede.
+                if (Array.isArray(cardapio)) _processarCardapioRecebido(cardapio);
+                else console.warn('[Sheets] ⚠️ cardápio não veio — mantendo o anterior');
 
                 // Processar usuários
                 if (usuarios && usuarios.length > 0) {
@@ -3392,14 +3493,16 @@
                 }
                 state._usuariosCarregados = true;
 
-                // ── Batch 2: itens de todas as comandas em paralelo ────────
-                if (comandas && comandas.length > 0) {
-                    const itensPorComanda = await Promise.all(
-                        comandas.map(cmd => sheetsAPI('getItensDaComanda', { comanda_id: cmd.id }))
-                    );
+                // ── Comandas — os itens JÁ VÊM aninhados (ponto 1) ────────
+                //
+                // ⚠️ AQUI EXISTIA O N+1 DO BOOT: um `getItensDaComanda` por comanda, em
+                // paralelo. Com 30 comandas às 13h eram 30 requisições a cada login ou F5 —
+                // e o Chrome só abre 6 conexões simultâneas por host, então elas se
+                // atropelavam. Era a "rajada" que aparecia no Network.
+                if (Array.isArray(comandas) && comandas.length > 0) {
                     for (let i = 0; i < comandas.length; i++) {
                         const cmd = comandas[i];
-                        const itensCmd = itensPorComanda[i];
+                        const itensCmd = cmd.itens || [];
                         const data = cmd.timestamp_abertura ? cmd.timestamp_abertura.split('T')[0] : new Date().toISOString().split('T')[0];
                         const numeroNormSheets = String(parseInt(cmd.numero, 10));
                         const chave = `${numeroNormSheets}-${data}`;
@@ -3491,7 +3594,31 @@
         }
 
         async function sheets_novaComanda(chave, numero) {
-            const res = await sheetsAPI('novaComanda', { numero: String(numero), usuario: state.userLogado || state.user || '' });
+            const _payload = { numero: String(numero), usuario: state.userLogado || state.user || '' };
+
+            let res = await sheetsAPI('novaComanda', _payload);
+
+            // ── RETENTATIVA ÚNICA em falha de TRANSPORTE ──
+            //
+            // Observado em 05/08: a mesma chamada, com o mesmo token, ora passava, ora
+            // voltava "Não autorizado" — compatível com o corpo do POST se perdendo no
+            // ping-pong de redirecionamento do GAS (exec → echo → exec).
+            //
+            // Retentar aqui é seguro porque `novaComanda` é IDEMPOTENTE por natureza: o GAS
+            // tem LockService e, se o número já existir no dia, devolve `jaAberta` em vez de
+            // criar de novo. Ou seja, a 2ª tentativa ou cria (se a 1ª não criou) ou é
+            // informada de que já existe. Nunca duplica.
+            //
+            // Só retenta em falha de transporte. Respostas SEMÂNTICAS (`jaAberta`,
+            // `cancelada`) são conclusivas e não devem ser repetidas.
+            const _semantica = res && (res.jaAberta || res.cancelada || res.id);
+            if (!_semantica) {
+                console.warn('[Sheets] novaComanda sem resposta conclusiva — 1 retentativa |',
+                             res && res.erro);
+                await new Promise(r => setTimeout(r, 900));
+                res = await sheetsAPI('novaComanda', _payload);
+            }
+
             if (res && res.erro) console.error('[Sheets] novaComanda erro:', res.erro);
             if (res && res.cancelada) {
                 // ⚠️ Número inutilizado: comanda foi cancelada neste dia — não pode ser reaberta.
@@ -3508,23 +3635,78 @@
                 // Desfaz a criação local, sincroniza com o servidor e carrega a comanda
                 // existente automaticamente — sem mostrar erro nem obrigar o usuário a
                 // redigitar o número.
-                console.warn('[Sheets] Comanda', numero, 'já existe no servidor — revertendo e carregando');
+                console.warn('[Sheets] Comanda', numero, 'já existe no servidor — carregando a real');
+
+                // ⚠️ NÃO apagar a tela antes de ter o substituto em mãos.
+                //
+                // Antes: apagava a comanda local, buscava, e só então carregava. No meio
+                // disso a tela ficava vazia por segundos e o usuário via "criou → sumiu →
+                // erro → apareceu". Comanda que já existe é desfecho NORMAL, não falha —
+                // não pode parecer uma.
+                //
+                // Agora: busca primeiro, troca depois. A troca fica invisível.
+
+                // ── PONTO 16 VIVE AQUI, e não antes de criar ──
+                //
+                // Este é o único momento em que sabemos, pelo SERVIDOR, que a comanda
+                // existe — ele acabou de dizer `jaAberta`. Buscar aqui é uma chamada paga
+                // só por quem precisa; buscar antes de criar seria paga por todo mundo.
+                //
+                // Antes usava-se `await pollFromSheets()` para trazê-la. Não serve mais: com
+                // o payload restrito do ponto 1, uma comanda paga há uma hora não vem no
+                // poll, e o operador ficaria com "não encontrada" para uma comanda que
+                // existe — e o contorno natural dele seria abrir outra e relançar tudo.
+                const _b = await sheetsAPI('getComandaCompleta', { numero: numero });
+
+                // ⚠️ "não achei" ≠ "a chamada falhou". Confundir os dois aqui faria o
+                // sistema dizer que uma comanda existente não existe.
+                if (_b && _b.comanda) {
+                    // Substitui a comanda otimista pela real, sem passar por tela vazia.
+                    delete state.comandas[chave];
+                    _absorverComandaDoServidor(_b.comanda);
+                    document.getElementById('lançarComandaNum').value = numero;
+                    carregarComanda();
+                    return;
+                }
+
+                // Só aqui limpa: não conseguimos trazer a comanda real.
                 delete state.comandas[chave];
                 if (state.comandaAtual === chave) state.comandaAtual = null;
                 saveStorage();
-                await pollFromSheets(); // traz a comanda existente para o state
-                if (state.comandas[chave]) {
-                    // Comanda encontrada: carregar normalmente
-                    document.getElementById('lançarComandaNum').value = numero;
-                    carregarComanda();
-                } else {
-                    // Não encontrou mesmo após sync (raro): avisar e limpar
-                    showToast(`⚠️ Comanda #${numero} não encontrada — tente novamente`, 'error');
-                    limparTelaLançar();
-                }
+                showToast(!_respostaValida(_b)
+                    ? 'Não conseguimos carregar a comanda. Tente de novo.'
+                    : `⚠️ Comanda #${numero} não encontrada — tente novamente`, 'error');
+                limparTelaLançar();
                 return;
             }
-            if (res && res.id && state.comandas[chave]) {
+            // ⚠️ NÃO CHEGOU ID, e não foi `jaAberta` nem `cancelada` → a chamada FALHOU.
+            //
+            // Aqui existia só o `if` de sucesso, sem `else`. Quando a resposta se perdia no
+            // transporte, o código não fazia NADA — e a comanda criada de forma otimista
+            // ficava no estado local SEM `_id`, em silêncio. Daí em diante todo item caía no
+            // `if (!comanda._id) return null` do sheets_addItem e sumia. O operador via a
+            // comanda na tela, lançava, e nada chegava à planilha.
+            //
+            // O auto-reparo do poll (ponto 18) não cobre este caso: se o número pertence a
+            // uma comanda PAGA e antiga, ela não vem no payload restrito do ponto 1, então
+            // o poll nunca a encontra para corrigir.
+            //
+            // Reverter é seguro E recuperável: se a comanda tiver sido criada no servidor e
+            // só a resposta tiver se perdido, a próxima tentativa recebe `jaAberta` e carrega
+            // a comanda de verdade. Se não tiver sido criada, cria. Nos dois casos o
+            // operador termina com o dado certo — em vez de trabalhar meia hora num fantasma.
+            if (!(res && res.id)) {
+                console.error('[Sheets] novaComanda sem id — revertendo criação local |',
+                              chave, '| erro:', res && res.erro);
+                delete state.comandas[chave];
+                if (state.comandaAtual === chave) state.comandaAtual = null;
+                saveStorage();
+                showToast('Não conseguimos criar a comanda. Tente de novo.', 'error');
+                limparTelaLançar();
+                return;
+            }
+
+            if (state.comandas[chave]) {
                 state.comandas[chave]._id = res.id;
                 console.log('[Sheets] ✅ Comanda', numero, 'id:', res.id);
             }
@@ -3539,6 +3721,11 @@
                 console.warn('[Sheets] sheets_addItem: comanda._id não disponível, item não salvo', chave);
                 return null;
             }
+            // Marca a gravação como EM VOO. É o que permite ao poll distinguir
+            // "otimista, ainda não confirmado" de "resquício de uma gravação que já
+            // terminou" — sem isso o item duplica na tela (ver o merge no pollFromSheets).
+            itemRef._enviando = true;
+
             const res = await sheetsAPI('addItem', {
                 comanda_id: comanda._id,
                 codigo: dados.codigo, nome: dados.nome,
@@ -3550,7 +3737,28 @@
                 preparo_ja: dados.preparo_ja || false,
                 usuario: state.userLogado || state.user || ''
             });
-            if (res && res.id) itemRef._id = res.id;
+            itemRef._enviando = false;   // gravação terminou — com sucesso ou não
+
+            if (res && res.id) {
+                itemRef._id = res.id;
+                return res;
+            }
+
+            // ⚠️ Sem id = o item NÃO foi salvo. Antes isso passava em silêncio: o item
+            // continuava na tela, entrava no total, e o operador cobrava por algo que não
+            // existia no servidor. Perda silenciosa é pior que erro barulhento.
+            console.error('[Sheets] addItem sem id — item NÃO salvo |', chave,
+                          '| erro:', res && res.erro);
+            const _c = state.comandas[chave];
+            if (_c && Array.isArray(_c.itens)) {
+                const i = _c.itens.indexOf(itemRef);
+                if (i >= 0) _c.itens.splice(i, 1);
+                _c.total = (_c.itens || []).reduce((s, it) =>
+                    s + (parseFloat(it.preco) || 0) * (parseFloat(it.quantidade) || 1), 0);
+                saveStorage();
+            }
+            showToast(`❌ "${dados.nome}" não foi salvo. Lance novamente.`, 'error');
+            if (typeof renderizarTelaAtual === 'function') renderizarTelaAtual();
             return res;
         }
 
@@ -3571,6 +3779,10 @@
         }
 
         async function sheets_salvarCarnesDia(dia, carnes) {
+            // Arma a trava ANTES do POST: durante o envio, o poll deste mesmo aparelho pode
+            // trazer a config antiga e reverter na tela o que acabou de ser salvo. Foi o
+            // incidente de 02/08.
+            marcarCarnesEditadas();
             const siglas = ['seg','ter','qua','qui','sex','sab','dom'];
             await sheetsAPI('atualizarConfig', { chave: `carnes_${siglas[dia]}`, valor: carnes.join(',') });
         }
@@ -3827,10 +4039,24 @@
             // Timeout de segurança: banner sempre some em 25s (cobre 20s do AbortController + margem)
             const _syncTimeout = setTimeout(() => syncBanner.classList.remove('visible'), 25000);
             try {
-                await Promise.all([
-                    _loadFromSheetsPromise || Promise.resolve(),
-                    pollFromSheets()
-                ]);
+                // ⚠️ Este `pollFromSheets()` era INCONDICIONAL e, depois do ponto 1, virou
+                // trabalho repetido: o boot já trouxe comandas, itens e caixa pelo MESMO
+                // endpoint. Se o login acontece poucos segundos depois do boot — que é o
+                // caso normal — a segunda chamada busca exatamente o mesmo dado.
+                //
+                // Continua valendo quando o boot é velho (a pessoa abriu a tela e foi tomar
+                // café antes de digitar a senha). Quem decide é o piso da Regra 48.
+                // ⚠️ SEQUENCIAL, e não Promise.all — a ordem aqui é o que faz a trava
+                // funcionar. Num `Promise.all([bootPromise, _sincronizarPorEvento()])`, o
+                // segundo item é avaliado NA HORA DE MONTAR O ARRAY, antes de o boot
+                // terminar: `_ultimoEstadoEm` ainda vale 0, a idade do dado é infinita, e
+                // ele chama assim mesmo. A trava existiria e nunca pegaria.
+                //
+                // Esperar o boot e só então perguntar "o dado está velho?" é o que faz
+                // sentido — e não custa paralelismo, porque depois do ponto 1 o boot já traz
+                // exatamente o que a segunda chamada buscaria.
+                await (_loadFromSheetsPromise || Promise.resolve());
+                _sincronizarPorEvento('login');
             } catch(e) { /* usa o que tiver */ }
             clearTimeout(_syncTimeout);
 
@@ -5795,7 +6021,47 @@ function abrirResetSenhaUsuario(login) {
             }
         }
 
-function carregarComanda() {
+// Insere no estado local uma comanda vinda do getComandaCompleta (ponto 16).
+// Usa exatamente o mesmo mapeamento do poll, para não existir uma segunda versão
+// da verdade sobre como uma comanda do servidor vira uma comanda local.
+function _absorverComandaDoServidor(cmd) {
+    const _dt   = new Date();
+    const _hoje = _dt.getFullYear() + '-' + String(_dt.getMonth()+1).padStart(2,'0') + '-' + String(_dt.getDate()).padStart(2,'0');
+    const data  = cmd.timestamp_abertura ? cmd.timestamp_abertura.split('T')[0] : _hoje;
+    const numeroNorm = String(parseInt(cmd.numero, 10));
+    const chave = `${numeroNorm}-${data}`;
+
+    const itens  = (cmd.itens || []).map(mapItemSheets);
+    const isPaid = !!cmd.timestamp_pagamento;
+    const temMarmita = itens.some(i => i.tipo === 'Marmita');
+
+    let statusFinal;
+    if (isPaid && temMarmita)                                 statusFinal = 'Em Preparo';
+    else if (isPaid)                                          statusFinal = 'Fechada/Paga';
+    else if (cmd.status === 'em_preparo' || itens.some(i => i.preparo_ja)) statusFinal = 'Em Preparo';
+    else                                                      statusFinal = 'Aberta';
+
+    state.comandas[chave] = {
+        _id:            cmd.id,
+        numero:         numeroNorm,
+        status:         statusFinal,
+        data,
+        paid:           isPaid,
+        encerramento:   cmd.encerramento || null,
+        itens,
+        total:          parseFloat(cmd.total) || 0,
+        dataCriacao:    cmd.timestamp_abertura || null,
+        formaPagamento: cmd.forma_pagamento || null,
+        dataPagamento:  cmd.timestamp_pagamento || null,
+        nomeCliente:    cmd.nome_cliente || null,
+        canal:          cmd.canal || 'presencial'
+    };
+    saveStorage();
+    console.log('[Sheets] comanda', numeroNorm, 'trazida sob demanda do servidor');
+    return chave;
+}
+
+async function carregarComanda() {
             const numero = document.getElementById('lançarComandaNum').value.trim();
             
             if (!numero) {
@@ -5817,7 +6083,16 @@ function carregarComanda() {
                 return;
             }
 
-            // VERIFICAR SE EXISTE — se não existe, cria direto (fluxo unificado)
+            // NÃO EXISTE LOCALMENTE → cria direto, como sempre foi.
+            //
+            // ⚠️ AQUI EU TINHA COLOCADO UM getComandaCompleta ANTES DE CRIAR, e foi um
+            // erro: comanda nova, por definição, não existe. Eu tinha adicionado uma ida ao
+            // servidor inútil no fluxo MAIS FREQUENTE da operação — e, com a cauda de
+            // transporte, isso virava segundos de tela parada onde antes era instantâneo.
+            //
+            // O caminho certo já existia: `novaComanda` no GAS tem LockService e devolve
+            // `jaAberta: true` quando o número já existe no dia. A busca sob demanda (ponto
+            // 16) vive LÁ — só é paga por quem realmente precisa dela.
             if (!state.comandas[key]) {
                 criarComandaInline(numeroNorm);
                 return;
@@ -7154,13 +7429,21 @@ function carregarComanda() {
                 if (isQuiloItem) {
                     gramas.push(item);
                 } else if (item.tipo === 'Fixo') {
-                    if (!agrupados[item.codigo]) {
-                        agrupados[item.codigo] = { ...item, quantidade: 0 };
+                    // ⚠️ CHAVE inclui o PREÇO (05/08). Antes agrupava só por código, e
+                    // dois lançamentos do MESMO item com preços diferentes — o que acontece
+                    // quando o Admin altera o preço no meio do serviço — viravam uma linha
+                    // só, com o preço do PRIMEIRO. A planilha ficava certa e a tela mostrava
+                    // "2 × preço velho", sem bater com o total da comanda.
+                    const _kf = item.codigo + '|' + (parseFloat(item.preco) || 0);
+                    if (!agrupados[_kf]) {
+                        agrupados[_kf] = { ...item, quantidade: 0 };
                     }
-                    agrupados[item.codigo].quantidade += item.quantidade;
+                    agrupados[_kf].quantidade += item.quantidade;
                 } else if (item.tipo === 'Marmita') {
-                    if (!marmitas[item.codigo]) {
-                        marmitas[item.codigo] = { ...item, quantidade: 0, observacoes: [] };
+                    // Mesma razão do agrupamento de itens fixos: preço entra na chave.
+                    const _km = item.codigo + '|' + (parseFloat(item.preco) || 0);
+                    if (!marmitas[_km]) {
+                        marmitas[_km] = { ...item, quantidade: 0, observacoes: [] };
                     }
                     // Soma item.quantidade (não +=1) — marmitas do Pedido Online podem
                     // vir como 1 linha com quantidade > 1. Mesmo bug já corrigido em
@@ -7168,12 +7451,13 @@ function carregarComanda() {
                     // que de fato renderiza a lista de itens do Checkout — a outra função
                     // chamada renderizarCheckoutItens() existe no arquivo mas não é chamada
                     // em lugar nenhum (código morto), então corrigi-la antes não tinha efeito.
-                    marmitas[item.codigo].quantidade += (item.quantidade || 1);
-                    if (item.observacao) marmitas[item.codigo].observacoes.push(item.observacao);
+                    marmitas[_km].quantidade += (item.quantidade || 1);
+                    if (item.observacao) marmitas[_km].observacoes.push(item.observacao);
                 }
             });
 
-            Object.entries(agrupados).forEach(([codigo, item]) => {
+            Object.entries(agrupados).forEach(([_chave, item]) => {
+                const codigo = item.codigo;
                 const precoTotal = item.quantidade * item.preco;
                 total += precoTotal;
                 const div = document.createElement('div');
@@ -7191,7 +7475,8 @@ function carregarComanda() {
                 containerItens.appendChild(div);
             });
 
-            Object.entries(marmitas).forEach(([codigo, item]) => {
+            Object.entries(marmitas).forEach(([_chave, item]) => {
+                const codigo = item.codigo;
                 const precoTotal = item.quantidade * item.preco;
                 total += precoTotal;
                 const div = document.createElement('div');
@@ -9238,6 +9523,33 @@ function carregarComanda() {
             console.log('[Poll] ⏹ Parado');
         }
 
+        // ══ SINCRONIZAÇÃO POR EVENTO — com piso (Regras 44 e 48) ══
+        //
+        // Momento em que o estado foi recebido do servidor com sucesso — vale tanto para o
+        // boot quanto para o poll, porque agora os dois usam o MESMO endpoint e trazem os
+        // MESMOS dados.
+        let _ultimoEstadoEm = 0;
+
+        // A pergunta certa não é "faz quanto tempo da última chamada?" e sim "o dado que eu
+        // já tenho está velho?". E "velho", por definição, é o intervalo do poll: se o dado
+        // tem menos que isso, buscar de novo não acrescenta nada.
+        //
+        // Piso IGUAL ao intervalo (Regra 48), não um número menor solto: assim nenhuma
+        // sequência de eventos consegue gerar mais chamadas que o poll normal. Foi a falta
+        // exatamente disso que quebrou o sistema em 02/08 — um listener de `focus` sem trava
+        // disparando a tempestade completa a cada retorno de foco (Regra 44).
+        function _sincronizarPorEvento(motivo) {
+            if (!state.user) return;
+            const limite = POLL_INTERVALO_POR_PERFIL[state.perfil] || POLL_INTERVALO_PADRAO;
+            const idade  = Date.now() - _ultimoEstadoEm;
+            if (idade < limite) {
+                console.log('[Poll] ' + motivo + ' — dado tem ' + Math.round(idade/1000) +
+                            's, ainda fresco. Sem chamada.');
+                return;
+            }
+            pollFromSheets();
+        }
+
         // SAFETY NET — força um poll imediato assim que a aba/app volta a ficar
         // visível (ex: tablet do Preparo com a tela bloqueada/"dormindo" por um
         // tempo, ou o app foi pra segundo plano um instante). setInterval pode ser
@@ -9251,7 +9563,7 @@ function carregarComanda() {
         // qualquer execução duplicada/concorrente com o poll do setInterval normal.
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible' && state.user) {
-                pollFromSheets();
+                _sincronizarPorEvento('voltou à aba');
             }
         });
 
@@ -9311,9 +9623,56 @@ function carregarComanda() {
             try {
                 const dataAtual = new Date().toISOString().split('T')[0];
 
-                // Busca TODAS as comandas de hoje não encerradas (abertas + pagas)
-                const serverList = await sheetsAPI('getComandasDoDia');
-                if (!Array.isArray(serverList)) return; // timeout ou erro retorna null/objeto — ignora ciclo
+                // ══ PONTO 1 — UMA chamada traz comandas, itens e caixa ══
+                //
+                // Antes: getComandasDoDia + um getItensDaComanda por comanda que precisasse
+                // sincronizar. Com 20 comandas ativas, 21 requisições e 25.727 linhas lidas
+                // para usar ~60 — a cada ciclo, em cada aparelho. Causa raiz de 03/08.
+                const estado = await sheetsAPI('getEstadoOperacional');
+
+                // Guarda de falha: resposta ruim = ciclo ignorado, estado local INTACTO.
+                // Nunca tratar falha como "não há comandas" — isso apagaria o dia inteiro.
+                if (!_respostaValida(estado) || !Array.isArray(estado.comandas)) return;
+                const serverList = estado.comandas;
+                _ultimoEstadoEm = Date.now();   // alimenta o piso da Regra 48
+
+                // Declarada ANTES do bloco do caixa de propósito: `let mudou` só é declarada
+                // mais adiante, e tocá-la aqui daria erro de temporal dead zone.
+                let _caixaMudou = false;
+
+                // Status do caixa vem de carona (custo zero) — antes só era lido no boot,
+                // então um aparelho ligado ANTES da abertura do caixa nunca ficava sabendo
+                // que ele abriu, e seguia bloqueando a criação de comandas até dar F5.
+                if (_respostaValida(estado.caixa)) {
+                    const _dh = new Date();
+                    const _hoje = _dh.getFullYear() + '-' +
+                                  String(_dh.getMonth() + 1).padStart(2, '0') + '-' +
+                                  String(_dh.getDate()).padStart(2, '0');
+                    const _abertoAgora = estado.caixa.status === 'aberto' && estado.caixa.data === _hoje;
+                    const _eraAberto   = state.caixa && state.caixa.status === 'aberto';
+                    if (_abertoAgora !== _eraAberto) {
+                        // ⚠️ NOMES DOS CAMPOS: têm que ser EXATAMENTE os mesmos que o boot e
+                        // o abrirCaixa usam (`dataAbertura`, `horaAbertura`, `usuario`).
+                        // Eu tinha escrito `hora` e `data`, e omitido o usuário — o estado
+                        // ficava "aberto" corretamente, mas a tela mostrava "Aberto às —"
+                        // sem horário nem nome, porque lê por esses nomes.
+                        state.caixa = _abertoAgora
+                            ? { status:       'aberto',
+                                troco:        estado.caixa.troco || 0,
+                                dataAbertura: estado.caixa.data,
+                                horaAbertura: estado.caixa.horaAbertura || null,
+                                usuario:      estado.caixa.usuarioAbertura || null }
+                            : { status: 'fechado', troco: 0, dataAbertura: null,
+                                horaAbertura: null, usuario: null };
+                        saveStorage();
+                        // ⚠️ Sem isto o estado mudava e a TELA NÃO REDESENHAVA: o re-render
+                        // do fim do poll olha só a flag alimentada por mudanças em comandas.
+                        // O operador via "caixa fechado" no console e "caixa aberto" na tela,
+                        // e só ao clicar na aba (visibilitychange) a tela se corrigia.
+                        _caixaMudou = true;
+                        console.log('[Poll] caixa mudou para:', state.caixa.status);
+                    }
+                }
 
                 // Mapa chave → comanda do servidor
                 const serverMap = {};
@@ -9345,49 +9704,23 @@ function carregarComanda() {
 
                 // 2. Atualiza existentes / adiciona novas do servidor
                 //
-                // PERF: antes, cada comanda que precisava re-sincronizar itens disparava
-                // um `await sheetsAPI('getItensDaComanda', ...)` sequencial DENTRO do loop —
-                // com N comandas precisando de fetch no mesmo ciclo, os tempos de rede somam
-                // (N requisições em série), e o _pollingAtivo trava o próximo ciclo de 3s até
-                // o atual terminar inteiro. Isso explica relatos de ~40s pra um card de
-                // preparo aparecer em outro device: não era 1 request lento, eram várias
-                // somadas. Fix: 1ª passada (síncrona) decide QUAIS comandas precisam de fetch
-                // e já DISPARA todos os sheetsAPI('getItensDaComanda', ...) em paralelo (sem
-                // await ainda); 2ª passada aplica a lógica de cada comanda awaitando a
-                // promise que já está em voo — o tempo total passa a ser ~o maior tempo de
-                // resposta individual, não a soma de todos.
-                const fetchPromises = {};
-                for (const [chave, cmd] of Object.entries(serverMap)) {
-                    const local = state.comandas[chave];
-                    const novoPaid = !!(cmd.timestamp_pagamento);
-                    let precisaFetch;
-
-                    if (!local) {
-                        precisaFetch = true;
-                    } else if (!local.paid && novoPaid && (!local.itens || local.itens.length === 0)) {
-                        precisaFetch = true;
-                    } else {
-                        const totalServer = parseFloat(cmd.total) || 0;
-                        const temItemEmPreparoAtivo = (local.itens || []).some(i =>
-                            !i.timestampConcluido && (i.preparo_ja || (local.paid && i.tipo === 'Marmita'))
-                        );
-                        const bloqueadoPorEdicao = local._editadoEm && (Date.now() - local._editadoEm) < 60000;
-                        precisaFetch = !bloqueadoPorEdicao && chave !== state.comandaAtual &&
-                            (Math.abs(totalServer - (local.total || 0)) > 0.001 || temItemEmPreparoAtivo);
-                    }
-
-                    if (precisaFetch) {
-                        fetchPromises[chave] = sheetsAPI('getItensDaComanda', { comanda_id: cmd.id });
-                    }
-                }
-
+                // ══ TODA A PRIMEIRA PASSADA FOI REMOVIDA (ponto 1) ══
+                //
+                // Existia aqui um laço que decidia QUAIS comandas precisavam de itens e
+                // disparava um `getItensDaComanda` para cada uma. Era o N+1: 20 comandas
+                // ativas = 21 requisições por ciclo, por aparelho, a cada poll.
+                //
+                // Os itens agora chegam ANINHADOS em cada comanda (`cmd.itens`), então não
+                // há mais o que buscar — e some junto toda a heurística de `precisaFetch`,
+                // incluindo a condição `temItemEmPreparoAtivo`, que mantinha comanda paga
+                // com marmita pendente re-buscando itens indefinidamente.
                 for (const [chave, cmd] of Object.entries(serverMap)) {
                     const local = state.comandas[chave];
                     const novoPaid = !!(cmd.timestamp_pagamento);
 
                     if (!local) {
                         // ── COMANDA NOVA (aberta em outro device) ──
-                        const itensCmd = await fetchPromises[chave];
+                        const itensCmd = cmd.itens || [];
                         const data = cmd.timestamp_abertura ? cmd.timestamp_abertura.split('T')[0] : dataAtual;
                         const itens = (itensCmd || [])
                             .filter(i => String(i.removido).toLowerCase() !== 'true')
@@ -9424,6 +9757,27 @@ function carregarComanda() {
 
                     } else {
                         // ── COMANDA EXISTENTE ──
+
+                        // ⚠️ AUTO-REPARO DO _id (ponto 18) — perda silenciosa de itens.
+                        //
+                        // `local._id` só era preenchido na resposta do novaComanda. Se essa
+                        // resposta se perdesse no transporte (o que aconteceu o dia inteiro
+                        // em 03/08), ficava uma comanda local SEM _id — e a partir dali todo
+                        // item lançado nela caía no `if (!comanda._id) return null` do
+                        // sheets_addItem, em SILÊNCIO. Refresh não resolvia: a comanda
+                        // quebrada mora no localStorage.
+                        //
+                        // Detalhe cruel: o total no servidor ficava zero (nenhum item
+                        // chegava lá), então o poll sincronizava zero por cima e a tela
+                        // ficava coerente consigo mesma enquanto o dado não existia.
+                        //
+                        // O servidor é a fonte da verdade do id. Se o local diverge, corrige.
+                        if (cmd.id && local._id !== cmd.id) {
+                            console.warn('[Poll] 🔧 reparando _id da comanda', chave,
+                                         '| local:', local._id, '→ servidor:', cmd.id);
+                            local._id = cmd.id;
+                            localMudou = true;
+                        }
                         let localMudou = false;
 
                         // CASO 0: Nome do cliente preenchido em outro device (ex: marmita
@@ -9443,8 +9797,8 @@ function carregarComanda() {
                             local.dataPagamento  = cmd.timestamp_pagamento || local.dataPagamento;
                             // Jornada de preparo: verifica marmitas antes de fechar
                             if (!local.itens || local.itens.length === 0) {
-                                const itensCmd = await fetchPromises[chave];
-                                if (itensCmd) local.itens = itensCmd.filter(i => String(i.removido).toLowerCase() !== 'true').map(mapItemSheets);
+                                const itensCmd = cmd.itens || [];
+                                if (itensCmd.length) local.itens = itensCmd.map(mapItemSheets);
                             }
                             const temMarmita = (local.itens || []).some(i => i.tipo === 'Marmita');
                             local.status = (temMarmita || cmd.status === 'em_preparo') ? 'Em Preparo' : 'Fechada/Paga';
@@ -9480,24 +9834,27 @@ function carregarComanda() {
                         // devices, porque nem total mudava nem temItemEmPreparoAtivo via true.
                         // Acrescenta o caso local.paid + Marmita + não concluído.
                         const totalServer = parseFloat(cmd.total) || 0;
-                        const temItemEmPreparoAtivo = (local.itens || []).some(i =>
-                            !i.timestampConcluido && (i.preparo_ja || (local.paid && i.tipo === 'Marmita'))
-                        );
                         // Se admin editou preço manualmente há menos de 60s, bloquear re-sync
                         // para não sobrescrever com valores antigos do Sheets enquanto a API atualiza
                         const bloqueadoPorEdicao = local._editadoEm && (Date.now() - local._editadoEm) < 60000;
-                        if (!bloqueadoPorEdicao && chave !== state.comandaAtual &&
-                            (Math.abs(totalServer - (local.total || 0)) > 0.001 || temItemEmPreparoAtivo) &&
-                            fetchPromises[chave]) {
+
+                        // ⚠️ A HEURÍSTICA DE QUANDO SINCRONIZAR FOI REMOVIDA (ponto 1).
+                        //
+                        // Antes só sincronizava se o total tivesse mudado OU se
+                        // `temItemEmPreparoAtivo` fosse true — porque cada sincronização
+                        // custava uma requisição. Isso tinha dois defeitos: mudanças que não
+                        // alteram o total (concluir preparo, por exemplo) podiam não chegar,
+                        // e comanda paga com marmita pendente re-buscava itens para sempre.
+                        //
+                        // Agora os itens já vieram na mesma resposta. Sincronizar é DE GRAÇA,
+                        // então sincroniza sempre — mais simples e mais correto.
+                        if (!bloqueadoPorEdicao && chave !== state.comandaAtual) {
                             // Status ANTES do re-sync — usado abaixo pra detectar a transição
-                            // pra "Concluído" causada por outro device (ver comentário após o
-                            // fetch).
+                            // pra "Concluído" causada por outro device.
                             const statusAntes = (derivarStatusPreparo(local) || {}).status || null;
-                            const itensCmd = await fetchPromises[chave];
-                            if (itensCmd) {
-                                const serverItems  = itensCmd
-                                    .filter(i => String(i.removido).toLowerCase() !== 'true')
-                                    .map(mapItemSheets);
+                            const itensCmd = cmd.itens || [];
+                            {
+                                const serverItems  = itensCmd.map(mapItemSheets);
 
                                 // ANTI-FLICKER: preserva timestamps definidos localmente quando
                                 // o servidor ainda retorna null — o GAS pode levar 1-5s para
@@ -9507,7 +9864,23 @@ function carregarComanda() {
                                 // "Aguardando" e voltar. O servidor sempre ganha quando TEM o dado.
                                 // TTL: após 15s sem confirmação, desiste e avisa o usuário — a write
                                 // falhou silenciosamente e ele precisa clicar de novo.
-                                const WRITE_TTL_MS = 15000;
+                                // 15s → 45s (05/08). O valor de 15s foi calibrado quando uma
+                                // escrita custava 1-2 segundos. As medições de 04-05/08
+                                // mostram POST levando 30s ou mais na cauda de transporte —
+                                // ou seja, a proteção desistia ANTES de o servidor ter
+                                // chance de confirmar, e o card voltava para vermelho com a
+                                // gravação ainda em voo.
+                                //
+                                // Isso ficou muito mais visível depois do ponto 1: antes a
+                                // sincronização de itens era rara (só quando o total mudava),
+                                // então o estado otimista sobrevivia por acidente. Agora
+                                // sincroniza todo ciclo, e a proteção é exercitada sempre.
+                                //
+                                // ⚠️ MITIGAÇÃO, NÃO CORREÇÃO. O certo é o operador VER que a
+                                // gravação está pendente, em vez de a tela adivinhar por
+                                // quanto tempo confiar no otimismo — é o item B (estado
+                                // visível de pendência) da lista de confiabilidade.
+                                const WRITE_TTL_MS = 45000;
                                 const localMap = {};
                                 (local.itens || []).forEach(i => { if (i._id) localMap[String(i._id)] = i; });
                                 serverItems.forEach(si => {
@@ -9527,9 +9900,30 @@ function carregarComanda() {
                                     }
                                 });
 
-                                const pendingItems = local.itens.filter(i => !i._id);
-                                const serverIds    = new Set(serverItems.map(i => i._id));
-                                local.itens  = [...serverItems, ...pendingItems.filter(p => !serverIds.has(p._id))];
+                                // ⚠️ AQUI NASCIA ITEM DUPLICADO NA TELA (corrigido 05/08).
+                                //
+                                // Era:
+                                //   const pendingItems = local.itens.filter(i => !i._id);
+                                //   local.itens = [...serverItems,
+                                //                  ...pendingItems.filter(p => !serverIds.has(p._id))];
+                                //
+                                // `pendingItems` é, por definição, a lista dos itens SEM
+                                // `_id`. Então `p._id` era sempre `undefined`, e
+                                // `serverIds.has(undefined)` sempre falso — **nenhum
+                                // pendente era removido, nunca**. Quando o servidor
+                                // devolvia o item já salvo, ele entrava na lista JUNTO com
+                                // a cópia otimista local: item duplicado e total dobrado na
+                                // tela, com a planilha correta.
+                                //
+                                // Agora o critério é explícito: só sobrevive o item cuja
+                                // gravação AINDA ESTÁ EM VOO (`_enviando`). Assim que o
+                                // POST responde, a flag cai e o item do servidor assume.
+                                //
+                                // A correção de raiz é a idempotência do núcleo da Onda 1 —
+                                // item nascer com id do cliente, e o servidor deduplicar.
+                                // Isto aqui é a versão que não depende dela.
+                                const pendingItems = local.itens.filter(i => !i._id && i._enviando);
+                                local.itens  = [...serverItems, ...pendingItems];
                                 // Re-aplicar overrides de preço editados manualmente pelo admin
                                 if (local._precoOverrides) {
                                     local.itens.forEach(item => {
@@ -9569,10 +9963,23 @@ function carregarComanda() {
                     }
                 }
 
-                if (mudou) {
+                // `_caixaMudou` entra aqui: abrir ou fechar o caixa em outro aparelho muda
+                // o que a tela deve mostrar tanto quanto uma comanda nova.
+                if (mudou || _caixaMudou) {
                     saveStorage();
                     renderizarTelaAtual();
                 }
+
+                // O estado aberto/fechado do caixa é desenhado por `renderizarCaixa()`, e
+                // `renderizarTelaAtual()` chama `renderizarResumoDoDia()` — que atualiza os
+                // totais, não a fase da tela. Por isso o caixa mudava no estado e a tela
+                // continuava mostrando o contrário.
+                //
+                // Chamado SÓ na mudança real, nunca a cada ciclo: `renderizarCaixa()`
+                // redesenha a tela inteira e apagaria o que o operador estivesse digitando
+                // no campo de troco. (A função já tem guarda própria para não interromper
+                // o fluxo de fechamento em andamento — ver Regra 40.)
+                if (_caixaMudou) renderizarCaixa();
 
             } catch(e) {
                 console.warn('[Poll] Erro:', e);
@@ -10467,7 +10874,8 @@ function carregarComanda() {
             });
 
             // Renderizar itens agrupados
-            Object.entries(agrupados).forEach(([codigo, item]) => {
+            Object.entries(agrupados).forEach(([_chave, item]) => {
+                const codigo = item.codigo;
                 const precoTotal = item.quantidade * item.preco;
                 total += precoTotal;
 
@@ -10704,7 +11112,9 @@ function carregarComanda() {
             // Listener de barcode removido daqui — centralizado em _initBarcodeListener()
         }
 
-        function _processarCodigoScanner(code) {
+        // async por causa da busca sob demanda do Checkout (ponto 16). Os chamadores
+        // disparam sem await — é ação de UI, não há nada esperando o retorno.
+        async function _processarCodigoScanner(code) {
             const telaLancar   = document.getElementById('screen-lançar');
             const telaCheckout = document.getElementById('screen-checkout');
             const emLancar     = telaLancar   && telaLancar.classList.contains('active');
@@ -10719,10 +11129,29 @@ function carregarComanda() {
                 } else if (emCheckout) {
                     // Busca restrita ao dia atual — comanda de outro dia não deve ser selecionável
                     const dataAtual = new Date().toISOString().split('T')[0];
-                    const chave = Object.keys(state.comandas).find(k => {
+                    let chave = Object.keys(state.comandas).find(k => {
                         const cmd = state.comandas[k];
                         return String(cmd.numero) === numero && cmd.data === dataAtual;
                     });
+
+                    // ── Ponto 16: SEGUNDO ponto de busca sob demanda ──
+                    //
+                    // Antes daqui saía direto "Comanda não encontrada". Isso já era ruim
+                    // hoje (comanda criada há 10s no celular, poll ainda não trouxe) e
+                    // ficaria permanente com o payload restrito do ponto 1 — uma comanda
+                    // paga há uma hora nunca mais seria bipável no caixa.
+                    //
+                    // A distinção importa: falha de rede NÃO pode virar "não existe".
+                    if (!chave) {
+                        showToast('Buscando comanda #' + numero + '...', 'info');
+                        const _b = await sheetsAPI('getComandaCompleta', { numero: numero });
+                        if (!_respostaValida(_b) && !(_b && _b.erro === 'Comanda não encontrada')) {
+                            showToast('Não conseguimos consultar a comanda. Tente de novo.', 'error');
+                            return;
+                        }
+                        if (_b && _b.comanda) chave = _absorverComandaDoServidor(_b.comanda);
+                    }
+
                     if (!chave) { showToast('Comanda #' + numero + ' não encontrada', 'error'); return; }
                     const comanda = state.comandas[chave];
                     if (comanda.status === 'Fechada/Paga' || comanda.paid || comanda.encerramento) {
@@ -11701,7 +12130,8 @@ function carregarComanda() {
             });
 
             // Renderizar FIXO
-            Object.entries(agrupados).forEach(([codigo, item]) => {
+            Object.entries(agrupados).forEach(([_chave, item]) => {
+                const codigo = item.codigo;
                 const precoTotal = item.quantidade * item.preco;
                 total += precoTotal;
                 const icone = getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo));
@@ -11720,7 +12150,8 @@ function carregarComanda() {
             });
 
             // Renderizar MARMITAS
-            Object.entries(marmitas).forEach(([codigo, item]) => {
+            Object.entries(marmitas).forEach(([_chave, item]) => {
+                const codigo = item.codigo;
                 const precoTotal = item.quantidade * item.preco;
                 total += precoTotal;
                 const icone = getIconeCategoria(item.categoria || categorizarItem(item.nome, item.tipo));
