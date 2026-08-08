@@ -3100,7 +3100,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-05-l';
+        const CHEF_MIND_VERSAO = '2026-08-06-a';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -10820,8 +10820,14 @@ async function carregarComanda() {
                     bufetsIndividuais.push({ ...item, indice: idx });
                 } else {
                     // TUDO MAIS - agrupar por código (inclusive Buffet Livre)
-                    if (!agrupados[item.codigo]) {
-                        agrupados[item.codigo] = {
+                    // ⚠️ CHAVE inclui o PREÇO — ver comentário no agrupamento do Checkout.
+                    // Este bloco ficou de fora da primeira correção (05/08): existem TRÊS
+                    // lugares que montam `agrupados`, e eu tinha ajustado só um. Sem isto,
+                    // o mesmo item lançado com preços diferentes vira uma linha só, com o
+                    // preço do primeiro — e as linhas da tela não fecham com o total.
+                    const _ka = item.codigo + '|' + (parseFloat(item.preco) || 0);
+                    if (!agrupados[_ka]) {
+                        agrupados[_ka] = {
                             ...item,
                             quantidade: 0,
                             observacoes: [],
@@ -10833,11 +10839,11 @@ async function carregarComanda() {
                     // 1 linha com quantidade > 1 (ex: "2x Refrigerante"). Lançamentos do
                     // atendente sempre vêm com quantidade:1 por linha, então a soma também
                     // funciona normalmente para eles (1+1+1... = N linhas).
-                    agrupados[item.codigo].quantidade += (item.quantidade || 1);
+                    agrupados[_ka].quantidade += (item.quantidade || 1);
                     if (item.tipo === 'Marmita') {
-                        agrupados[item.codigo].observacoes.push(item.observacao || '-');
+                        agrupados[_ka].observacoes.push(item.observacao || '-');
                     }
-                    agrupados[item.codigo].indices.push(idx);
+                    agrupados[_ka].indices.push(idx);
                 }
             });
 
@@ -12111,21 +12117,24 @@ async function carregarComanda() {
                 if (isQuiloItem) {
                     gramas.push(item);
                 } else if (item.tipo === 'Fixo') {
-                    if (!agrupados[item.codigo]) {
-                        agrupados[item.codigo] = { ...item, quantidade: 0, indices: [] };
+                    // Chave com preço — mesmo motivo dos outros dois blocos.
+                    const _kb = item.codigo + '|' + (parseFloat(item.preco) || 0);
+                    if (!agrupados[_kb]) {
+                        agrupados[_kb] = { ...item, quantidade: 0, indices: [] };
                     }
-                    agrupados[item.codigo].quantidade += item.quantidade;
-                    agrupados[item.codigo].indices.push(idx);
+                    agrupados[_kb].quantidade += item.quantidade;
+                    agrupados[_kb].indices.push(idx);
                 } else if (item.tipo === 'Marmita') {
-                    if (!marmitas[item.codigo]) {
-                        marmitas[item.codigo] = { ...item, quantidade: 0, observacoes: [], indices: [] };
+                    const _kc = item.codigo + '|' + (parseFloat(item.preco) || 0);
+                    if (!marmitas[_kc]) {
+                        marmitas[_kc] = { ...item, quantidade: 0, observacoes: [], indices: [] };
                     }
                     // Soma item.quantidade (não +=1) — mesmo bug já corrigido em
                     // renderizarListaLançada: marmitas do Pedido Online podem vir como
                     // 1 linha com quantidade > 1.
-                    marmitas[item.codigo].quantidade += (item.quantidade || 1);
-                    marmitas[item.codigo].observacoes.push(item.observacao || '-');
-                    marmitas[item.codigo].indices.push(idx);
+                    marmitas[_kc].quantidade += (item.quantidade || 1);
+                    marmitas[_kc].observacoes.push(item.observacao || '-');
+                    marmitas[_kc].indices.push(idx);
                 }
             });
 
