@@ -630,6 +630,15 @@
             background: var(--success);
         }
 
+        /* ⚠️ `warning` era usado em 35 chamadas de showToast e NUNCA teve regra de CSS —
+           todas caíam no fundo padrão do `.toast`, que é `var(--danger)`. Ou seja: dezenas
+           de avisos que dizem "atenção, confira" apareciam com a cara de "deu erro".
+           Descoberto em 06/08 ao testar o Item B, onde a contradição fica gritante: a
+           mensagem diz que a gravação PROVAVELMENTE deu certo, num balão vermelho. */
+        .toast.warning {
+            background: var(--warning);
+        }
+
         @keyframes slideDown {
             from { transform: translateY(-100%); }
             to { transform: translateY(0); }
@@ -3100,7 +3109,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-06-a';
+        const CHEF_MIND_VERSAO = '2026-08-06-b';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -3144,29 +3153,84 @@
         // Token de API — deve ser igual ao valor definido em GAS → Project Settings → Script Properties → API_TOKEN
         const API_TOKEN = 'cm-37172ab32d1cf5e095fd40e0';
 
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // ITEM B — o POST não tinha prazo, e a tela travava para sempre
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // A ausência de timeout no POST é PROPOSITAL e continua sendo (Regra 2: passar
+        // `signal` cancela o redirect 302 do GAS e a gravação nem acontece). O que nunca
+        // foi tratado é a CONSEQUÊNCIA: se a resposta se perde no caminho, o `await` fica
+        // esperando indefinidamente e a tela congela sem saída.
+        //
+        // Reproduzido 3x em 05/08 — pedido do cliente, login e abrir caixa. Em todos os
+        // três a gravação TINHA acontecido na planilha. O usuário via "enviando..." para
+        // sempre, recarregava, perdia a sessão, e a reação natural era refazer a ação.
+        // Pedido duplicado que a cozinha prepara e ninguém pediu.
+        //
+        // A saída é separar duas coisas que estavam grudadas:
+        //
+        //     "quanto tempo a GRAVAÇÃO tem"  ≠  "quanto tempo a TELA espera"
+        //
+        // `Promise.race` só mexe na segunda. O fetch não é cancelado, segue vivo em
+        // segundo plano e grava normalmente — nós apenas paramos de PRENDER A TELA nele.
+        // Nenhum signal entra em cena, então a Regra 2 continua intacta.
+        const _POST_PRAZO_MS = 30000;
+
+        // Uma resposta incerta NÃO é sucesso e NÃO é falha — é "não sei", e o desfecho
+        // mais provável é que a gravação tenha dado certo. Confundir isso com falha é o
+        // que gera duplicata: manda-se o usuário "tentar de novo" numa ação que já valeu.
+        //
+        // Nota: ela carrega `.erro`, então `_respostaValida()` a reprova. Todo chamador
+        // que ainda não conhece essa distinção segue tratando como falha — default seguro.
+        // Quem PRECISA distinguir chama `_respostaIncerta()` explicitamente.
+        function _respostaIncerta(r) { return !!r && r._incerto === true; }
+
+        async function _postComPrazo(action, dados) {
+            // O `.catch` aqui não é decoração: quando o prazo vence, esta promise continua
+            // pendente. Se ela rejeitar depois (queda de rede), sem o catch vira
+            // unhandledrejection — erro no console que não pertence a ninguém.
+            const _emVoo = fetch(SHEETS_API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action, token: API_TOKEN, ...dados })
+            })
+                .then(r => r.json())
+                .catch(err => ({ sucesso: false, erro: err.message }));
+
+            const _prazo = new Promise(resolve => setTimeout(() => resolve({
+                sucesso: false,
+                erro: `Sem confirmação do servidor em ${_POST_PRAZO_MS / 1000}s`,
+                _incerto: true
+            }), _POST_PRAZO_MS));
+
+            const r = await Promise.race([_emVoo, _prazo]);
+            if (r && r._incerto) {
+                console.warn(`[Sheets] ⏳ "${action}" sem confirmação em ${_POST_PRAZO_MS / 1000}s ` +
+                             '— a gravação segue em voo e provavelmente vai acontecer.');
+            }
+            return r;
+        }
+
         async function sheetsAPI(action, dados = {}, timeoutMs = 20000) {
             try {
                 const ehLeitura = action.startsWith('get');
-                let resp;
+                let json;
                 if (ehLeitura) {
                     // GET: usa AbortController para evitar hang infinito
                     const controller = new AbortController();
                     const timeoutId  = setTimeout(() => controller.abort(), timeoutMs);
                     try {
                         const params = new URLSearchParams({ action, token: API_TOKEN, ...dados });
-                        resp = await fetch(`${SHEETS_API_URL}?${params}`, { signal: controller.signal });
+                        const resp = await fetch(`${SHEETS_API_URL}?${params}`, { signal: controller.signal });
+                        json = await resp.json();
                     } finally {
                         clearTimeout(timeoutId);
                     }
                 } else {
-                    // POST: SEM signal — o redirect do GAS (302→googleusercontent) é incompatível
-                    // com AbortController em alguns browsers Android/Chrome
-                    resp = await fetch(SHEETS_API_URL, {
-                        method: 'POST',
-                        body: JSON.stringify({ action, token: API_TOKEN, ...dados })
-                    });
+                    // POST: SEM signal (Regra 2) — prazo de tela via Promise.race, ver acima.
+                    // `timeoutMs` não se aplica aqui: ele é o prazo de ABORTO do GET, e
+                    // abortar POST é justamente o que não podemos fazer.
+                    json = await _postComPrazo(action, dados);
                 }
-                const json = await resp.json();
 
                 // ⚠️ NÃO LANÇAR EXCEÇÃO AQUI.
                 //
@@ -3742,6 +3806,25 @@
             if (res && res.id) {
                 itemRef._id = res.id;
                 return res;
+            }
+
+            // ⏱️ SEM CONFIRMAÇÃO ≠ NÃO SALVOU (Item B).
+            //
+            // O prazo de 30s venceu, mas o fetch continua vivo e a gravação provavelmente
+            // aconteceu. Cair no bloco abaixo aqui seria dar o conselho ERRADO: removeríamos
+            // o item da tela e mandaríamos "lance novamente" numa ação que já valeu — o
+            // operador lança de novo e o cliente paga o item em dobro.
+            //
+            // O que fazemos em vez disso: soltar o item (o `_enviando` já foi zerado acima,
+            // então o merge do poll para de segurá-lo como otimista) e deixar o POLL
+            // decidir. Em um ciclo a tela converge para a verdade do servidor — se gravou,
+            // o item volta com `_id`; se não gravou, some. Não inventamos um desfecho que
+            // não conhecemos; avisamos que ainda não sabemos e deixamos o sistema resolver.
+            if (_respostaIncerta(res)) {
+                console.warn('[Sheets] addItem sem confirmação — deixando o poll reconciliar |', chave);
+                showToast(`⏳ "${dados.nome}" — sem confirmação ainda. ` +
+                          'Confira a comanda antes de lançar de novo.', 'warning');
+                return null;
             }
 
             // ⚠️ Sem id = o item NÃO foi salvo. Antes isso passava em silêncio: o item
