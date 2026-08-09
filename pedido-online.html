@@ -313,7 +313,7 @@ const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
 // tempo, e sem isso não dá pra saber qual versão está de fato rodando no aparelho —
 // só deduzir por sintoma, que já nos custou horas. O estado da trava de horário
 // aparece junto de propósito: é a diferença mais fácil de confundir entre versões.
-const CHEF_MIND_PEDIDO_VERSAO = '2026-08-04-b';
+const CHEF_MIND_PEDIDO_VERSAO = '2026-08-06-b';
 
 // Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
 // na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
@@ -331,7 +331,16 @@ const TELEFONE_AJUDA = '+5541997829474';
 // aparece. Usado pontualmente para validar mudanças fora do expediente; sempre reverter
 // para false antes de publicar, senão o pedido online fica aberto 24h e um cliente
 // consegue fazer pedido de madrugada. Estado atual: DESLIGADO (trava valendo normal).
-const _TESTE_IGNORAR_HORARIO = false;
+// 🔓 Trava de horário liberada APENAS por `?teste=1` na URL.
+//
+// Antes era um `false` fixo que precisava virar `true` para testar — e enquanto estivesse
+// `true`, QUALQUER cliente com o link (que já está distribuído) conseguiria fazer pedido
+// fora do horário, com a cozinha fechada. Um "esqueci de reverter" custaria pedido real
+// que ninguém prepara.
+//
+// Com o parâmetro, o link normal continua com a trava ativa para o cliente, e o teste
+// não depende de ninguém lembrar de desfazer nada.
+const _TESTE_IGNORAR_HORARIO = new URLSearchParams(location.search).get('teste') === '1';
 
 console.log(
     '%c Pedido Online ' + CHEF_MIND_PEDIDO_VERSAO + ' ',
@@ -363,12 +372,44 @@ async function apiGet(action, params, timeoutMs) {
 
 // Regra 2: POST NUNCA usa AbortController/signal — o GAS responde via redirect HTTP 302
 // e o signal cancelaria a requisição no meio do redirect, perdendo a escrita silenciosamente.
+// ═══════════════════════════════════════════════════════════════════════════════════
+// ITEM B — o POST não tinha prazo, e a tela do cliente travava para sempre
+// ═══════════════════════════════════════════════════════════════════════════════════
+//
+// Reproduzido em 05/08: pedido feito dentro do horário, GRAVADO corretamente na
+// planilha, e a mensagem "estamos gerando seu pedido" ficou na tela para sempre.
+// Refresh → voltou para o formulário vazio.
+//
+// Aqui o custo é maior que no index.html. O cliente não sabe que o pedido entrou, não
+// consegue acompanhar, e a reação natural dele é PEDIR DE NOVO. A cozinha prepara os
+// dois e alguém paga por isso.
+//
+// Não podemos passar `signal` (Regra 2 — cancela o redirect 302 do GAS e aí sim o
+// pedido não é gravado). `Promise.race` resolve sem tocar no fetch: ele continua vivo
+// e grava normalmente; só paramos de prender a tela nele.
+const _POST_PRAZO_MS = 30000;
+
+// "Não sei" é um terceiro estado, ao lado de "deu certo" e "deu errado" — e é o mais
+// perigoso de traduzir errado. Dizer "falhou" para um pedido que foi gravado é
+// literalmente instruir o cliente a duplicar.
+function _respostaIncerta(r) { return !!r && r._incerto === true; }
+
 async function apiPost(action, payload) {
-    const resp = await fetch(SHEETS_API_URL, {
+    // O `.catch` evita unhandledrejection: quando o prazo vence, esta promise segue
+    // pendente e pode rejeitar depois (queda de rede) sem ninguém escutando.
+    const _emVoo = fetch(SHEETS_API_URL, {
         method: 'POST',
         body: JSON.stringify(Object.assign({ action }, payload))
-    });
-    return await resp.json();
+    })
+        .then(r => r.json())
+        .catch(err => ({ erro: err.message }));
+
+    const _prazo = new Promise(resolve => setTimeout(() => resolve({
+        erro: `Sem confirmação do servidor em ${_POST_PRAZO_MS / 1000}s`,
+        _incerto: true
+    }), _POST_PRAZO_MS));
+
+    return Promise.race([_emVoo, _prazo]);
 }
 
 function escapeHtml(s) {
@@ -697,6 +738,23 @@ async function confirmarPedido() {
     }
 
     state.enviando = false;
+
+    // ⏱️ SEM CONFIRMAÇÃO — o desfecho mais provável é que o pedido TENHA entrado.
+    //
+    // Este ramo tem que vir ANTES do teste de erro abaixo, porque a resposta incerta
+    // também carrega `.erro` — e cair no snackbar vermelho "Erro ao enviar o pedido.
+    // Tente de novo." seria exatamente a instrução que produz o pedido duplicado.
+    //
+    // Também não pode ser um snackbar: ele some sozinho e o cliente fica olhando o
+    // formulário preenchido, que é um convite a apertar Enviar de novo. Precisa ser uma
+    // tela que substitui o formulário e tira essa opção da frente dele.
+    if (_respostaIncerta(resultado)) {
+        console.warn('[Pedido] Envio sem confirmação — provável gravação em voo');
+        salvarClienteLembrado(state.nome.trim(), state.whatsapp.trim());
+        view = 'envio_incerto';
+        render();
+        return;
+    }
 
     if (!resultado || resultado.erro) {
         erro((resultado && resultado.erro) || 'Erro ao enviar o pedido. Tente de novo.');
@@ -1160,6 +1218,7 @@ function render() {
     else if (view === 'status') app.innerHTML = renderStatus();
     else if (view === 'fechado') app.innerHTML = renderFechado();
     else if (view === 'erro_carregamento') app.innerHTML = renderErroCarregamento();
+    else if (view === 'envio_incerto') app.innerHTML = renderEnvioIncerto();
     else app.innerHTML = renderFormulario();
 
     if (state.rolarParaPedidoAoRenderizar) {
@@ -1259,6 +1318,32 @@ async function tentarCarregarNovamente() {
     const ok = await carregarOpcoes();
     view = ok ? (estaDentroDoHorario() ? 'form' : 'fechado') : 'erro_carregamento';
     render();
+}
+
+// Tela de envio sem confirmação (Item B). O objetivo dela é UM só: impedir o reenvio.
+//
+// Por isso não tem botão "tentar de novo" — seria a porta exata que queremos fechar. E a
+// mensagem assume a incerteza em vez de fingir sucesso ou fingir falha: o cliente merece
+// saber que o pedido provavelmente entrou, e tem um caminho humano (WhatsApp/telefone,
+// via renderAjuda) para tirar a dúvida em segundos.
+function renderEnvioIncerto() {
+    return `
+        <div class="card tela-centro">
+            <div class="titulo-card">Não conseguimos confirmar seu pedido</div>
+            <div class="dica" style="margin-top:14px;">
+                A resposta do nosso servidor não chegou a tempo — mas o seu pedido
+                <strong>provavelmente já foi registrado</strong>.
+            </div>
+            <div class="dica" style="margin-top:16px; font-weight:800; color:var(--danger); font-size:1.05em;">
+                Por favor, não envie de novo.
+            </div>
+            <div class="dica" style="margin-top:14px;">
+                Fale com a gente agora que confirmamos na hora — e, se não tiver entrado,
+                a gente registra pra você na mesma conversa.
+            </div>
+            ${renderAjuda()}
+        </div>
+    `;
 }
 
 function renderErroCarregamento() {
