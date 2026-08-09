@@ -3109,7 +3109,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-06-c';
+        const CHEF_MIND_VERSAO = '2026-08-06-d';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -9943,6 +9943,28 @@ async function carregarComanda() {
                         // chegava lá), então o poll sincronizava zero por cima e a tela
                         // ficava coerente consigo mesma enquanto o dado não existia.
                         //
+                        // ⚠️ Esta declaração precisa vir ANTES do auto-reparo abaixo.
+                        //
+                        // Em 05/08 o bloco do reparo foi inserido acima dela e escrevia
+                        // `localMudou = true` na zona morta temporal do `let` — o que só
+                        // explode QUANDO O REPARO DISPARA. Como ele é raro (só quando o
+                        // `_id` diverge), o erro passou batido no deploy e só apareceu no
+                        // teste 3.5, em 06/08. Ver a entrada correspondente na Seção 7.
+                        let localMudou = false;
+
+                        // ⚠️ AUTO-REPARO DO _id (ponto 18) — perda silenciosa de itens.
+                        //
+                        // `local._id` só era preenchido na resposta do novaComanda. Se essa
+                        // resposta se perdesse no transporte (o que aconteceu o dia inteiro
+                        // em 03/08), ficava uma comanda local SEM _id — e a partir dali todo
+                        // item lançado nela caía no `if (!comanda._id) return null` do
+                        // sheets_addItem, em SILÊNCIO. Refresh não resolvia: a comanda
+                        // quebrada mora no localStorage.
+                        //
+                        // Detalhe cruel: o total no servidor ficava zero (nenhum item
+                        // chegava lá), então o poll sincronizava zero por cima e a tela
+                        // ficava coerente consigo mesma enquanto o dado não existia.
+                        //
                         // O servidor é a fonte da verdade do id. Se o local diverge, corrige.
                         if (cmd.id && local._id !== cmd.id) {
                             console.warn('[Poll] 🔧 reparando _id da comanda', chave,
@@ -9950,7 +9972,6 @@ async function carregarComanda() {
                             local._id = cmd.id;
                             localMudou = true;
                         }
-                        let localMudou = false;
 
                         // CASO 0: Nome do cliente preenchido em outro device (ex: marmita
                         // digitou o nome depois que este device já tinha a comanda carregada).
