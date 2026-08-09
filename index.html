@@ -3109,7 +3109,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-06-b';
+        const CHEF_MIND_VERSAO = '2026-08-06-c';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -3185,6 +3185,28 @@
         // Quem PRECISA distinguir chama `_respostaIncerta()` explicitamente.
         function _respostaIncerta(r) { return !!r && r._incerto === true; }
 
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // PONTO 17 — de quem é o erro: do servidor ou do caminho até ele?
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // Até 06/08 não havia como saber. O GAS recusa uma senha com
+        //     { sucesso:false, erro:'Login ou senha incorretos' }
+        // e o `catch` do sheetsAPI, quando a rede falha, devolvia
+        //     { sucesso:false, erro:'Unexpected token <...' }
+        // — a MESMA FORMA. O front não tinha escolha senão tratar os dois igual, e foi
+        // exatamente isso que fez a tela dizer "Usuário não encontrado" para uma senha
+        // certa numa manhã em que o transporte estava caindo (05/08).
+        //
+        // A correção não é adivinhar pelo texto do erro. É marcar, na origem, tudo que
+        // NÃO veio do servidor. Quem gera a resposta sabe se ela é uma resposta de
+        // verdade; qualquer teste feito depois é palpite.
+        //
+        // Vale para o sistema inteiro, não só para o login: qualquer chamada que precise
+        // separar "o servidor me respondeu não" de "eu não fui respondido" agora pode.
+        function _falhaDeTransporte(r) {
+            return !!r && (r._transporte === true || r._incerto === true);
+        }
+
         async function _postComPrazo(action, dados) {
             // O `.catch` aqui não é decoração: quando o prazo vence, esta promise continua
             // pendente. Se ela rejeitar depois (queda de rede), sem o catch vira
@@ -3194,12 +3216,13 @@
                 body: JSON.stringify({ action, token: API_TOKEN, ...dados })
             })
                 .then(r => r.json())
-                .catch(err => ({ sucesso: false, erro: err.message }));
+                .catch(err => ({ sucesso: false, erro: err.message, _transporte: true }));
 
             const _prazo = new Promise(resolve => setTimeout(() => resolve({
                 sucesso: false,
                 erro: `Sem confirmação do servidor em ${_POST_PRAZO_MS / 1000}s`,
-                _incerto: true
+                _incerto: true,
+                _transporte: true
             }), _POST_PRAZO_MS));
 
             const r = await Promise.race([_emVoo, _prazo]);
@@ -3256,8 +3279,12 @@
                 const msg = err.name === 'AbortError'
                     ? `Timeout (${timeoutMs/1000}s) em "${action}"`
                     : err.message;
+                // `_transporte` marca o que NUNCA chegou ao servidor: timeout, queda de
+                // rede, e o `Unexpected token '<'` (a página de erro HTML que o Google
+                // devolve quando a chave do redirect expira). Nenhum destes é uma
+                // resposta — e sem essa marca o front os confunde com um "não" do GAS.
                 console.warn(`[Sheets] Erro em "${action}":`, msg);
-                return { sucesso: false, erro: msg };
+                return { sucesso: false, erro: msg, _transporte: true };
             }
         }
 
@@ -4004,6 +4031,14 @@
                 return;
             }
 
+            // Mensagem única para "não fomos respondidos". Ela precisa dizer três coisas:
+            // que o problema é nosso, que não é culpa de quem está digitando, e o que
+            // fazer — sem sugerir que tentar imediatamente ajuda, porque não ajuda
+            // (cada tentativa carrega mais o servidor que já estava em dificuldade).
+            const _MSG_LOGIN_SEM_CONEXAO =
+                '📡 Não conseguimos falar com o servidor. Aguarde alguns segundos e tente de novo — ' +
+                'seu usuário e senha estão certos.';
+
             // ✅ VERIFICAR CREDENCIAIS
             // Se o usuário não foi encontrado E os dados do Sheets ainda não carregaram,
             // buscar usuários agora (dispositivos lentos podem tentar logar antes do load inicial)
@@ -4013,24 +4048,52 @@
                 btnLogin.disabled = true;
                 btnLogin.textContent = 'Verificando...';
                 erroEl.style.display = 'none';
+                let _listaChegou = false;
                 try {
-                    const usuarios = await sheetsAPI('getUsuarios');
-                    if (usuarios && usuarios.length > 0) {
+                    let usuarios = await sheetsAPI('getUsuarios');
+
+                    // Retentativa única. O 404 do `echo` costuma passar na segunda — é o
+                    // mesmo padrão do ponto 10b, que já se provou no pedido online.
+                    // `getUsuarios` é leitura pura: repetir não tem efeito colateral.
+                    if (!_respostaValida(usuarios) || !Array.isArray(usuarios)) {
+                        console.warn('[Login] getUsuarios falhou — 1 retentativa |',
+                                     usuarios && usuarios.erro);
+                        await new Promise(r => setTimeout(r, 900));
+                        usuarios = await sheetsAPI('getUsuarios');
+                    }
+
+                    if (_respostaValida(usuarios) && Array.isArray(usuarios)) {
                         usuarios.forEach(u => {
                             state.usuarios[u.login] = {
                                 nome: u.nome || u.login,
                                 perfil: u.nivel === 'admin' ? 'Admin' : u.nivel === 'balanca' ? 'Balança' : u.nivel === 'balanca_touch' ? 'Balança Touch' : u.nivel === 'gerente' ? 'Gerente' : u.nivel === 'caixa' ? 'Caixa' : u.nivel === 'marmita' ? 'Marmita' : u.nivel === 'tv' ? 'TV' : 'Atendente'
                             };
                         });
+                        // ⚠️ A flag só sobe AQUI (Regra 38). Antes ela era marcada mesmo
+                        // quando a chamada falhava — e como ela desliga a busca, toda
+                        // tentativa seguinte pulava o fetch e ia direto para "Usuário não
+                        // encontrado". O operador ficava preso nisso até dar F5.
+                        state._usuariosCarregados = true;
+                        _listaChegou = true;
                     }
-                    state._usuariosCarregados = true;
-                } catch(e) { /* falha silenciosa, vai cair no erro abaixo */ }
-                finally {
+                } finally {
                     btnLogin.disabled = false;
                     btnLogin.textContent = 'Entrar';
                 }
+
+                // ⚠️ MENTIRA Nº 1 (ponto 17). A lista não chegou — não sabemos NADA sobre
+                // este usuário. Dizer "não encontrado" é inventar um fato sobre o cadastro
+                // a partir de uma falha nossa. E é pior que inventar: a mensagem convida a
+                // tentar de novo, e cada tentativa joga mais chamadas no servidor que já
+                // estava afogado. Numa segunda-feira às 10h30 é a operadora tentando quatro
+                // vezes, achando que errou, enquanto multiplica a carga que causou a falha.
+                if (!_listaChegou) {
+                    mostrarErroLogin(_MSG_LOGIN_SEM_CONEXAO, 'loginUser');
+                    return;
+                }
             }
 
+            // Agora sim: a lista está em mãos e o usuário realmente não está nela.
             if (!state.usuarios[user]) {
                 mostrarErroLogin('❌ Usuário não encontrado. Verifique e tente novamente.', 'loginUser');
                 return;
@@ -4040,17 +4103,43 @@
             const _btnVerify = document.getElementById('btnLogin');
             _btnVerify.disabled = true;
             _btnVerify.textContent = 'Verificando...';
-            let _loginOk = false;
+            let _res;
             try {
-                const _res = await sheetsAPI('login', { login: user, senha: pass });
-                _loginOk = _res && _res.sucesso === true;
-            } catch(e) {
-                _loginOk = false;
+                _res = await sheetsAPI('login', { login: user, senha: pass });
+
+                // Retentativa só em falha de TRANSPORTE. Uma recusa do servidor é
+                // conclusiva e não se repete — repetir senha errada não a torna certa,
+                // e ainda gastaria uma chamada. `login` não grava nada, então retentar
+                // é seguro (Regra 50: a operação é idempotente).
+                if (_falhaDeTransporte(_res)) {
+                    console.warn('[Login] falha de transporte — 1 retentativa |', _res.erro);
+                    await new Promise(r => setTimeout(r, 900));
+                    _res = await sheetsAPI('login', { login: user, senha: pass });
+                }
             } finally {
                 _btnVerify.disabled = false;
                 _btnVerify.textContent = 'Entrar';
             }
-            if (!_loginOk) {
+
+            // ⚠️ MENTIRA Nº 2 (ponto 17), e esta era a pior das duas.
+            //
+            // O código antigo era `_loginOk = _res && _res.sucesso === true` — qualquer
+            // coisa diferente de sucesso virava **"Senha incorreta"**. Como o GAS recusa
+            // credencial com `{sucesso:false, erro:'Login ou senha incorretos'}` e uma
+            // queda de rede produzia a MESMA FORMA, o sistema acusava a pessoa de ter
+            // errado a própria senha toda vez que o transporte caía. Fazer alguém
+            // duvidar do que ela sabe é bem pior do que dizer "não deu, tente de novo".
+            //
+            // Agora `_transporte` separa os dois na origem (ver _falhaDeTransporte).
+            if (_falhaDeTransporte(_res)) {
+                // Senha NÃO é apagada: ela pode estar perfeitamente certa. Limpar o campo
+                // aqui obrigaria a redigitar e reforçaria a ideia falsa de que ela errou.
+                mostrarErroLogin(_MSG_LOGIN_SEM_CONEXAO, 'loginPassword');
+                return;
+            }
+
+            if (!_res || _res.sucesso !== true) {
+                // Resposta do servidor, conclusiva: a credencial está errada mesmo.
                 mostrarErroLogin('❌ Senha incorreta. Tente novamente.', 'loginPassword');
                 document.getElementById('loginPassword').value = '';
                 return;
