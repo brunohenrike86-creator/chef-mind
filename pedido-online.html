@@ -313,7 +313,7 @@ const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
 // tempo, e sem isso não dá pra saber qual versão está de fato rodando no aparelho —
 // só deduzir por sintoma, que já nos custou horas. O estado da trava de horário
 // aparece junto de propósito: é a diferença mais fácil de confundir entre versões.
-const CHEF_MIND_PEDIDO_VERSAO = '2026-08-06-b';
+const CHEF_MIND_PEDIDO_VERSAO = '2026-08-06-d';
 
 // Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
 // na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
@@ -393,6 +393,37 @@ const _POST_PRAZO_MS = 30000;
 // perigoso de traduzir errado. Dizer "falhou" para um pedido que foi gravado é
 // literalmente instruir o cliente a duplicar.
 function _respostaIncerta(r) { return !!r && r._incerto === true; }
+
+// ── ONDA 1 no pedido online ──
+//
+// A chave é gerada UMA vez e persiste até o pedido entrar. É isso que torna o reenvio
+// inofensivo: o servidor reconhece a repetição e devolve o mesmo pedido em vez de criar
+// um segundo. Sem ela, "tentar de novo" era exatamente o que produzia a duplicata que a
+// cozinha preparava.
+//
+// Persistir importa mais aqui do que no app do operador: o cliente fecha a aba, o celular
+// mata a página em segundo plano, ele reabre o link. Se a chave morresse junto com a
+// sessão, o reenvio voltaria a ser um pedido novo.
+const CHAVE_CLIENTE_KEY = 'chefmind-pedido-clientekey';
+
+// Payload do último envio que ficou sem confirmação, guardado para o botão "Verificar meu
+// pedido". Declarado aqui, junto do resto da Onda 1, e não lá embaixo perto de quem o usa:
+// em 06/08 um bloco enxertado acima da declaração de um `let` derrubou o ciclo do poll por
+// zona morta temporal, e o erro só aparecia no caminho raro (ver Seção 7 do Knowledge).
+let _payloadIncerto = null;
+
+function _obterClienteKey() {
+    let k = localStorage.getItem(CHAVE_CLIENTE_KEY);
+    if (!k) {
+        k = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+        localStorage.setItem(CHAVE_CLIENTE_KEY, k);
+    }
+    return k;
+}
+
+function _limparClienteKey() {
+    localStorage.removeItem(CHAVE_CLIENTE_KEY);
+}
 
 async function apiPost(action, payload) {
     // O `.catch` evita unhandledrejection: quando o prazo vence, esta promise segue
@@ -723,7 +754,8 @@ async function confirmarPedido() {
             carne: item.carnes.join(' + '),
             obs: item.obs
         })),
-        bebidas: state.bebidas.map(b => ({ codigo: b.codigo, quantidade: b.qtd }))
+        bebidas: state.bebidas.map(b => ({ codigo: b.codigo, quantidade: b.qtd })),
+        cliente_key: _obterClienteKey()
     };
 
     let resultado;
@@ -751,6 +783,7 @@ async function confirmarPedido() {
     if (_respostaIncerta(resultado)) {
         console.warn('[Pedido] Envio sem confirmação — provável gravação em voo');
         salvarClienteLembrado(state.nome.trim(), state.whatsapp.trim());
+        _payloadIncerto = payload;   // guardado para o botão "Verificar meu pedido"
         view = 'envio_incerto';
         render();
         return;
@@ -762,6 +795,7 @@ async function confirmarPedido() {
     }
 
     salvarClienteLembrado(state.nome.trim(), state.whatsapp.trim());
+    _limparClienteKey();   // pedido entrou: a próxima compra é outra, precisa de chave nova
 
     pedidoAtual = {
         comandaId: resultado.comandaId,
@@ -1326,24 +1360,69 @@ async function tentarCarregarNovamente() {
 // mensagem assume a incerteza em vez de fingir sucesso ou fingir falha: o cliente merece
 // saber que o pedido provavelmente entrou, e tem um caminho humano (WhatsApp/telefone,
 // via renderAjuda) para tirar a dúvida em segundos.
+// Tela de envio sem confirmação — reescrita na Onda 1.
+//
+// Antes ela era um beco: avisava para não reenviar e mandava o cliente pro WhatsApp. Era o
+// melhor possível sem deduplicação, porque reenviar significava duplicar de verdade.
+//
+// Com a `cliente_key` isso mudou de natureza. Perguntar ao servidor "meu pedido entrou?"
+// virou uma operação segura — se entrou, ele devolve o mesmo pedido; se não, cria uma vez
+// só. Então a tela deixa de pedir paciência e passa a resolver: um toque e o cliente
+// descobre onde está. O WhatsApp continua ali, mas como plano B, não como único caminho.
 function renderEnvioIncerto() {
     return `
         <div class="card tela-centro">
-            <div class="titulo-card">Não conseguimos confirmar seu pedido</div>
+            <div class="titulo-card">Vamos confirmar seu pedido</div>
             <div class="dica" style="margin-top:14px;">
-                A resposta do nosso servidor não chegou a tempo — mas o seu pedido
+                A resposta do nosso servidor demorou mais que o esperado — mas o seu pedido
                 <strong>provavelmente já foi registrado</strong>.
             </div>
-            <div class="dica" style="margin-top:16px; font-weight:800; color:var(--danger); font-size:1.05em;">
-                Por favor, não envie de novo.
+            <div class="dica" style="margin-top:12px;">
+                Toque no botão abaixo que a gente verifica. Pode tocar quantas vezes quiser:
+                <strong>isso não cria um segundo pedido</strong>.
             </div>
-            <div class="dica" style="margin-top:14px;">
-                Fale com a gente agora que confirmamos na hora — e, se não tiver entrado,
-                a gente registra pra você na mesma conversa.
-            </div>
+            <button class="btn btn-primario" style="margin-top:18px;"
+                    id="btnVerificarPedido" onclick="verificarPedidoIncerto()">
+                Verificar meu pedido
+            </button>
             ${renderAjuda()}
         </div>
     `;
+}
+
+// Reenvia o MESMO payload, com a mesma chave e `retentativa: true`. O servidor deduplica:
+// devolve o pedido existente se ele já entrou, ou cria uma vez só se não entrou. Nos dois
+// casos o cliente termina na tela de acompanhamento — que é onde ele queria estar.
+async function verificarPedidoIncerto() {
+    if (!_payloadIncerto) { erro('Recarregue a página e faça o pedido novamente.'); return; }
+    const btn = document.getElementById('btnVerificarPedido');
+    if (btn) { btn.disabled = true; btn.textContent = 'Verificando...'; }
+
+    const r = await apiPost('novoPedidoOnline', Object.assign({}, _payloadIncerto, { retentativa: true }));
+
+    // Sem este log não há como saber, olhando de fora, se o servidor CRIOU um pedido novo ou
+    // RECONHECEU o que já existia — os dois desfechos levam o cliente para a mesma tela.
+    // `_dedup: true` é o que prova que o reenvio não duplicou.
+    console.log('[Pedido] verificação →', r,
+                r && r._dedup ? '| ✅ DEDUP (não criou outro)' : '| pedido criado agora');
+
+    if (btn) { btn.disabled = false; btn.textContent = 'Verificar meu pedido'; }
+
+    if (!r || r.erro || !r.comandaId) {
+        erro('Ainda não conseguimos confirmar. Tente de novo em alguns segundos.');
+        return;
+    }
+
+    _limparClienteKey();
+    salvarClienteLembrado(state.nome.trim(), state.whatsapp.trim());
+    pedidoAtual = {
+        comandaId: r.comandaId, numero: r.numero, nome: state.nome.trim(),
+        itens: state.carrinho, bebidas: state.bebidas, total: calcularTotal()
+    };
+    salvarSessaoAtiva(pedidoAtual);
+    view = 'status';
+    render();
+    iniciarPolling();
 }
 
 function renderErroCarregamento() {
