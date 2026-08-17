@@ -2287,6 +2287,7 @@
                             <button data-admin-tab="operacional" class="admin-tab-btn" style="flex-shrink: 0; padding: 7px 12px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 20px; cursor: pointer; font-weight: bold; white-space: nowrap;">📋 Operacional</button>
                             <button data-admin-tab="financeiro" class="admin-tab-btn" style="flex-shrink: 0; padding: 7px 12px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 20px; cursor: pointer; font-weight: bold; white-space: nowrap;">💰 Financeiro</button>
                             <button data-admin-tab="usuarios" class="admin-tab-btn" style="flex-shrink: 0; padding: 7px 12px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 20px; cursor: pointer; font-weight: bold; white-space: nowrap;">👥 Usuários</button>
+                            <button data-admin-tab="saude" class="admin-tab-btn" style="flex-shrink: 0; padding: 7px 12px; font-size: 11px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 20px; cursor: pointer; font-weight: bold; white-space: nowrap;">📊 Saúde</button>
                         </div>
                     </div>
 
@@ -2383,6 +2384,19 @@
                     </div>
 
                     <!-- TAB: USUÁRIOS -->
+                    <!-- ABA SAÚDE (Ponto 8) — os dados são DESTE aparelho. Cada estação tem
+                         a história dela, e é isso que permite descobrir se o problema é de um
+                         aparelho, de um perfil ou do servidor. -->
+                    <div id="admin-saude" class="admin-tab" style="display: none; flex-direction: column; gap: 8px;">
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                            <button onclick="renderizarSaude()" style="flex:1;min-width:110px;padding:11px;background:var(--bg-light);color:var(--text-dark);border:2px solid var(--border);border-radius:8px;cursor:pointer;font-weight:bold;font-size:12px;">🔄 Atualizar</button>
+                            <button onclick="_obsCopiar('detalhe')" style="flex:1;min-width:150px;padding:11px;background:linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:bold;font-size:12px;" title="Cole direto numa planilha do Google — sem baixar nada">📋 Copiar detalhe</button>
+                            <button onclick="_obsCopiar('horas')" style="flex:1;min-width:150px;padding:11px;background:var(--bg-light);color:var(--text-dark);border:2px solid var(--primary);border-radius:8px;cursor:pointer;font-weight:bold;font-size:12px;" title="Histórico por hora — é o que mostra se a cauda está melhorando">📋 Copiar por hora</button>
+                            <button onclick="_obsBaixarCSV()" style="flex:1;min-width:110px;padding:11px;background:var(--bg-light);color:var(--text-dark);border:2px solid var(--border);border-radius:8px;cursor:pointer;font-weight:bold;font-size:12px;" title="Para os computadores do restaurante, que têm Excel">⬇️ CSV</button>
+                        </div>
+                        <div id="saudeConteudo"></div>
+                    </div>
+
                     <div id="admin-usuarios" class="admin-tab" style="display: none; flex-direction: column; gap: 8px;">
                         <!-- BOTÃO NOVO USUÁRIO -->
                         <button onclick="abrirModalNovoUsuario()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; box-shadow: 0 2px 8px rgba(212,114,79,0.3);">➕ Novo Usuário</button>
@@ -3136,7 +3150,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-06-n';
+        const CHEF_MIND_VERSAO = '2026-08-12-k';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -3202,6 +3216,754 @@
         // segundo plano e grava normalmente — nós apenas paramos de PRENDER A TELA nele.
         // Nenhum signal entra em cena, então a Regra 2 continua intacta.
         const _POST_PRAZO_MS = 30000;
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // PONTO 8 — OBSERVABILIDADE (fase 1: coleta, sem tela)
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // Existe para responder UMA pergunta que hoje não tem resposta: **a cauda de
+        // transporte está melhorando ou não?** Hoje as duas únicas frases disponíveis são
+        // "parece melhor" e "ainda tem recaída", e nenhuma delas sustenta a decisão de
+        // recolocar 300 clientes por dia no sistema.
+        //
+        // Quatro restrições de projeto, nascidas de uma pergunta do Bruno em 12/08 — "isso
+        // não pode piorar a nossa situação?". Observabilidade que consome a capacidade que
+        // deveria medir é a pior forma de ironia:
+        //
+        //   1. ZERO chamadas novas ao GAS — o dado fica no aparelho e sai por exportação
+        //   2. A REQUISIÇÃO NÃO MUDA — a correlação vem na RESPOSTA (`_ms`, `_rid`).
+        //      Alterar a forma do pedido acrescentaria uma variável a um mecanismo cujo
+        //      modo de falha não entendemos (a cauda, o 404 no `echo`)
+        //   3. Escrita local EM LOTE, buffer limitado — persistir a cada chamada seria
+        //      JSON.stringify de dezenas de KB na thread principal, várias vezes por minuto
+        //   4. NUNCA pode quebrar o sheetsAPI — todo gancho engole o próprio erro
+        //
+        // Desligada, o custo é ZERO: `return` na primeira linha, sem alocar nada.
+        const _OBS_ATIVA_MESTRE = true;                 // interruptor de código (exige deploy)
+        const _OBS_CHAVE_OFF    = 'chefmind-obs-off';   // desliga só ESTE aparelho, sem deploy
+        const _OBS_CHAVE_BUFFER = 'chefmind-obs';
+        // ⚠️ 600 → 3000 (12/08). O 600 foi escolhido sem fazer a conta e não servia para
+        // nada: no ritmo de operação real (poll a cada 10s ≈ 6 chamadas/min) o buffer se
+        // esgotava em **100 minutos**. Um dia de almoço daria a volta várias vezes, e a
+        // pergunta que motivou tudo isto — "a cauda está melhorando ao longo das semanas?" —
+        // ficaria sem resposta, porque o histórico se apagaria sozinho.
+        //
+        // 3000 registros ≈ 360KB, contra o limite de ~5MB do localStorage. Cobre ~8h, ou
+        // seja, um dia inteiro de operação.
+        const _OBS_MAX          = 3000;
+        const _OBS_PERSIST_MS   = 30000;
+
+        // ── HISTÓRICO LONGO, EM FORMA COMPACTA ──
+        //
+        // O detalhe bruto é para investigar "o que houve ontem". Para "está melhorando ao
+        // longo das semanas" ele não serve: ou cresce sem limite, ou se apaga.
+        //
+        // A saída é guardar, por hora, quantas chamadas caíram em cada FAIXA de tempo. Isso
+        // ocupa quase nada (uma linha por hora, para sempre) e mostra exatamente o que a
+        // média esconderia — se a cauda é bimodal, as duas corcovas aparecem nas faixas.
+        // v2: o agregado passou a ser quebrado por AÇÃO, para o filtro funcionar também na
+        // visão longa. Chave nova de propósito — o formato antigo é incompatível e são
+        // poucas horas de dado, não vale escrever migração.
+        // v3: `ok`/`ruins` viraram `des`, com a contagem de CADA desfecho.
+        //
+        // Medido antes de decidir (12/08): 30 dias de operação real ocupam ~193 KB, contra
+        // ~132 KB do formato anterior e ~5 MB de limite do navegador. A alternativa cara —
+        // guardar o histograma de tempo separado por desfecho — daria 426 KB, também
+        // irrelevante. Ficou a barata mesmo assim, por ser **mais útil**: o histograma de um
+        // timeout é previsível (timeout demora ~20s por definição); o que interessa saber é
+        // QUANTOS por hora ao longo das semanas, e isso a contagem entrega inteiro.
+        const _OBS_CHAVE_HORAS = 'chefmind-obs-horas3';
+        const _OBS_HORAS_DIAS  = 30;   // poda: histórico não pode crescer sem limite
+        const _OBS_FAIXAS      = [500, 1000, 2000, 5000, 10000, 30000];   // ms
+        const _OBS_FAIXAS_ROT  = ['<0,5s', '<1s', '<2s', '<5s', '<10s', '<30s', '30s+'];
+
+        let _obsBuffer   = [];
+        let _obsHoras    = {};
+        let _obsPendente = false;
+
+        function _obsFaixa(ms) {
+            for (let i = 0; i < _OBS_FAIXAS.length; i++) if (ms <= _OBS_FAIXAS[i]) return i;
+            return _OBS_FAIXAS.length;
+        }
+
+        // Resolvido já na carga, para que as chamadas do BOOT — as mais interessantes de
+        // todas — sejam medidas. A config da planilha pode desligar depois, quando chegar.
+        let _obsLigada = (() => {
+            try { return _OBS_ATIVA_MESTRE && localStorage.getItem(_OBS_CHAVE_OFF) !== '1'; }
+            catch (e) { return false; }
+        })();
+
+        try {
+            _obsBuffer = JSON.parse(localStorage.getItem(_OBS_CHAVE_BUFFER) || '[]');
+            if (!Array.isArray(_obsBuffer)) _obsBuffer = [];
+            // Descarta registros impossíveis que já tenham sido gravados pela versão com o
+            // bug do t0 — senão o histórico ruim contamina o p95 para sempre.
+            _obsBuffer = _obsBuffer.filter(r => r && typeof r.ms === 'number' &&
+                                                r.ms >= 0 && r.ms <= 600000);
+            _obsHoras = JSON.parse(localStorage.getItem(_OBS_CHAVE_HORAS) || '{}') || {};
+        } catch (e) { _obsBuffer = []; }
+
+        // Terceira camada de desligamento: uma chave na planilha alcança TODOS os aparelhos.
+        function _obsAplicarConfig(config) {
+            try {
+                if (!config) return;
+
+                // ⚠️ NUNCA usar `|| ''` num valor que você está procurando POR SER FALSO.
+                //
+                // A primeira versão fazia `String(config[chave] || '')`. O Sheets devolve um
+                // BOOLEANO `false` para uma célula com FALSE — e `false || ''` avalia para
+                // `''`. Ou seja, o `||` apagava exatamente o valor que a função existe para
+                // detectar, e o interruptor nunca teve chance de funcionar. Pego no teste 4,
+                // em 12/08, e só porque o diagnóstico mostrou `false` sem aspas.
+                //
+                // É a Regra 42 vista de outro ângulo: aqui o problema não é confundir objeto
+                // de erro com sucesso, é um operador de "valor padrão" engolindo um valor
+                // legítimo. Todo `||` num teste de configuração merece essa desconfiança.
+                //
+                // `String(false)` é `'false'`, então o teste cobre booleano e texto de uma vez.
+                const bruto = config['observabilidade_ativa'];
+                if (bruto === undefined || bruto === null || bruto === '') return;
+
+                const v = String(bruto).trim().toLowerCase();
+                if (v === 'false' || v === 'nao' || v === 'não' || v === '0' ||
+                    v === 'off'   || v === 'desligado') {
+                    if (_obsLigada) console.warn('[Obs] 🔌 desligada pela config da planilha.');
+                    _obsLigada = false;
+                }
+            } catch (e) { /* nunca pode quebrar o boot */ }
+        }
+
+        const _OBS_MS_ABSURDO = 600000;   // 10 min — nenhum prazo nosso passa de 45s
+
+        function _obsRegistrar(action, t0, json, erroTransporte) {
+            if (!_obsLigada || !t0) return;   // ← custo zero quando desligada
+            try {
+                const _dur = Date.now() - t0;
+                if (_dur < 0 || _dur > _OBS_MS_ABSURDO) return;   // registro impossível, descarta
+                let d = 'ok';
+                if (erroTransporte)                d = /timeout/i.test(erroTransporte) ? 'timeout' : 'transporte';
+                else if (json && json._incerto)    d = 'incerto';
+                else if (json && json._transporte) d = 'transporte';
+                else if (json && json.erro)        d = 'erro_gas';
+
+                _obsBuffer.push({
+                    t:    new Date().toISOString(),
+                    a:    action,
+                    ms:   _dur,                                                      // navegador
+                    srv:  (json && typeof json._ms === 'number') ? json._ms : null,   // servidor
+                    d:    d,
+                    p:    (typeof state !== 'undefined' && state.perfil) || '',
+                    tela: document.querySelector('.screen.active')?.id?.replace('screen-', '') || '',
+                    rid:  (json && json._rid) || ''
+                });
+                if (_obsBuffer.length > _OBS_MAX) _obsBuffer.splice(0, _obsBuffer.length - _OBS_MAX);
+
+                // Histórico compacto por hora — este NÃO é descartado, é o que responde
+                // "melhorou ao longo das semanas?".
+                const _h = new Date().toISOString().slice(0, 13);      // 2026-08-16T19
+                if (!_obsHoras[_h]) _obsHoras[_h] = {};
+                if (!_obsHoras[_h][action]) {
+                    _obsHoras[_h][action] = { n: 0, des: {},
+                                              nav: [0,0,0,0,0,0,0], tr: [0,0,0,0,0,0,0] };
+                }
+                const _agg = _obsHoras[_h][action];
+                _agg.n++;
+                _agg.des[d] = (_agg.des[d] || 0) + 1;
+                _agg.nav[_obsFaixa(_dur)]++;
+                if (typeof json?._ms === 'number') _agg.tr[_obsFaixa(Math.max(0, _dur - json._ms))]++;
+
+                _obsPendente = true;
+            } catch (e) { /* restrição 4: nunca derrubar a chamada que está sendo medida */ }
+        }
+
+        function _obsPersistir() {
+            if (!_obsLigada || !_obsPendente) return;
+            try {
+                localStorage.setItem(_OBS_CHAVE_BUFFER, JSON.stringify(_obsBuffer));
+                // Poda: sem isto o histórico por hora cresce para sempre e um dia estoura a
+                // cota do navegador — que derrubaria a gravação do buffer junto.
+                const _limite = new Date(Date.now() - _OBS_HORAS_DIAS * 864e5).toISOString().slice(0, 13);
+                Object.keys(_obsHoras).forEach(h => { if (h < _limite) delete _obsHoras[h]; });
+                localStorage.setItem(_OBS_CHAVE_HORAS,  JSON.stringify(_obsHoras));
+                _obsPendente = false;
+            } catch (e) {
+                // Cota cheia não pode virar erro repetido a cada 30s: desliga e avisa uma vez.
+                console.warn('[Obs] falha ao persistir — desligando:', e.message);
+                _obsLigada = false;
+            }
+        }
+
+        setInterval(_obsPersistir, _OBS_PERSIST_MS);
+        document.addEventListener('visibilitychange', () => { if (document.hidden) _obsPersistir(); });
+
+        // ── Comandos de console (a fase 1 não tem tela de propósito) ──
+        window.cmObsStatus = function () {
+            console.log('[Obs]', { ligada: _obsLigada, registros: _obsBuffer.length,
+                                   pendente: _obsPendente, mestre: _OBS_ATIVA_MESTRE });
+            return _obsBuffer.length;
+        };
+        window.cmObsOff = function () {
+            try { localStorage.setItem(_OBS_CHAVE_OFF, '1'); } catch (e) {}
+            _obsLigada = false;
+            console.warn('[Obs] 🔌 DESLIGADA neste aparelho. Vale já e sobrevive ao F5.');
+        };
+        window.cmObsOn = function () {
+            try { localStorage.removeItem(_OBS_CHAVE_OFF); } catch (e) {}
+            _obsLigada = _OBS_ATIVA_MESTRE;
+            console.log('[Obs] ligada:', _obsLigada);
+        };
+        window.cmObsLimpar = function () {
+            _obsBuffer = []; _obsPendente = true; _obsPersistir();
+            console.log('[Obs] buffer zerado.');
+        };
+        window.cmObsUltimos = function (n) { console.table(_obsBuffer.slice(-(n || 20))); };
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // PONTO 8 — FASE 2: resumo e exportação
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // O número que interessa não é a duração da chamada — é **`ms − srv`**, a diferença
+        // entre o que o navegador esperou e o que o servidor levou. Isso é o transporte, e é
+        // exatamente o que não conseguimos enxergar desde 04/08.
+        //
+        // Percentil e não média, de propósito: a cauda é bimodal (ou ~2s ou 11-30s, nunca no
+        // meio). Média de duas populações separadas descreve um valor que não acontece nunca.
+        // O p95 é que mostra se a cauda encurtou.
+        function _obsPercentil(arr, p) {
+            if (!arr.length) return null;
+            const s = arr.slice().sort((a, b) => a - b);
+            return s[Math.min(s.length - 1, Math.floor(s.length * p))];
+        }
+
+        // Janela de análise. Sem ela, os números descrevem um sistema que não existe: uma
+        // média sobre 5 horas em que o app passou 4 paradas dilui exatamente o pico que a
+        // gente precisa enxergar. Observação do Bruno em 12/08 — "sempre veremos um número
+        // acumulado com períodos de baixa".
+        let _obsJanelaMin = 60;   // 0 = tudo
+        let _obsFiltro = { a: '', p: '', tela: '', d: '' };   // '' = todos
+
+        function _obsAplicarFiltros(lista) {
+            const f = _obsFiltro;
+            if (!f.a && !f.p && !f.tela && !f.d) return lista;
+            return lista.filter(r => (!f.a    || r.a    === f.a)
+                                  && (!f.p    || r.p    === f.p)
+                                  && (!f.tela || r.tela === f.tela)
+                                  && (!f.d    || r.d    === f.d));
+        }
+
+        function _obsResumo(janelaMin) {
+            const jan = (janelaMin === undefined) ? _obsJanelaMin : janelaMin;
+            const corte = jan ? Date.now() - jan * 60000 : 0;
+            const naJanela = jan ? _obsBuffer.filter(r => new Date(r.t).getTime() >= corte) : _obsBuffer;
+            const regs = _obsAplicarFiltros(naJanela);
+            if (!regs.length) return null;
+
+            const ms      = regs.map(r => r.ms).filter(n => typeof n === 'number');
+            const comSrv  = regs.filter(r => typeof r.srv === 'number');
+            const transp  = comSrv.map(r => Math.max(0, r.ms - r.srv));
+
+            const desfechos = {};
+            regs.forEach(r => { desfechos[r.d] = (desfechos[r.d] || 0) + 1; });
+
+            // Ritmo medido do registro mais antigo da janela até AGORA — e não até o último
+            // registro. Se o app ficou 20 min parado, esse silêncio faz parte do ritmo e
+            // precisa entrar na conta; senão o número mente para cima.
+            const t0 = new Date(regs[0].t).getTime();
+            const minutos = Math.max(1, (Date.now() - t0) / 60000);
+
+            const porAcao = {};
+            regs.forEach(r => {
+                const k = r.a || '?';
+                if (!porAcao[k]) porAcao[k] = { n: 0, ms: [], srv: [], transp: [], ruins: 0 };
+                porAcao[k].n++;
+                if (typeof r.ms === 'number') porAcao[k].ms.push(r.ms);
+                if (typeof r.srv === 'number') {
+                    porAcao[k].srv.push(r.srv);
+                    porAcao[k].transp.push(Math.max(0, r.ms - r.srv));
+                }
+                if (r.d !== 'ok') porAcao[k].ruins++;
+            });
+
+            return {
+                total: regs.length,
+                regs: regs,
+                janela: jan,
+                de: regs[0].t, ate: regs[regs.length - 1].t,
+                porMinuto: +(regs.length / minutos).toFixed(1),
+                msP50: _obsPercentil(ms, 0.50), msP95: _obsPercentil(ms, 0.95),
+                trP50: _obsPercentil(transp, 0.50), trP95: _obsPercentil(transp, 0.95),
+                piorTransporte: transp.length ? Math.max(...transp) : null,
+                desfechos: desfechos,
+                taxaRuim: +(((regs.length - (desfechos.ok || 0)) / regs.length) * 100).toFixed(1),
+                porAcao: porAcao
+            };
+        }
+
+        function _obsCSV() {
+            // `;` como separador e BOM no início: é o que faz o arquivo abrir certo, com
+            // acentos, no Excel em português — que é onde o Bruno vai analisar isto.
+            const cab = ['quando', 'acao', 'ms_navegador', 'ms_servidor', 'ms_transporte',
+                         'desfecho', 'perfil', 'tela', 'rid'].join(';');
+            const linhas = _obsBuffer.map(r => [
+                r.t, r.a, r.ms,
+                (typeof r.srv === 'number' ? r.srv : ''),
+                (typeof r.srv === 'number' ? Math.max(0, r.ms - r.srv) : ''),
+                r.d, r.p, r.tela, r.rid
+            ].join(';'));
+            return '﻿' + cab + '\n' + linhas.join('\n');
+        }
+
+        function _obsBaixarCSV() {
+            try {
+                if (!_obsBuffer.length) { showToast('Nada registrado ainda.', 'warning'); return; }
+                const blob = new Blob([_obsCSV()], { type: 'text/csv;charset=utf-8;' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'chefmind-saude-' + (state.perfil || 'perfil') + '-' +
+                             new Date().toISOString().slice(0, 16).replace(/[:T]/g, '') + '.csv';
+                document.body.appendChild(a); a.click();
+                setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+            } catch (e) {
+                console.error('[Obs] falha ao exportar:', e);
+                showToast('Não foi possível gerar o arquivo.', 'error');
+            }
+        }
+
+        window.cmSaude = function (janelaMin) {
+            const r = _obsResumo(janelaMin);
+            if (!r) { console.log('[Obs] nada registrado ainda.'); return; }
+            console.log('[Obs] ' + r.total + ' chamadas · ' + r.porMinuto + '/min · ' +
+                        r.taxaRuim + '% não-ok');
+            console.log('  navegador  p50 ' + r.msP50 + 'ms · p95 ' + r.msP95 + 'ms');
+            console.log('  TRANSPORTE p50 ' + r.trP50 + 'ms · p95 ' + r.trP95 +
+                        'ms · pior ' + r.piorTransporte + 'ms');
+            console.log('  desfechos:', r.desfechos);
+            console.table(Object.entries(r.porAcao).map(([a, v]) => ({
+                acao: a, n: v.n,
+                ms_p50: _obsPercentil(v.ms, 0.5), ms_p95: _obsPercentil(v.ms, 0.95),
+                transp_p95: _obsPercentil(v.transp, 0.95),
+                nao_ok: v.ruins
+            })));
+            return r;
+        };
+        window.cmSaudeCSV = _obsBaixarCSV;
+
+        // ── COPIAR PARA COLAR NO GOOGLE SHEETS ──
+        //
+        // O Bruno não tem Excel no notebook, e baixar CSV para depois importar no Sheets é
+        // trabalho à toa. Texto separado por TAB, colado direto numa planilha do Google, se
+        // divide em colunas sozinho — sem baixar, sem importar, sem upload.
+        //
+        // O CSV continua existindo porque os computadores do restaurante têm Excel. As duas
+        // saídas convivem: cada uma serve a uma máquina diferente.
+        function _obsTSVDetalhe() {
+            const cab = ['quando', 'acao', 'ms_navegador', 'ms_servidor', 'ms_transporte',
+                         'desfecho', 'perfil', 'tela', 'rid'].join('\t');
+            return cab + '\n' + _obsBuffer.map(r => [
+                r.t, r.a, r.ms,
+                (typeof r.srv === 'number' ? r.srv : ''),
+                (typeof r.srv === 'number' ? Math.max(0, r.ms - r.srv) : ''),
+                r.d, r.p, r.tela, r.rid
+            ].join('\t')).join('\n');
+        }
+
+        function _obsTSVHoras() {
+            const DESF = ['ok', 'timeout', 'transporte', 'incerto', 'erro_gas'];
+            const cab = ['hora', 'chamadas']
+                .concat(DESF)
+                .concat(_OBS_FAIXAS_ROT.map(f => 'total_' + f))
+                .concat(_OBS_FAIXAS_ROT.map(f => 'transporte_' + f)).join('\t');
+            const linhas = Object.keys(_obsHoras).sort().map(h => {
+                const a = _obsHoraTotal(h);
+                return [h.replace('T', ' ') + 'h', a.n]
+                    .concat(DESF.map(k => a.des[k] || 0))
+                    .concat(a.nav).concat(a.tr).join('\t');
+            });
+            return cab + '\n' + linhas.join('\n');
+        }
+
+        async function _obsCopiar(qual) {
+            try {
+                const txt = qual === 'horas' ? _obsTSVHoras() : _obsTSVDetalhe();
+                if (!txt || txt.indexOf('\n') === -1) { showToast('Nada registrado ainda.', 'warning'); return; }
+                await navigator.clipboard.writeText(txt);
+                showToast('✅ Copiado. Cole numa planilha do Google.', 'success');
+            } catch (e) {
+                // clipboard exige HTTPS ou localhost; em file:// pode falhar. Cai no textarea.
+                const ta = document.createElement('textarea');
+                ta.value = qual === 'horas' ? _obsTSVHoras() : _obsTSVDetalhe();
+                ta.style.cssText = 'position:fixed;top:10%;left:5%;width:90%;height:70%;z-index:99999;font-size:11px;';
+                document.body.appendChild(ta); ta.select();
+                showToast('Selecione tudo (Ctrl+A), copie (Ctrl+C) e feche com Esc.', 'warning');
+                ta.addEventListener('keydown', ev => { if (ev.key === 'Escape') ta.remove(); });
+            }
+        }
+        window.cmObsUso = function () { const u = _obsUso(); console.log('[Obs] armazenamento', u); return u; };
+        window.cmSaudeCopiar = () => _obsCopiar('detalhe');
+        window.cmSaudeCopiarHoras = () => _obsCopiar('horas');
+
+        function _obsSetJanela(min) { _obsJanelaMin = min; renderizarSaude(); }
+        function _obsSetFiltro(campo, valor) { _obsFiltro[campo] = valor; renderizarSaude(); }
+        function _obsLimparFiltros() { _obsFiltro = { a: '', p: '', tela: '', d: '' }; renderizarSaude(); }
+
+        // Vigiar o próprio consumo é parte de "não pode piorar a situação" (restrição 1).
+        // A cota do localStorage é COMPARTILHADA — comandas, cache do cardápio, fila de
+        // gravação e a observabilidade disputam o mesmo espaço. Se esta tela encher o
+        // armazenamento, quem quebra primeiro é a FILA, que é o que garante que nenhum
+        // lançamento se perca. O medidor existe para isso não acontecer sem aviso.
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // ARMAZENAMENTO PERSISTENTE — protege a FILA, não a observabilidade
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // Descoberto por uma pergunta do Bruno em 12/08 ("o que pode reduzir o limite?").
+        // A resposta que importava não era sobre limite: **quando o aparelho fica sem espaço,
+        // o navegador não reduz a cota — ele DESCARTA o armazenamento inteiro do site**,
+        // escolhendo os menos usados, sem avisar.
+        //
+        // E a fila de gravação da Onda 1 mora exatamente ali. Um tablet Android barato,
+        // com pouca memória, ligado o dia inteiro, é o perfil de risco descrito no manual.
+        // Ou seja: a perda silenciosa de lançamento que a Onda 1 existe para impedir podia
+        // voltar por essa porta, e eu não tinha olhado para ela.
+        //
+        // `persist()` marca o site como não-descartável. Uma linha, uma vez, e o navegador
+        // passa a preservar o dado sob pressão de disco. Exige origem segura (https), então
+        // não vale no arquivo local — vale na produção, que é onde a operação acontece.
+        let _armazenamentoPersistente = null;   // null = ainda não sabemos
+
+        async function _garantirArmazenamentoPersistente() {
+            try {
+                if (!navigator.storage || !navigator.storage.persist) return;
+                if (await navigator.storage.persisted()) { _armazenamentoPersistente = true; return; }
+                _armazenamentoPersistente = await navigator.storage.persist();
+                console.log(_armazenamentoPersistente
+                    ? '[Storage] ✅ armazenamento persistente concedido — a fila não será descartada'
+                    : '[Storage] ⚠️ persistência NEGADA — sob falta de espaço o navegador pode apagar a fila');
+            } catch (e) { /* nunca pode quebrar o boot */ }
+        }
+
+        async function _obsCota() {
+            try {
+                if (navigator.storage && navigator.storage.estimate) {
+                    const e = await navigator.storage.estimate();
+                    if (e && e.quota) return { usado: e.usage || 0, cota: e.quota, real: true };
+                }
+            } catch (e) {}
+            return null;   // sem a API, cai na estimativa de 5 MB
+        }
+
+        function _obsUso() {
+            let total = 0;
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    total += k.length + ((localStorage.getItem(k) || '').length);
+                }
+            } catch (e) { return null; }
+            const kb = v => Math.round(v / 1024);
+            const det = (localStorage.getItem(_OBS_CHAVE_BUFFER) || '').length;
+            const his = (localStorage.getItem(_OBS_CHAVE_HORAS)  || '').length;
+            return { detalhe: kb(det), historico: kb(his), total: kb(total),
+                     obsPct: total ? Math.round(((det + his) / total) * 100) : 0,
+                     cotaPct: Math.round((total / (5 * 1024 * 1024)) * 100) };
+        }
+
+        function _obsRenderUso() {
+            const u = _obsUso();
+            if (!u) return '';
+            const cor = u.cotaPct >= 70 ? 'var(--danger)' : u.cotaPct >= 40 ? 'var(--warning)' : 'var(--gray)';
+            const persist = _armazenamentoPersistente === true
+                ? '<span style="color:var(--success);">🔒 protegido contra descarte</span>'
+                : _armazenamentoPersistente === false
+                    ? '<span style="color:var(--warning);" title="Sob falta de espaço no aparelho, o navegador pode apagar a fila de gravação">⚠️ sem proteção contra descarte</span>'
+                    : '';
+            return `<div style="font-size:9px;color:var(--gray);margin-top:10px;padding:6px 8px;background:var(--bg-light);border-radius:5px;display:flex;gap:12px;flex-wrap:wrap;">
+                <span>💾 detalhe <strong>${u.detalhe} KB</strong></span>
+                <span>histórico <strong>${u.historico} KB</strong></span>
+                <span>total do app <strong style="color:${cor}">${u.total} KB</strong> (${u.cotaPct}% do limite)</span>
+                <span style="opacity:.75">a observabilidade é ${u.obsPct}% disso</span>
+                ${persist}
+                <span id="obsCotaReal" style="opacity:.75"></span>
+            </div>`;
+        }
+
+        // Pergunta a cota REAL ao navegador e preenche depois — é assíncrono, e não vale
+        // segurar a tela por causa de um número informativo. Melhor perguntar do que supor:
+        // os 5 MB do cálculo acima são estimativa minha, o navegador sabe o valor de verdade.
+        async function _obsPreencherCotaReal() {
+            const c = await _obsCota();
+            const el = document.getElementById('obsCotaReal');
+            if (!el || !c) return;
+            const mb = v => (v / 1048576).toFixed(1);
+            el.textContent = `· navegador informa ${mb(c.usado)} MB de ${mb(c.cota)} MB`;
+        }
+
+        function _obsRenderHoras() {
+            const chaves = Object.keys(_obsHoras).sort().slice(-72);   // últimas 72 horas
+            if (!chaves.length) {
+                return `<div style="font-size:11px;color:var(--gray);padding:14px 4px;">
+                    Ainda não há histórico por hora — ele começa a se formar a partir de agora.</div>`;
+            }
+            const tot = chaves.reduce((s, h) => s + _obsHoraTotal(h).n, 0);
+            const ruins = chaves.reduce((s, h) => s + _obsHoraTotal(h).ruins, 0);
+            if (!tot) return `<div style="font-size:11px;color:var(--gray);padding:14px 4px;">
+                Nenhuma chamada de "${_obsFiltro.a}" no histórico por hora.</div>`;
+            return _obsSvgHoras(chaves) +
+                `<div style="font-size:9px;color:var(--gray);margin-top:6px;">
+                    ${chaves.length} hora(s) registrada(s) · ${tot} chamadas · ${ruins} não-ok
+                 </div>`;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // GRÁFICOS — SVG escrito à mão, sem biblioteca
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // Nenhuma biblioteca de gráfico por CDN: o app precisa abrir com a internet ruim ou
+        // fora do ar, que é exatamente quando esta tela mais importa. Uma dependência
+        // externa faria o diagnóstico falhar junto com o que ele deveria diagnosticar.
+        const _OBS_COR = { ok: 'var(--success)', timeout: 'var(--danger)',
+                           transporte: 'var(--danger)', incerto: 'var(--warning)',
+                           erro_gas: 'var(--gray)' };
+
+        // Dispersão: cada ponto é uma chamada. Escala LOGARÍTMICA no eixo do tempo, porque
+        // é ela que revela o formato bimodal — com escala linear, tudo abaixo de 3s vira uma
+        // linha grudada na base e as duas populações somem numa mancha só.
+        function _obsSvgDispersao(regs) {
+            if (!regs.length) return '';
+            const W = 800, H = 210, pL = 46, pR = 8, pT = 10, pB = 20;
+            const t0 = new Date(regs[0].t).getTime();
+            const t1 = Math.max(new Date(regs[regs.length - 1].t).getTime(), t0 + 1);
+            const lo = Math.log10(50), hi = Math.log10(40000);
+            const px = t => pL + ((t - t0) / (t1 - t0)) * (W - pL - pR);
+            const py = ms => pT + (1 - (Math.log10(Math.max(50, ms)) - lo) / (hi - lo)) * (H - pT - pB);
+
+            const grade = [100, 500, 1000, 2000, 5000, 10000, 30000].map(v => `
+                <line x1="${pL}" y1="${py(v)}" x2="${W - pR}" y2="${py(v)}" stroke="var(--border)" stroke-width="1" stroke-dasharray="2,3"/>
+                <text x="${pL - 5}" y="${py(v) + 3}" font-size="9" fill="var(--gray)" text-anchor="end">${v >= 1000 ? (v / 1000) + 's' : v + 'ms'}</text>`).join('');
+
+            const passo = Math.ceil(regs.length / 700);
+            const pontos = regs.filter((_, i) => i % passo === 0).map(r => {
+                const x = px(new Date(r.t).getTime());
+                const bolinhas = `<circle cx="${x}" cy="${py(r.ms)}" r="2.4" fill="${_OBS_COR[r.d] || 'var(--gray)'}" opacity=".75"/>`;
+                // Segundo ponto, menor: quanto DISSO foi o servidor. A distância entre os
+                // dois pontos na vertical é o transporte, visível a olho nu.
+                return typeof r.srv === 'number'
+                    ? bolinhas + `<circle cx="${x}" cy="${py(r.srv)}" r="1.3" fill="var(--primary)" opacity=".45"/>`
+                    : bolinhas;
+            }).join('');
+
+            const hora = t => new Date(t).toTimeString().slice(0, 5);
+            return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;">
+                ${grade}${pontos}
+                <text x="${pL}" y="${H - 6}" font-size="9" fill="var(--gray)">${hora(t0)}</text>
+                <text x="${W - pR}" y="${H - 6}" font-size="9" fill="var(--gray)" text-anchor="end">${hora(t1)}</text>
+            </svg>`;
+        }
+
+        // Barras empilhadas por hora — a visão longa. Cada coluna é uma hora; cada pedaço,
+        // quantas chamadas caíram naquela faixa de tempo. É aqui que se vê, ao longo de
+        // semanas, se a parte vermelha está encolhendo.
+        // Soma as ações de uma hora, respeitando o filtro de ação quando houver.
+        function _obsHoraTotal(h) {
+            const porAcao = _obsHoras[h] || {};
+            const alvo = _obsFiltro.a ? [_obsFiltro.a] : Object.keys(porAcao);
+            const t = { n: 0, des: {}, nav: [0,0,0,0,0,0,0], tr: [0,0,0,0,0,0,0] };
+            alvo.forEach(a => {
+                const v = porAcao[a]; if (!v) return;
+                t.n += v.n;
+                Object.keys(v.des || {}).forEach(k => { t.des[k] = (t.des[k] || 0) + v.des[k]; });
+                for (let i = 0; i < 7; i++) { t.nav[i] += v.nav[i]; t.tr[i] += v.tr[i]; }
+            });
+            t.ok = t.des.ok || 0;
+            t.ruins = t.n - t.ok;
+            // Quando há filtro de desfecho, é ELE que vira a altura da barra.
+            t.foco = _obsFiltro.d ? (t.des[_obsFiltro.d] || 0) : t.n;
+            return t;
+        }
+
+        function _obsSvgHoras(chaves) {
+            if (!chaves.length) return '';
+            const W = 800, H = 190, pL = 34, pR = 6, pT = 8, pB = 30;
+            const cores = ['#27AE60', '#7DC67F', '#F4D03F', '#F39C12', '#E67E22', '#E74C3C', '#922B21'];
+            const tot = {}; chaves.forEach(h => tot[h] = _obsHoraTotal(h));
+            const foco = !!_obsFiltro.d;   // filtrando por desfecho: barra sólida da contagem
+            const maxN = Math.max(...chaves.map(h => foco ? tot[h].foco : tot[h].n), 1);
+            const larg = (W - pL - pR) / chaves.length;
+            const alt = H - pT - pB;
+
+            const barras = chaves.map((h, i) => {
+                const a = tot[h];
+                const valor = foco ? a.foco : a.n;
+                if (!valor) return '';
+                const x = pL + i * larg;
+                let y = pT + alt - (valor / maxN) * alt;
+                const segs = foco
+                    ? `<rect x="${x + 1}" y="${y}" width="${Math.max(1, larg - 2)}" height="${(valor / maxN) * alt}" fill="${_OBS_COR[_obsFiltro.d] || 'var(--gray)'}"/>`
+                    : a.tr.map((c, f) => {
+                        if (!c) return '';
+                        const hSeg = (c / a.n) * ((a.n / maxN) * alt);
+                        const r = `<rect x="${x + 1}" y="${y}" width="${Math.max(1, larg - 2)}" height="${hSeg}" fill="${cores[f]}"/>`;
+                        y += hSeg;
+                        return r;
+                    }).join('');
+                const rot = chaves.length <= 30 || i % Math.ceil(chaves.length / 24) === 0
+                    ? `<text x="${x + larg / 2}" y="${H - 16}" font-size="8" fill="var(--gray)" text-anchor="middle" transform="rotate(-60 ${x + larg / 2} ${H - 16})">${h.slice(5).replace('T', ' ')}h</text>` : '';
+                return segs + rot;
+            }).join('');
+
+            const legenda = foco
+                ? `<span style="font-size:9px;color:var(--gray);">altura = quantidade de <strong style="color:${_OBS_COR[_obsFiltro.d]}">${_obsFiltro.d}</strong> por hora</span>`
+                : _OBS_FAIXAS_ROT.map((rot, i) =>
+                `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:8px;font-size:9px;color:var(--gray);">
+                    <span style="width:9px;height:9px;background:${cores[i]};border-radius:2px;display:inline-block;"></span>${rot}</span>`).join('');
+
+            return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;">
+                <text x="${pL - 4}" y="${pT + 8}" font-size="9" fill="var(--gray)" text-anchor="end">${maxN}</text>
+                <line x1="${pL}" y1="${pT + alt}" x2="${W - pR}" y2="${pT + alt}" stroke="var(--border)"/>
+                ${barras}
+            </svg><div style="margin-top:4px;">${legenda}</div>`;
+        }
+
+        function renderizarSaude() {
+            const el = document.getElementById('saudeConteudo');
+            if (!el) return;
+            const r = _obsResumo();
+
+            const _chips = [[15,'15 min'],[30,'30 min'],[60,'1 h'],[120,'2 h'],[240,'4 h'],[0,'Tudo']]
+                .map(([v, rot]) => `<button onclick="_obsSetJanela(${v})" style="padding:5px 11px;font-size:11px;border-radius:14px;cursor:pointer;font-weight:bold;white-space:nowrap;${
+                    v === _obsJanelaMin
+                        ? 'background:linear-gradient(135deg,var(--primary) 0%,var(--primary-dark) 100%);color:#fff;border:none;'
+                        : 'background:var(--bg-light);color:var(--text-dark);border:2px solid var(--border);'}">${rot}</button>`).join('');
+            // Opções vindas do próprio dado: só aparece o que existe. Lista fixa mostraria
+            // telas e perfis que este aparelho nunca usou.
+            const _opts = (campo, atual) => {
+                const vals = [...new Set(_obsBuffer.map(r => r[campo]).filter(Boolean))].sort();
+                return `<option value="">todos</option>` +
+                       vals.map(v => `<option value="${v}"${v === atual ? ' selected' : ''}>${v}</option>`).join('');
+            };
+            const _sel = (campo, rot) => `
+                <label style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--gray);">
+                    ${rot}
+                    <select onchange="_obsSetFiltro('${campo}', this.value)"
+                            style="font-size:10px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:#fff;color:var(--text-dark);-webkit-appearance:menulist;appearance:auto;max-width:150px;">
+                        ${_opts(campo, _obsFiltro[campo])}
+                    </select>
+                </label>`;
+
+            const _algumFiltro = _obsFiltro.a || _obsFiltro.p || _obsFiltro.tela || _obsFiltro.d;
+            const _barraJanela = `
+                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;align-items:center;">
+                    <span style="font-size:10px;color:var(--gray);margin-right:2px;">JANELA</span>${_chips}
+                </div>
+                <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:10px;align-items:center;padding:7px 9px;background:var(--bg-light);border-radius:7px;">
+                    ${_sel('a', 'Função')}${_sel('p', 'Perfil')}${_sel('tela', 'Tela')}${_sel('d', 'Desfecho')}
+                    ${_algumFiltro ? `<button onclick="_obsLimparFiltros()" style="font-size:10px;padding:3px 9px;border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:5px;cursor:pointer;font-weight:bold;">✕ limpar</button>` : ''}
+                </div>`;
+
+            if (!r) {
+                el.innerHTML = _barraJanela + `<div style="text-align:center;color:var(--gray);padding:30px 14px;font-size:12px;">
+                    <div style="font-size:24px;margin-bottom:8px;">📊</div>
+                    Nada registrado ${_obsJanelaMin ? 'nesta janela' : 'ainda'}.<br>
+                    <span style="font-size:10px;opacity:.8;">${
+                        _obsJanelaMin ? 'Experimente uma janela maior — o total guardado é de ' + _obsBuffer.length + ' chamadas.'
+                                      : (_obsLigada ? 'A coleta está ligada — use o app um pouco e volte aqui.' : 'A coleta está DESLIGADA.')}</span>
+                </div>` + _obsRenderUso();
+                return;
+            }
+
+            const cor = v => v == null ? 'var(--gray)' : (v > 5000 ? 'var(--danger)' : v > 2000 ? 'var(--warning)' : 'var(--success)');
+            const card = (rot, val, sub, c) => `
+                <div style="flex:1;min-width:96px;background:var(--bg-light);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center;">
+                    <div style="font-size:9px;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;">${rot}</div>
+                    <div style="font-size:17px;font-weight:800;color:${c || 'var(--text-dark)'};line-height:1.2;">${val}</div>
+                    <div style="font-size:9px;color:var(--gray);">${sub}</div>
+                </div>`;
+
+            const td = (txt, extra) => `<td style="padding:4px 5px;font-size:10px;text-align:right;${extra || ''}">${txt}</td>`;
+            const linhas = Object.entries(r.porAcao)
+                .sort((a, b) => b[1].n - a[1].n)
+                .map(([a, v]) => `<tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:4px 5px;font-size:10px;">${a}</td>
+                    ${td(v.n)}
+                    ${td(_obsPercentil(v.ms, 0.50) ?? '—')}
+                    ${td(_obsPercentil(v.ms, 0.95) ?? '—')}
+                    ${td(_obsPercentil(v.srv, 0.50) ?? '—', 'color:var(--gray);')}
+                    ${td(_obsPercentil(v.srv, 0.95) ?? '—', 'color:var(--gray);')}
+                    ${td(_obsPercentil(v.transp, 0.50) ?? '—', 'font-weight:700;')}
+                    ${td(_obsPercentil(v.transp, 0.95) ?? '—', 'font-weight:700;')}
+                    ${td(v.ruins, v.ruins ? 'color:var(--danger);' : 'color:var(--gray);')}
+                </tr>`).join('');
+
+            el.innerHTML = _barraJanela + `
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+                    ${card('Chamadas', r.total, r.porMinuto + '/min', null)}
+                    ${card('Não-ok', r.taxaRuim + '%', Object.entries(r.desfechos).filter(([k]) => k !== 'ok').map(([k, v]) => k + ':' + v).join(' ') || 'nenhum', r.taxaRuim > 5 ? 'var(--danger)' : 'var(--success)')}
+                    ${card('Navegador p95', (r.msP95 ?? '—') + 'ms', 'p50 ' + (r.msP50 ?? '—') + 'ms', cor(r.msP95))}
+                    ${card('Transporte p95', (r.trP95 ?? '—') + 'ms', 'pior ' + (r.piorTransporte ?? '—') + 'ms', cor(r.trP95))}
+                </div>
+
+                <div style="background:var(--bg-light);border-left:3px solid var(--primary);padding:7px 9px;border-radius:5px;font-size:10px;color:var(--gray);margin-bottom:10px;line-height:1.45;">
+                    <strong>Transporte</strong> = tempo que o navegador esperou menos o tempo que o servidor levou.
+                    É o pedaço que não está no nosso código e que nunca conseguimos ver.
+                    Percentil e não média: a cauda é bimodal, e média de duas populações descreve um valor que não acontece.
+                </div>
+
+                <div style="font-size:10px;color:var(--gray);margin:2px 0 4px;">
+                    Cada ponto é uma chamada. <strong style="color:var(--text-dark);">Bolinha grande</strong> = tempo total;
+                    <strong style="color:var(--primary);">ponto pequeno</strong> = a parte do servidor.
+                    A distância entre os dois é o transporte. Escala de tempo logarítmica — é ela que
+                    separa as duas populações; em escala normal tudo abaixo de 3s vira uma mancha só.
+                </div>
+                ${_obsSvgDispersao(r.regs)}
+
+                <table style="width:100%;border-collapse:collapse;margin-top:10px;">
+                    <thead>
+                    <tr>
+                        <th></th><th></th>
+                        <th colspan="2" style="text-align:center;padding:3px;font-size:9px;color:var(--text-dark);background:var(--bg-light);">NAVEGADOR (total)</th>
+                        <th colspan="2" style="text-align:center;padding:3px;font-size:9px;color:var(--gray);background:var(--bg-light);">SERVIDOR</th>
+                        <th colspan="2" style="text-align:center;padding:3px;font-size:9px;color:var(--primary);background:var(--bg-light);">TRANSPORTE</th>
+                        <th></th>
+                    </tr>
+                    <tr style="border-bottom:1px solid var(--border);">
+                        <th style="text-align:left;padding:4px 5px;font-size:9px;color:var(--gray);">AÇÃO</th>
+                        <th style="text-align:right;padding:4px 5px;font-size:9px;color:var(--gray);">N</th>
+                        <th style="text-align:right;padding:4px 5px;font-size:9px;color:var(--gray);">p50</th>
+                        <th style="text-align:right;padding:4px 5px;font-size:9px;color:var(--gray);">p95</th>
+                        <th style="text-align:right;padding:4px 5px;font-size:9px;color:var(--gray);">p50</th>
+                        <th style="text-align:right;padding:4px 5px;font-size:9px;color:var(--gray);">p95</th>
+                        <th style="text-align:right;padding:4px 5px;font-size:9px;color:var(--gray);">p50</th>
+                        <th style="text-align:right;padding:4px 5px;font-size:9px;color:var(--gray);">p95</th>
+                        <th style="text-align:right;padding:4px 5px;font-size:9px;color:var(--gray);">RUINS</th>
+                    </tr></thead>
+                    <tbody>${linhas}</tbody>
+                </table>
+
+                <div style="font-size:9px;color:var(--gray);margin-top:8px;">
+                    ${r.janela ? 'últimos ' + r.janela + ' min' : 'todo o histórico'} ·
+                    ${r.de.slice(0, 16).replace('T', ' ')} até ${r.ate.slice(0, 16).replace('T', ' ')} ·
+                    coleta ${_obsLigada ? '<strong style="color:var(--success)">ligada</strong>' : '<strong style="color:var(--danger)">DESLIGADA</strong>'}
+                </div>
+
+                <div style="border-top:2px solid var(--border);margin:16px 0 10px;padding-top:12px;">
+                    <div style="font-size:12px;font-weight:800;color:var(--text-dark);">📈 Histórico por hora</div>
+                    <div style="font-size:10px;color:var(--gray);margin-top:3px;line-height:1.45;">
+                        Esta parte <strong>não é apagada</strong> — o detalhe acima gira a cada ${_OBS_MAX} chamadas,
+                        este resumo fica. Cada coluna é uma hora; a altura é o volume e as cores são
+                        as faixas de <strong>tempo de transporte</strong>. É aqui que se enxerga, ao longo
+                        de semanas, se a parte vermelha está encolhendo.
+                    </div>
+                    <div style="font-size:9px;color:var(--gray);margin-top:5px;padding:5px 7px;background:var(--bg-light);border-radius:5px;">
+                        Valem os filtros de <strong>Função</strong>${_obsFiltro.a ? ' (<strong>' + _obsFiltro.a + '</strong>)' : ''}
+                        e <strong>Desfecho</strong>${_obsFiltro.d ? ' (<strong>' + _obsFiltro.d + '</strong>)' : ''}.
+                        Perfil e Tela não se aplicam: o histórico longo é guardado <strong>compactado</strong>,
+                        e guardar cada combinação multiplicaria um dado que precisa durar 30 dias.
+                        A janela de tempo também não vale aqui — esta visão é o histórico inteiro.
+                    </div>
+                </div>
+                ${_obsRenderHoras()}
+                ${_obsRenderUso()}`;
+            _obsPreencherCotaReal();
+        }
 
         // Uma resposta incerta NÃO é sucesso e NÃO é falha — é "não sei", e o desfecho
         // mais provável é que a gravação tenha dado certo. Confundir isso com falha é o
@@ -3442,6 +4204,15 @@
         }
 
         async function sheetsAPI(action, dados = {}, timeoutMs = 20000) {
+            // ⚠️ SEMPRE marcar o início, mesmo com a coleta desligada.
+            //
+            // Antes era `_obsLigada ? Date.now() : 0`, tentando economizar. Só que a coleta
+            // pode ser LIGADA no meio de uma chamada já em voo (cmObsOn, ou a config
+            // chegando) — aí o registro nascia com t0 = 0 e `Date.now() - 0` virava o
+            // timestamp inteiro: 1.786.912.872.909 ms, uns 56 mil anos. Um único registro
+            // desses envenena o máximo e o p95, que são justamente os números que a gente
+            // olha. Um `Date.now()` por chamada não é economia que valha isso.
+            const _obsT0 = Date.now();
             try {
                 const ehLeitura = action.startsWith('get');
                 let json;
@@ -3480,8 +4251,10 @@
                 // vendo falha. A diferença é que quem precisa do MOTIVO agora o recebe.
                 if (json && json.erro) {
                     console.warn(`[Sheets] Erro em "${action}":`, json.erro);
+                    _obsRegistrar(action, _obsT0, json, null);
                     return json;
                 }
+                _obsRegistrar(action, _obsT0, json, null);
                 return json;
             } catch (err) {
                 const msg = err.name === 'AbortError'
@@ -3492,6 +4265,7 @@
                 // devolve quando a chave do redirect expira). Nenhum destes é uma
                 // resposta — e sem essa marca o front os confunde com um "não" do GAS.
                 console.warn(`[Sheets] Erro em "${action}":`, msg);
+                _obsRegistrar(action, _obsT0, null, msg);
                 return { sucesso: false, erro: msg, _transporte: true };
             }
         }
@@ -3674,7 +4448,7 @@
                 return false;
             }
             if (Array.isArray(r.cardapio)) _processarCardapioRecebido(r.cardapio);
-            if (r.config) _aplicarConfigCarnes(r.config);
+            if (r.config) { _aplicarConfigCarnes(r.config); _obsAplicarConfig(r.config); }
             return true;
         }
 
@@ -3852,6 +4626,7 @@
                     // falso: apagar TODAS as carnes de um dia nunca propagava, porque string
                     // vazia caía fora do if e a lista local ficava com o valor velho.
                     _aplicarConfigCarnes(config);
+                    _obsAplicarConfig(config);   // 3ª camada de desligamento (Ponto 8)
                     // Rodízio de telas ociosas do Fullscreen Cliente — chave genérica na
                     // aba config (idle_playlist), sem precisar de mudança no GAS (getConfig
                     // já é chave|valor livre). Valor é um JSON array de slides, ex.:
@@ -4330,6 +5105,7 @@
                 // Onda 1: a abertura do app é o ÚNICO momento em que dá para recuperar uma
                 // gravação cuja aba foi morta com o POST em voo. É por isto que a fila é
                 // persistida, e não guardada em memória.
+                _garantirArmazenamentoPersistente();   // e por isto ela não pode ser descartada
                 _atualizarBadgeFila();
                 _filaDrenar('abertura do app');
 
@@ -4581,6 +5357,7 @@
             iniciarPollingCardapio();
             // Onda 1 — ver a nota no bloco de restauração de sessão: reabrir o app é a
             // única chance de recuperar gravação cuja aba morreu com o POST em voo.
+            _garantirArmazenamentoPersistente();
             _atualizarBadgeFila();
             _filaDrenar('login');
 
@@ -4721,8 +5498,10 @@
             const perfil = state.perfil;
 
             const subAbasPermitidas = {
-                'Gerente': ['marnitasDia', 'estoque', 'operacional'],
-                'Caixa':   ['itens', 'marnitasDia', 'estoque']
+                // 'saude' liberada para os dois: são os perfis que operam em estação com
+                // teclado, e o Caixa é o aparelho mais interessante de medir — é o que mais chama.
+                'Gerente': ['marnitasDia', 'estoque', 'operacional', 'saude'],
+                'Caixa':   ['itens', 'marnitasDia', 'estoque', 'saude']
             };
             const permitidas = subAbasPermitidas[perfil];
 
@@ -5153,6 +5932,8 @@
                     
                     // Se for aba de itens, recarregar cardápio completo (ativos + inativos)
                     // Reset filtros ao entrar na aba — não faz sentido manter busca/filtro ao voltar
+                    if (tabName === 'saude') renderizarSaude();
+
                     if (tabName === 'itens') {
                         adminFiltroCategoria = 'Todos';
                         adminFiltroBusca     = '';
