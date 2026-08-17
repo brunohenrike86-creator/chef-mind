@@ -3150,7 +3150,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-12-k';
+        const CHEF_MIND_VERSAO = '2026-08-12-l';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -3689,12 +3689,22 @@
         // Pergunta a cota REAL ao navegador e preenche depois — é assíncrono, e não vale
         // segurar a tela por causa de um número informativo. Melhor perguntar do que supor:
         // os 5 MB do cálculo acima são estimativa minha, o navegador sabe o valor de verdade.
+        // ⚠️ `estimate()` NÃO enxerga o localStorage.
+        //
+        // Ele mede os armazenamentos modernos — IndexedDB, Cache Storage, Service Worker.
+        // O Chef Mind usa exclusivamente localStorage, então o "usado" vinha ZERADO em
+        // produção: número tecnicamente correto e completamente inútil, que é pior que
+        // número nenhum (visto em 12/08). A soma manual das chaves, logo acima, é a medida
+        // que vale para nós.
+        //
+        // Mantido apenas para quando houver algo além de localStorage — e escondido quando
+        // não houver, em vez de mostrar zero.
         async function _obsPreencherCotaReal() {
             const c = await _obsCota();
             const el = document.getElementById('obsCotaReal');
-            if (!el || !c) return;
+            if (!el || !c || !c.usado) return;
             const mb = v => (v / 1048576).toFixed(1);
-            el.textContent = `· navegador informa ${mb(c.usado)} MB de ${mb(c.cota)} MB`;
+            el.textContent = `· outros armazenamentos: ${mb(c.usado)} MB de ${mb(c.cota)} MB`;
         }
 
         function _obsRenderHoras() {
