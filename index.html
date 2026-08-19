@@ -3150,7 +3150,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-12-l';
+        const CHEF_MIND_VERSAO = '2026-08-12-m';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -3277,6 +3277,40 @@
         const _OBS_FAIXAS      = [500, 1000, 2000, 5000, 10000, 30000];   // ms
         const _OBS_FAIXAS_ROT  = ['<0,5s', '<1s', '<2s', '<5s', '<10s', '<30s', '30s+'];
 
+        // ── IDENTIFICAÇÃO DO APARELHO ──
+        //
+        // Guardado UMA VEZ, como chave própria — e não repetido em cada registro. O aparelho
+        // é propriedade do armazenamento, não da chamada: gravar em 3.000 registros o mesmo
+        // "Caixa 1" seria desperdiçar ~45 KB para dizer a mesma coisa 3.000 vezes.
+        // Custo real: ~20 bytes, uma vez. No detalhe e no por hora, zero.
+        //
+        // Nome editável de propósito: "Caixa 1" e "Tablet da Balança" dizem mais numa
+        // planilha consolidada do que um identificador aleatório.
+        const _OBS_CHAVE_DEVICE = 'chefmind-obs-device';
+
+        function _obsDevice() {
+            try {
+                let d = localStorage.getItem(_OBS_CHAVE_DEVICE);
+                if (!d) {
+                    d = 'aparelho-' + Math.random().toString(36).slice(2, 6);
+                    localStorage.setItem(_OBS_CHAVE_DEVICE, d);
+                }
+                return d;
+            } catch (e) { return 'desconhecido'; }
+        }
+
+        function _obsRenomearDevice() {
+            const atual = _obsDevice();
+            const novo = prompt('Nome deste aparelho (ex: Caixa 1, Tablet da Balança):', atual);
+            if (novo === null) return;
+            const limpo = String(novo).trim().slice(0, 30);
+            if (!limpo) return;
+            try { localStorage.setItem(_OBS_CHAVE_DEVICE, limpo); } catch (e) {}
+            renderizarSaude();
+        }
+        window.cmObsDevice = _obsRenomearDevice;
+
+        let _obsOrigem   = 'usuario';
         let _obsBuffer   = [];
         let _obsHoras    = {};
         let _obsPendente = false;
@@ -3335,7 +3369,7 @@
 
         const _OBS_MS_ABSURDO = 600000;   // 10 min — nenhum prazo nosso passa de 45s
 
-        function _obsRegistrar(action, t0, json, erroTransporte) {
+        function _obsRegistrar(action, t0, json, erroTransporte, origem) {
             if (!_obsLigada || !t0) return;   // ← custo zero quando desligada
             try {
                 const _dur = Date.now() - t0;
@@ -3349,6 +3383,7 @@
                 _obsBuffer.push({
                     t:    new Date().toISOString(),
                     a:    action,
+                    o:    origem,
                     ms:   _dur,                                                      // navegador
                     srv:  (json && typeof json._ms === 'number') ? json._ms : null,   // servidor
                     d:    d,
@@ -3440,12 +3475,13 @@
         // gente precisa enxergar. Observação do Bruno em 12/08 — "sempre veremos um número
         // acumulado com períodos de baixa".
         let _obsJanelaMin = 60;   // 0 = tudo
-        let _obsFiltro = { a: '', p: '', tela: '', d: '' };   // '' = todos
+        let _obsFiltro = { a: '', o: '', p: '', tela: '', d: '' };   // '' = todos
 
         function _obsAplicarFiltros(lista) {
             const f = _obsFiltro;
-            if (!f.a && !f.p && !f.tela && !f.d) return lista;
+            if (!f.a && !f.o && !f.p && !f.tela && !f.d) return lista;
             return lista.filter(r => (!f.a    || r.a    === f.a)
+                                  && (!f.o    || r.o    === f.o)
                                   && (!f.p    || r.p    === f.p)
                                   && (!f.tela || r.tela === f.tela)
                                   && (!f.d    || r.d    === f.d));
@@ -3502,10 +3538,11 @@
         function _obsCSV() {
             // `;` como separador e BOM no início: é o que faz o arquivo abrir certo, com
             // acentos, no Excel em português — que é onde o Bruno vai analisar isto.
-            const cab = ['quando', 'acao', 'ms_navegador', 'ms_servidor', 'ms_transporte',
-                         'desfecho', 'perfil', 'tela', 'rid'].join(';');
+            const dev = _obsDevice();
+            const cab = ['aparelho', 'quando', 'acao', 'origem', 'ms_navegador', 'ms_servidor',
+                         'ms_transporte', 'desfecho', 'perfil', 'tela', 'rid'].join(';');
             const linhas = _obsBuffer.map(r => [
-                r.t, r.a, r.ms,
+                dev, r.t, r.a, r.o || '', r.ms,
                 (typeof r.srv === 'number' ? r.srv : ''),
                 (typeof r.srv === 'number' ? Math.max(0, r.ms - r.srv) : ''),
                 r.d, r.p, r.tela, r.rid
@@ -3557,10 +3594,11 @@
         // O CSV continua existindo porque os computadores do restaurante têm Excel. As duas
         // saídas convivem: cada uma serve a uma máquina diferente.
         function _obsTSVDetalhe() {
-            const cab = ['quando', 'acao', 'ms_navegador', 'ms_servidor', 'ms_transporte',
-                         'desfecho', 'perfil', 'tela', 'rid'].join('\t');
+            const dev = _obsDevice();
+            const cab = ['aparelho', 'quando', 'acao', 'origem', 'ms_navegador', 'ms_servidor',
+                         'ms_transporte', 'desfecho', 'perfil', 'tela', 'rid'].join('\t');
             return cab + '\n' + _obsBuffer.map(r => [
-                r.t, r.a, r.ms,
+                dev, r.t, r.a, r.o || '', r.ms,
                 (typeof r.srv === 'number' ? r.srv : ''),
                 (typeof r.srv === 'number' ? Math.max(0, r.ms - r.srv) : ''),
                 r.d, r.p, r.tela, r.rid
@@ -3569,13 +3607,14 @@
 
         function _obsTSVHoras() {
             const DESF = ['ok', 'timeout', 'transporte', 'incerto', 'erro_gas'];
-            const cab = ['hora', 'chamadas']
+            const dev = _obsDevice();
+            const cab = ['aparelho', 'hora', 'chamadas']
                 .concat(DESF)
                 .concat(_OBS_FAIXAS_ROT.map(f => 'total_' + f))
                 .concat(_OBS_FAIXAS_ROT.map(f => 'transporte_' + f)).join('\t');
             const linhas = Object.keys(_obsHoras).sort().map(h => {
                 const a = _obsHoraTotal(h);
-                return [h.replace('T', ' ') + 'h', a.n]
+                return [dev, h.replace('T', ' ') + 'h', a.n]
                     .concat(DESF.map(k => a.des[k] || 0))
                     .concat(a.nav).concat(a.tr).join('\t');
             });
@@ -3604,7 +3643,7 @@
 
         function _obsSetJanela(min) { _obsJanelaMin = min; renderizarSaude(); }
         function _obsSetFiltro(campo, valor) { _obsFiltro[campo] = valor; renderizarSaude(); }
-        function _obsLimparFiltros() { _obsFiltro = { a: '', p: '', tela: '', d: '' }; renderizarSaude(); }
+        function _obsLimparFiltros() { _obsFiltro = { a: '', o: '', p: '', tela: '', d: '' }; renderizarSaude(); }
 
         // Vigiar o próprio consumo é parte de "não pode piorar a situação" (restrição 1).
         // A cota do localStorage é COMPARTILHADA — comandas, cache do cardápio, fila de
@@ -3761,11 +3800,21 @@
                     : bolinhas;
             }).join('');
 
+            // Marcações de tempo a cada 1/8 do eixo, com linha vertical. Antes só existiam
+            // o início e o fim, e ficava impossível situar um pico no tempo — que é a
+            // primeira coisa que se quer fazer ao ver uma mancha de pontos lentos.
             const hora = t => new Date(t).toTimeString().slice(0, 5);
+            const N_TICKS = 8;
+            const ticks = Array.from({ length: N_TICKS + 1 }, (_, i) => {
+                const t = t0 + ((t1 - t0) * i) / N_TICKS;
+                const x = px(t);
+                const anc = i === 0 ? 'start' : i === N_TICKS ? 'end' : 'middle';
+                return `<line x1="${x}" y1="${pT}" x2="${x}" y2="${H - pB}" stroke="var(--border)" stroke-width="1" stroke-dasharray="1,4" opacity=".7"/>
+                        <text x="${x}" y="${H - 6}" font-size="9" fill="var(--gray)" text-anchor="${anc}">${hora(t)}</text>`;
+            }).join('');
+
             return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;">
-                ${grade}${pontos}
-                <text x="${pL}" y="${H - 6}" font-size="9" fill="var(--gray)">${hora(t0)}</text>
-                <text x="${W - pR}" y="${H - 6}" font-size="9" fill="var(--gray)" text-anchor="end">${hora(t1)}</text>
+                ${grade}${ticks}${pontos}
             </svg>`;
         }
 
@@ -3859,13 +3908,17 @@
                     </select>
                 </label>`;
 
-            const _algumFiltro = _obsFiltro.a || _obsFiltro.p || _obsFiltro.tela || _obsFiltro.d;
+            const _algumFiltro = _obsFiltro.a || _obsFiltro.o || _obsFiltro.p || _obsFiltro.tela || _obsFiltro.d;
             const _barraJanela = `
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                    <span style="font-size:12px;font-weight:800;color:var(--text-dark);">🖥️ ${_obsDevice()}</span>
+                    <button onclick="_obsRenomearDevice()" style="font-size:10px;padding:3px 9px;border:1px solid var(--border);background:#fff;color:var(--gray);border-radius:5px;cursor:pointer;">✏️ renomear aparelho</button>
+                </div>
                 <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;align-items:center;">
                     <span style="font-size:10px;color:var(--gray);margin-right:2px;">JANELA</span>${_chips}
                 </div>
                 <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:10px;align-items:center;padding:7px 9px;background:var(--bg-light);border-radius:7px;">
-                    ${_sel('a', 'Função')}${_sel('p', 'Perfil')}${_sel('tela', 'Tela')}${_sel('d', 'Desfecho')}
+                    ${_sel('a', 'Função')}${_sel('o', 'Origem')}${_sel('p', 'Perfil')}${_sel('tela', 'Tela')}${_sel('d', 'Desfecho')}
                     ${_algumFiltro ? `<button onclick="_obsLimparFiltros()" style="font-size:10px;padding:3px 9px;border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:5px;cursor:pointer;font-weight:bold;">✕ limpar</button>` : ''}
                 </div>`;
 
@@ -4133,7 +4186,8 @@
                     // `retentativa: true` autoriza o servidor a pagar a varredura cara se o
                     // cache de dedup já tiver expirado. Só a retentativa pode pedir isso.
                     const res = await sheetsAPI(env.action,
-                        Object.assign({}, env.payload, { cliente_key: env.cliente_key, retentativa: true }));
+                        Object.assign({}, env.payload, { cliente_key: env.cliente_key, retentativa: true }),
+                        20000, 'fila');
 
                     if (res && res.id) {
                         console.log('[Fila] ✅ confirmado', env.cliente_key, '→', res.id,
@@ -4213,7 +4267,12 @@
             return r;
         }
 
-        async function sheetsAPI(action, dados = {}, timeoutMs = 20000) {
+        // 4º parâmetro `origem` (Ponto 8): separa o que o SISTEMA dispara sozinho do que a
+        // PESSOA pediu. Sem isso, `getEstadoOperacional` aparece como uma coisa só — mas ele
+        // é chamado pelo poll (automático, dezenas por hora), pelo boot e por gatilho de
+        // evento. Misturar os três esconde justamente o que se quer saber: quanto do tráfego
+        // é gasto sem ninguém ter pedido nada.
+        async function sheetsAPI(action, dados = {}, timeoutMs = 20000, origem = 'usuario') {
             // ⚠️ SEMPRE marcar o início, mesmo com a coleta desligada.
             //
             // Antes era `_obsLigada ? Date.now() : 0`, tentando economizar. Só que a coleta
@@ -4261,10 +4320,10 @@
                 // vendo falha. A diferença é que quem precisa do MOTIVO agora o recebe.
                 if (json && json.erro) {
                     console.warn(`[Sheets] Erro em "${action}":`, json.erro);
-                    _obsRegistrar(action, _obsT0, json, null);
+                    _obsRegistrar(action, _obsT0, json, null, origem);
                     return json;
                 }
-                _obsRegistrar(action, _obsT0, json, null);
+                _obsRegistrar(action, _obsT0, json, null, origem);
                 return json;
             } catch (err) {
                 const msg = err.name === 'AbortError'
@@ -4275,7 +4334,7 @@
                 // devolve quando a chave do redirect expira). Nenhum destes é uma
                 // resposta — e sem essa marca o front os confunde com um "não" do GAS.
                 console.warn(`[Sheets] Erro em "${action}":`, msg);
-                _obsRegistrar(action, _obsT0, null, msg);
+                _obsRegistrar(action, _obsT0, null, msg, origem);
                 return { sucesso: false, erro: msg, _transporte: true };
             }
         }
@@ -4443,14 +4502,14 @@
         async function _buscarCardapioAgora(motivo) {
             if (!state.user) return false;
             console.log('[Cardápio] buscando —', motivo);
-            let r = await sheetsAPI('getCardapioEConfig');
+            let r = await sheetsAPI('getCardapioEConfig', {}, 20000, 'poll');
 
             // Retentativa em falha de TRANSPORTE (mesmo padrão do ponto 17). Leitura pura:
             // repetir não tem efeito colateral, e o 404 do `echo` costuma passar na segunda.
             if (_falhaDeTransporte(r)) {
                 console.warn('[Cardápio] falha de transporte — 1 retentativa |', r.erro);
                 await new Promise(res => setTimeout(res, 900));
-                r = await sheetsAPI('getCardapioEConfig');
+                r = await sheetsAPI('getCardapioEConfig', {}, 20000, 'poll');
             }
 
             if (!_respostaValida(r)) {
@@ -4598,7 +4657,7 @@
                 _restaurarCardapioDoCache();
 
                 const _TIMEOUT_BOOT = 45000;
-                const _boot = await sheetsAPI('getEstadoOperacional', { boot: '1' }, _TIMEOUT_BOOT);
+                const _boot = await sheetsAPI('getEstadoOperacional', { boot: '1' }, _TIMEOUT_BOOT, 'boot');
 
                 // ⚠️ GUARDA DE FALHA (checklist A do ponto 1). Antes, cada consumidor
                 // recebia sua própria resposta e checava com _respostaValida. Agora todos
@@ -11006,7 +11065,7 @@ async function carregarComanda() {
                 // Antes: getComandasDoDia + um getItensDaComanda por comanda que precisasse
                 // sincronizar. Com 20 comandas ativas, 21 requisições e 25.727 linhas lidas
                 // para usar ~60 — a cada ciclo, em cada aparelho. Causa raiz de 03/08.
-                const estado = await sheetsAPI('getEstadoOperacional');
+                const estado = await sheetsAPI('getEstadoOperacional', {}, 20000, 'poll');
 
                 // Guarda de falha: resposta ruim = ciclo ignorado, estado local INTACTO.
                 // Nunca tratar falha como "não há comandas" — isso apagaria o dia inteiro.
