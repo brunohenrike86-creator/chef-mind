@@ -3150,7 +3150,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-12-m';
+        const CHEF_MIND_VERSAO = '2026-08-12-n';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -4555,8 +4555,12 @@
             // MINUTOS depois. Nesse intervalo a tela Lançar ficava inutilizável e dar F5 só
             // refazia a mesma aposta contra a cauda de transporte. Foi exatamente esse o
             // sintoma relatado em 06/08.
-            if (!state._cardapioCarregado) {
-                _buscarCardapioAgora('boot não trouxe o cardápio').then(ok => {
+            // ⚠️ `&& !_cardapioRetentativaTimer` — sem isso, o Ponto 4 abriria um buraco:
+            // esta função passou a ser chamada a CADA volta de aba, e com o cardápio ausente
+            // cada alternância dispararia uma busca nova, sem piso. É a Regra 44 de novo.
+            // Se o laço de retentativa já está rodando, ele dá conta — não precisa de ajuda.
+            if (!state._cardapioCarregado && !_cardapioRetentativaTimer) {
+                _buscarCardapioAgora('cardápio ausente').then(ok => {
                     if (!ok) _garantirCardapio();   // falhou: entra no laço curto até conseguir
                 });
             }
@@ -10998,10 +11002,38 @@ async function carregarComanda() {
         // extra no momento certo — não altera nada da lógica de sincronização em
         // si, e o guard `_pollingAtivo` dentro de pollFromSheets() já impede
         // qualquer execução duplicada/concorrente com o poll do setInterval normal.
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // PONTO 4 — o poll para quando ninguém está olhando
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // Até aqui o poll começava no login e **nunca parava** até o logout. Aparelho ligado
+        // era aparelho consumindo servidor, mesmo com a tela apagada no bolso de alguém, ou
+        // esquecido ligado a noite inteira. É o tráfego mais inútil que existe: ninguém lê o
+        // resultado.
+        //
+        // O que NÃO pausa, e é intencional:
+        //   · Tablet do Preparo ligado sem ninguém tocando → a aba está VISÍVEL, continua
+        //   · TV com o rodízio → visível, continua
+        //   · A fila de gravação da Onda 1 → precisa continuar tentando mesmo oculta; é o
+        //     que garante que nenhum lançamento se perca. Só roda quando há algo pendente
+        //
+        // ⚠️ Retomar sem trava foi o que quebrou o sistema em 02/08 — um listener de `focus`
+        // disparando poll a cada retorno de foco gerava a tempestade de 21 chamadas. Por isso
+        // a volta passa por `_sincronizarPorEvento`, que aplica o piso da Regra 48: se o dado
+        // ainda está fresco, não busca nada.
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && state.user) {
-                _sincronizarPorEvento('voltou à aba');
+            if (!state.user) return;
+
+            if (document.visibilityState === 'hidden') {
+                pararPolling();
+                pararPollingCardapio();
+                console.log('[Poll] 👁️ aba oculta — polls pausados');
+                return;
             }
+
+            iniciarPolling();
+            iniciarPollingCardapio();
+            _sincronizarPorEvento('voltou à aba');
         });
 
         // Chama fn() quando o próximo poll terminar (seja o atual em andamento ou um novo).
