@@ -3150,7 +3150,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-12-n';
+        const CHEF_MIND_VERSAO = '2026-08-12-p';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -5822,7 +5822,21 @@
 
             // 2ª renderização: aguarda o poll ativo (ou inicia um novo) e re-renderiza
             // com dados REALMENTE frescos do servidor
-            if (['checkout', 'preparo', 'caixa-fin', 'areceber'].includes(screenName)) {
+            // ⚠️ `telaAnterior !== screenName` — clicar na aba JÁ ATIVA não pode custar o
+            // mesmo que trocar de tela. Achado pelo Bruno em 12/08, testando a etapa 1.
+            //
+            // No perfil Caixa as abas Lançar e Checkout são dois botões grandes no topo, e
+            // tocar de novo na que já está aberta é gesto comum — por engano ou por hábito
+            // de "atualizar". Cada toque desses passava por aqui e podia disparar uma
+            // chamada, sem nada ter mudado de tela.
+            //
+            // Guardado só o GATILHO DO SERVIDOR, e não a função inteira: no login do Caixa,
+            // `caixaSwitchTo('lançar')` roda com a tela Lançar já ativa, e um `return` seco
+            // no topo quebraria a marcação das abas. A renderização local continua
+            // acontecendo — quem toca de novo esperando "atualizar" continua vendo a tela
+            // redesenhar, só que com o dado que já está em mãos.
+            if (['checkout', 'preparo', 'caixa-fin', 'areceber'].includes(screenName)
+                && telaAnterior !== screenName) {
                 reRenderAposPoll(() => {
                     if (screenName === 'checkout')        renderizarCheckout();
                     else if (screenName === 'preparo')    renderizarPreapro();
@@ -10939,13 +10953,22 @@ async function carregarComanda() {
         };
         const POLL_INTERVALO_PADRAO = 10000;   // perfil desconhecido → o mais conservador
 
+        // Fonte ÚNICA do intervalo em vigor. Existe para que a etapa 3 do Ponto 3b (poll por
+        // TELA em vez de por perfil) mude um lugar só — hoje três pontos precisam saber esse
+        // número (o setInterval, a trava da sincronização por evento e a trava da troca de
+        // tela), e tê-los calculando cada um por conta seria garantir que um deles ficasse
+        // para trás na hora da migração.
+        function _intervaloPollAtual() {
+            return POLL_INTERVALO_POR_PERFIL[state.perfil] || POLL_INTERVALO_PADRAO;
+        }
+
         let _pollingInterval    = null;
         let _pollingAtivo       = false;
         let _pollWaiters        = [];   // callbacks a chamar quando o próximo poll terminar
         let _pollIntervaloAtual = null; // ms em uso, para detectar troca de perfil
 
         function iniciarPolling() {
-            const ms = POLL_INTERVALO_POR_PERFIL[state.perfil] || POLL_INTERVALO_PADRAO;
+            const ms = _intervaloPollAtual();
             // Já rodando no intervalo certo → nada a fazer. Mas se o PERFIL mudou (troca de
             // usuário sem recarregar a página), é preciso reiniciar: com o `return` seco de
             // antes, o aparelho continuaria no intervalo do perfil anterior para sempre.
@@ -10981,7 +11004,7 @@ async function carregarComanda() {
         // disparando a tempestade completa a cada retorno de foco (Regra 44).
         function _sincronizarPorEvento(motivo) {
             if (!state.user) return;
-            const limite = POLL_INTERVALO_POR_PERFIL[state.perfil] || POLL_INTERVALO_PADRAO;
+            const limite = _intervaloPollAtual();
             const idade  = Date.now() - _ultimoEstadoEm;
             if (idade < limite) {
                 console.log('[Poll] ' + motivo + ' — dado tem ' + Math.round(idade/1000) +
@@ -11043,10 +11066,31 @@ async function carregarComanda() {
             if (_pollingAtivo) {
                 // Já tem poll rolando → enfileira callback para quando ELE terminar
                 _pollWaiters.push(fn);
-            } else {
-                // Nenhum poll ativo → inicia um e re-renderiza ao final
-                pollFromSheets().then(fn);
+                return;
             }
+
+            // ⚠️ PONTO 3b, ETAPA 1 — piso da Regra 48 também aqui.
+            //
+            // Antes esta função ia direto para `pollFromSheets()`. Como `switchScreen` a
+            // chama ao entrar em Checkout, Preparo, Caixa-fin e A Receber, **cada troca de
+            // tela disparava uma chamada** — mesmo com o dado tendo 1 segundo de idade.
+            //
+            // Quem mais paga é o Caixa, que alterna Lançar↔Checkout o serviço inteiro:
+            // alternando a cada ~10s, são até 6 chamadas/min ALÉM das 12 do intervalo, todas
+            // redundantes. É a mesma forma do incidente de 02/08 (Regra 44), num gatilho que
+            // ninguém tinha olhado porque não parece um "listener de evento" — mas é.
+            //
+            // O que muda é só a BUSCA. O `fn()` continua sendo chamado sempre: a tela
+            // renderiza de qualquer jeito, com o dado que já está em mãos.
+            const idade = Date.now() - _ultimoEstadoEm;
+            if (idade < _intervaloPollAtual()) {
+                console.log('[Poll] troca de tela — dado tem ' + Math.round(idade / 1000) +
+                            's, ainda fresco. Renderiza sem chamada.');
+                fn();
+                return;
+            }
+
+            pollFromSheets().then(fn);
         }
 
         // Converte linha de itens do Sheets para objeto local
