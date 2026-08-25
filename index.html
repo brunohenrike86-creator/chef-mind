@@ -3169,7 +3169,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-13-e';
+        const CHEF_MIND_VERSAO = '2026-08-13-f';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -11220,6 +11220,37 @@ async function carregarComanda() {
             return document.querySelector('.screen.active')?.id?.replace('screen-', '') || '';
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // PONTO 3b, ETAPA 4 — intervalo do Preparo conforme a fila
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // Fila vazia não tem o que sincronizar. É o único ponto do desenho onde o PERFIL
+        // volta a importar, e a razão é física: a Marmita ganhou botão Atualizar e tem quem
+        // aperte; **a TV não tem**. Ela fica ligada o dia inteiro, inclusive nas horas mortas,
+        // e é a tela que o cliente olha para ver o pedido dele.
+        //
+        // Daí a inversão que parece estranha e não é: com fila, a TV é MAIS rápida que a
+        // Marmita (10s contra 15s) — é o cliente esperando. Sem fila, as duas relaxam.
+        const POLL_PREPARO = {
+            'TV':      { comFila: 10000, semFila: 20000 },
+            'PADRAO':  { comFila: 15000, semFila: 20000 }
+        };
+
+        // Chamado pelo batimento a cada 2s, então precisa ser barato: um `.some()` sobre as
+        // comandas do dia, sem alocar nada. `derivarStatusPreparo` devolve null para comanda
+        // que não entra na fila, e é a mesma fonte de verdade que a tela usa para desenhar —
+        // sem isso o intervalo poderia discordar do que está na tela.
+        function _temFilaDePreparo() {
+            try {
+                const hoje = new Date().toISOString().split('T')[0];
+                return Object.values(state.comandas || {}).some(cmd => {
+                    if (cmd.data !== hoje || cmd.encerramento) return false;
+                    const d = derivarStatusPreparo(cmd);
+                    return d && (d.status === 'Aguardando' || d.status === 'Em Preparo');
+                });
+            } catch (e) { return true; }   // na dúvida, o intervalo mais curto
+        }
+
         // Fonte ÚNICA do intervalo em vigor — três pontos dependem dela (o batimento do poll,
         // a trava da sincronização por evento e a trava da troca de tela). Centralizada para
         // que nenhum deles fique para trás quando o valor mudar.
@@ -11227,7 +11258,15 @@ async function carregarComanda() {
             if (!POLL_POR_TELA) {
                 return POLL_INTERVALO_POR_PERFIL[state.perfil] || POLL_INTERVALO_PADRAO;
             }
-            return POLL_INTERVALO_POR_TELA[_telaAtiva()] || POLL_INTERVALO_TELA_PADRAO;
+            const tela = _telaAtiva();
+
+            // Preparo é a única tela com intervalo variável — ver POLL_PREPARO.
+            if (tela === 'preparo') {
+                const regra = POLL_PREPARO[state.perfil] || POLL_PREPARO.PADRAO;
+                return _temFilaDePreparo() ? regra.comFila : regra.semFila;
+            }
+
+            return POLL_INTERVALO_POR_TELA[tela] || POLL_INTERVALO_TELA_PADRAO;
         }
 
         // ═══════════════════════════════════════════════════════════════════════════════
