@@ -2033,6 +2033,9 @@
                             <!-- Só aparece pro perfil Marmita (ver _initImpressaoMarmita) — é uma config
                                  do tablet físico conectado à impressora, não sincroniza entre devices. -->
                             <button id="btnToggleImpressao" onclick="toggleImpressaoAutomatica()" style="display:none; padding: 6px 12px; background: #999; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold;">🖨️ Impressão: OFF</button>
+                            <!-- Só no perfil Marmita: a TV não tem quem aperte, e os demais
+                                 perfis não ficam parados nesta tela esperando card aparecer. -->
+                            <button id="btnAtualizarPreparo" onclick="atualizarTelaAgora(this)" style="display:none; padding: 6px 12px; background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold;">🔄 Atualizar</button>
                             <button id="btnFullscreenPreparo" onclick="abrirFullscreen()" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold;">🖥️ FULLSCREEN</button>
                         </div>
                     </div>
@@ -2087,6 +2090,7 @@
                                 <div style="font-size:11px; font-weight:bold; letter-spacing:1px; opacity:0.9;">✅ CAIXA ABERTO</div>
                                 <div style="font-size:10px; opacity:0.8;" id="caixaInfoAbertura">—</div>
                             </div>
+                            <button id="btnAtualizarCaixa" onclick="atualizarTelaAgora(this)" style="padding:6px 12px; background:rgba(255,255,255,0.2); color:white; border:1px solid rgba(255,255,255,0.5); border-radius:3px; cursor:pointer; font-size:10px; font-weight:bold;">🔄 Atualizar</button>
                             <div style="text-align:right;">
                                 <div style="font-size:10px; opacity:0.8;">Troco</div>
                                 <div style="font-size:16px; font-weight:bold;" id="caixaTrocoDisplay">R$ 0,00</div>
@@ -2131,7 +2135,7 @@
                             <div style="font-size:10px; font-weight:bold; color:var(--gray); text-transform:uppercase; margin-bottom:6px;">🍛 Itens Mais Vendidos</div>
                             <div id="resumoItensVendidos" style="display:flex; flex-direction:column; gap:4px; margin-bottom:20px;"></div>
 
-                            <button onclick="iniciarFechamentoCaixa()" style="width:100%; padding:16px; background:linear-gradient(135deg,#2C3E50 0%,#1A252F 100%); color:white; border:none; border-radius:10px; font-size:16px; font-weight:bold; cursor:pointer; box-shadow:0 4px 12px rgba(44,62,80,0.4); margin-bottom:8px;">
+                            <button id="btnIrFechamento" onclick="iniciarFechamentoCaixa()" style="width:100%; padding:16px; background:linear-gradient(135deg,#2C3E50 0%,#1A252F 100%); color:white; border:none; border-radius:10px; font-size:16px; font-weight:bold; cursor:pointer; box-shadow:0 4px 12px rgba(44,62,80,0.4); margin-bottom:8px;">
                                 🔒 Fechar Caixa
                             </button>
 
@@ -3150,7 +3154,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-12-y';
+        const CHEF_MIND_VERSAO = '2026-08-13-c';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -5129,6 +5133,12 @@
             if (res && res.id) {
                 itemRef._id = res.id;
                 _filaRemover(_ck);       // confirmado: sai da fila
+                // ⚠️ REDESENHAR. Sem isto o ⏳ do item ficava na tela até o próximo poll —
+                // até 15s parado num item JÁ CONFIRMADO, o que faz o operador desconfiar de
+                // uma gravação que deu certo. O contador da fila sumia (é atualizado pelo
+                // `_filaRemover`), mas a marca no item não, porque nada redesenhava a lista.
+                // Relatado pelo Bruno em 12/08: "a ampulheta fica travada por um tempo".
+                renderizarTelaAtual();
                 return res;
             }
 
@@ -5744,6 +5754,9 @@
             // perfil logado na mesma sessão (handleLogout não recarrega a página).
             const _btnImp = document.getElementById('btnToggleImpressao');
             if (_btnImp) _btnImp.style.display = 'none';
+            // Mesmo motivo: o botão Atualizar do Preparo é só do perfil Marmita.
+            const _btnAtu = document.getElementById('btnAtualizarPreparo');
+            if (_btnAtu) _btnAtu.style.display = 'none';
             try {
                 if (document.exitFullscreen) document.exitFullscreen();
                 else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
@@ -9759,6 +9772,12 @@ async function carregarComanda() {
             if (!btn) return;
             btn.style.display = 'inline-block';
             _atualizarBotaoImpressao();
+
+            // Botão Atualizar do Preparo — mesmo perfil, mesma porta de entrada. A TV não
+            // tem quem aperte, e os demais perfis não ficam parados nesta tela esperando um
+            // card aparecer; quem faz isso é o operador da Marmita, com o cliente na frente.
+            const _atu = document.getElementById('btnAtualizarPreparo');
+            if (_atu) _atu.style.display = 'inline-block';
         }
 
         function _atualizarBotaoImpressao() {
@@ -11102,13 +11121,92 @@ async function carregarComanda() {
         };
         const POLL_INTERVALO_PADRAO = 10000;   // perfil desconhecido → o mais conservador
 
-        // Fonte ÚNICA do intervalo em vigor. Existe para que a etapa 3 do Ponto 3b (poll por
-        // TELA em vez de por perfil) mude um lugar só — hoje três pontos precisam saber esse
-        // número (o setInterval, a trava da sincronização por evento e a trava da troca de
-        // tela), e tê-los calculando cada um por conta seria garantir que um deles ficasse
-        // para trás na hora da migração.
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // PONTO 3b, ETAPA 3 — INTERVALO POR TELA
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // Quem determina o que precisa estar fresco é a TELA, não o crachá de quem olha. O
+        // Admin no celular ajudando no Checkout precisa da mesma frescura que o Caixa; o
+        // mesmo Admin na tela de configuração não precisa de nada.
+        //
+        // Balança, Atendente, Gerente e Admin deixam de ter regra própria — o que fazem já
+        // está descrito pela tela em que estão. A Balança só tem Lançar, então cai em 60s
+        // por consequência.
+        const POLL_INTERVALO_POR_TELA = {
+            'checkout':   10000,   // cliente esperando pagar — a lista tem que estar fresca
+            'preparo':    15000,   // + botão Atualizar no perfil Marmita
+            'lançar':     60000,   // trabalha numa comanda só, coberta pelo refresh sob demanda
+            'caixa-fin': 300000,   // + botão Atualizar e sync forçada no fechamento
+            'areceber':  300000,   // tem endpoint próprio, buscado ao entrar
+            'admin':     300000    // nada operacional
+        };
+        const POLL_INTERVALO_TELA_PADRAO = 30000;
+
+        // 🔌 INTERRUPTOR DE REVERSÃO. Esta é a mudança de maior risco do plano — mexe no
+        // caminho mais quente do sistema. `cmPollPorTela(false)` volta ao comportamento por
+        // perfil na hora, sem deploy, e sobrevive ao F5.
+        let POLL_POR_TELA = (() => {
+            try { return localStorage.getItem('chefmind-poll-por-tela') !== 'off'; }
+            catch (e) { return true; }
+        })();
+
+        window.cmPollPorTela = function (ligar) {
+            POLL_POR_TELA = ligar !== false;
+            try {
+                if (POLL_POR_TELA) localStorage.removeItem('chefmind-poll-por-tela');
+                else localStorage.setItem('chefmind-poll-por-tela', 'off');
+            } catch (e) {}
+            pararPolling(); iniciarPolling();
+            console.warn('[Poll] modo: ' + (POLL_POR_TELA ? 'POR TELA' : 'por perfil (revertido)'));
+            return POLL_POR_TELA;
+        };
+
+        // ═══ BOTÃO ATUALIZAR ═══
+        //
+        // Complemento do intervalo folgado: em vez de o sistema decidir quando o operador vê
+        // dado fresco, o operador decide. É melhor UX **e** menos chamadas — a alternativa
+        // seria um intervalo curto o tempo todo para cobrir um caso que acontece de vez em
+        // quando.
+        //
+        // Três cuidados, todos por causa de coisas que já morderam este projeto:
+        //   · trava de 4s     — toque duplo não vira duas chamadas (Regra 44)
+        //   · estado de loading — sem isso o operador toca três vezes (Regra 37)
+        //   · aviso quando nada muda — senão parece que o botão não funciona
+        let _atualizarEm = 0;
+
+        async function atualizarTelaAgora(btn) {
+            if (Date.now() - _atualizarEm < 4000) return;
+            _atualizarEm = Date.now();
+
+            const rotulo = btn ? btn.innerHTML : null;
+            if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Atualizando...'; }
+
+            const antes = _ultimoEstadoEm;
+            try {
+                await _aguardarPollFresco();   // mesmo motivo: `pollFromSheets` sai cedo
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = rotulo; }
+            }
+
+            if (_ultimoEstadoEm === antes) {
+                showToast('Não conseguimos atualizar agora. Tente de novo.', 'warning');
+            } else {
+                showToast('✅ Atualizado', 'success');
+            }
+        }
+
+        function _telaAtiva() {
+            return document.querySelector('.screen.active')?.id?.replace('screen-', '') || '';
+        }
+
+        // Fonte ÚNICA do intervalo em vigor — três pontos dependem dela (o batimento do poll,
+        // a trava da sincronização por evento e a trava da troca de tela). Centralizada para
+        // que nenhum deles fique para trás quando o valor mudar.
         function _intervaloPollAtual() {
-            return POLL_INTERVALO_POR_PERFIL[state.perfil] || POLL_INTERVALO_PADRAO;
+            if (!POLL_POR_TELA) {
+                return POLL_INTERVALO_POR_PERFIL[state.perfil] || POLL_INTERVALO_PADRAO;
+            }
+            return POLL_INTERVALO_POR_TELA[_telaAtiva()] || POLL_INTERVALO_TELA_PADRAO;
         }
 
         // ═══════════════════════════════════════════════════════════════════════════════
@@ -11251,16 +11349,32 @@ async function carregarComanda() {
         let _pollWaiters        = [];   // callbacks a chamar quando o próximo poll terminar
         let _pollIntervaloAtual = null; // ms em uso, para detectar troca de perfil
 
+        // ⚠️ BATIMENTO FIXO QUE DECIDE, em vez de um setInterval com o valor do intervalo.
+        //
+        // Com o intervalo variando por tela, recriar o `setInterval` a cada troca de tela
+        // traria de volta o "efeito B": alternando entre Lançar (60s) e Checkout (10s) a cada
+        // poucos segundos, o relógio reiniciaria toda vez e **o poll periódico nunca
+        // aconteceria**. Foi exatamente esse o sintoma que apareceu no poll do cardápio
+        // depois do Ponto 4, e a lição vale igual aqui.
+        //
+        // A saída é a mesma da Regra 48: não perguntar "faz quanto tempo do último timer?" e
+        // sim "o dado que eu tenho está velho?". Um batimento curto e fixo compara a idade
+        // real com o intervalo da tela ATUAL e decide. Trocar de tela passa a mudar a
+        // resposta da pergunta, não a reiniciar o relógio.
+        //
+        // De brinde: como `_ultimoEstadoEm` é atualizado por QUALQUER poll bem-sucedido
+        // (inclusive os disparados por evento), o batimento já leva isso em conta — o
+        // setInterval antigo disparava às cegas por cima deles.
+        const POLL_TICK_MS = 2000;
+
         function iniciarPolling() {
-            const ms = _intervaloPollAtual();
-            // Já rodando no intervalo certo → nada a fazer. Mas se o PERFIL mudou (troca de
-            // usuário sem recarregar a página), é preciso reiniciar: com o `return` seco de
-            // antes, o aparelho continuaria no intervalo do perfil anterior para sempre.
-            if (_pollingInterval && _pollIntervaloAtual === ms) return;
-            if (_pollingInterval) clearInterval(_pollingInterval);
-            _pollIntervaloAtual = ms;
-            _pollingInterval = setInterval(pollFromSheets, ms);
-            console.log('[Poll] ✅ Iniciado — perfil ' + (state.perfil || '?') + ' · ' + (ms / 1000) + 's');
+            if (_pollingInterval) return;
+            _pollingInterval = setInterval(() => {
+                if (!state.user) return;
+                if (Date.now() - _ultimoEstadoEm >= _intervaloPollAtual()) pollFromSheets();
+            }, POLL_TICK_MS);
+            console.log('[Poll] ✅ Iniciado — ' + (POLL_POR_TELA ? 'por tela' : 'por perfil') +
+                        ' · batimento ' + (POLL_TICK_MS / 1000) + 's');
         }
 
         function pararPolling() {
@@ -11354,6 +11468,22 @@ async function carregarComanda() {
 
         // Chama fn() quando o próximo poll terminar (seja o atual em andamento ou um novo).
         // Garante re-renderização com dados REALMENTE frescos, sem iniciar poll duplicado.
+        // Espera dado REALMENTE fresco, e não só "disparei um poll".
+        //
+        // `pollFromSheets()` sai na primeira linha quando já existe um poll em voo — então
+        // `await pollFromSheets()` pode voltar instantaneamente sem ter buscado nada. Com o
+        // batimento de 2s do ponto 3b, isso é o caso provável, não a exceção.
+        //
+        // Aqui a gente entra na fila de quem já está esperando aquele poll terminar, que é o
+        // mesmo mecanismo do `reRenderAposPoll`.
+        function _aguardarPollFresco() {
+            return new Promise(resolve => {
+                if (!state.user) { resolve(); return; }
+                if (_pollingAtivo) { _pollWaiters.push(resolve); return; }
+                pollFromSheets().then(resolve).catch(resolve);
+            });
+        }
+
         function reRenderAposPoll(fn) {
             if (!state.user) return;
             if (_pollingAtivo) {
@@ -12029,6 +12159,36 @@ async function carregarComanda() {
         }
 
         async function iniciarFechamentoCaixa() {
+            // ⚠️ SINCRONIZAÇÃO FORÇADA E BLOQUEANTE — condição para a tela Caixa ficar em 5 min.
+            //
+            // A primeira versão disparava o poll SEM `await`, "para não travar a tela". O
+            // Bruno testou e derrubou na hora: a tela calculava do estado velho, aparecia com
+            // a comanda paga ainda listada como pendente, e a resposta chegava depois sem
+            // servir para nada. Buscar e não esperar, aqui, é o mesmo que não buscar.
+            //
+            // Este é o único lugar do sistema onde vale a pena BLOQUEAR, e por três razões:
+            // acontece uma vez por dia; os números daqui viram o registro do dia; e mostrar
+            // total errado no fechamento, mesmo por um segundo, é pior que esperar 2s.
+            //
+            // Em todo o resto do sistema a escolha foi a oposta — abrir na hora e corrigir
+            // depois. A diferença é que lá o operador está trabalhando e aqui está conferindo.
+            const _btnFech = document.getElementById('btnIrFechamento');
+            const _rotFech = _btnFech ? _btnFech.innerHTML : null;
+            if (Date.now() - _ultimoEstadoEm > 3000) {
+                console.log('[Caixa] fechamento — sincronizando ANTES de somar');
+                if (_btnFech) { _btnFech.disabled = true; _btnFech.innerHTML = '⏳ Conferindo os totais...'; }
+                try {
+                    await _aguardarPollFresco();
+                } catch (e) { /* falha não pode impedir o fechamento */ }
+                if (_btnFech) { _btnFech.disabled = false; _btnFech.innerHTML = _rotFech; }
+
+                // Se nem assim o dado veio, seguir com o local — mas dizendo isso ao operador,
+                // porque ele está prestes a fechar o dia com um número que pode estar velho.
+                if (Date.now() - _ultimoEstadoEm > 3000) {
+                    showToast('⚠️ Não conseguimos atualizar os totais. Confira antes de fechar.', 'warning');
+                }
+            }
+
             const dataAtual = new Date().toISOString().split('T')[0];
             const abertas   = Object.values(state.comandas).filter(c =>
                 c.data === dataAtual && !c.encerramento &&
