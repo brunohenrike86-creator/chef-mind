@@ -3150,7 +3150,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-12-p';
+        const CHEF_MIND_VERSAO = '2026-08-12-y';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -3374,10 +3374,21 @@
             try {
                 const _dur = Date.now() - t0;
                 if (_dur < 0 || _dur > _OBS_MS_ABSURDO) return;   // registro impossível, descarta
+                // ⚠️ RESPOSTA SEMÂNTICA NÃO É FALHA.
+                //
+                // `novaComanda` devolve `{sucesso:false, erro:'Comanda já aberta', jaAberta:true}`
+                // quando o número já existe no dia — e isso é o sistema FUNCIONANDO: o servidor
+                // diz a verdade e o front usa a resposta para carregar a comanda real.
+                //
+                // O classificador antigo via `.erro` e carimbava como falha. No teste do Bruno
+                // em 12/08, carregar repetidamente uma comanda existente produziu 9 `erro_gas`
+                // em 15 chamadas — 80% de "não-ok" para um fluxo que deu certo 100% das vezes.
+                // Métrica que grita quando nada está errado é métrica que ninguém vai olhar.
                 let d = 'ok';
                 if (erroTransporte)                d = /timeout/i.test(erroTransporte) ? 'timeout' : 'transporte';
                 else if (json && json._incerto)    d = 'incerto';
                 else if (json && json._transporte) d = 'transporte';
+                else if (json && (json.jaAberta || json.cancelada)) d = 'semantico';
                 else if (json && json.erro)        d = 'erro_gas';
 
                 _obsBuffer.push({
@@ -3517,7 +3528,7 @@
                     porAcao[k].srv.push(r.srv);
                     porAcao[k].transp.push(Math.max(0, r.ms - r.srv));
                 }
-                if (r.d !== 'ok') porAcao[k].ruins++;
+                if (r.d === 'timeout' || r.d === 'transporte' || r.d === 'incerto') porAcao[k].ruins++;
             });
 
             return {
@@ -3530,7 +3541,12 @@
                 trP50: _obsPercentil(transp, 0.50), trP95: _obsPercentil(transp, 0.95),
                 piorTransporte: transp.length ? Math.max(...transp) : null,
                 desfechos: desfechos,
-                taxaRuim: +(((regs.length - (desfechos.ok || 0)) / regs.length) * 100).toFixed(1),
+                // "Falha" = não conseguimos falar direito com o servidor. `erro_gas` e
+                // `semantico` ficam de fora: nos dois o servidor RESPONDEU. Eles aparecem no
+                // detalhe do cartão, para não sumirem — um `erro_gas` que cresce continua
+                // sendo sinal de alguma coisa, só não é falha de comunicação.
+                taxaRuim: +((((desfechos.timeout || 0) + (desfechos.transporte || 0) +
+                              (desfechos.incerto || 0)) / regs.length) * 100).toFixed(1),
                 porAcao: porAcao
             };
         }
@@ -3606,7 +3622,7 @@
         }
 
         function _obsTSVHoras() {
-            const DESF = ['ok', 'timeout', 'transporte', 'incerto', 'erro_gas'];
+            const DESF = ['ok', 'semantico', 'timeout', 'transporte', 'incerto', 'erro_gas'];
             const dev = _obsDevice();
             const cab = ['aparelho', 'hora', 'chamadas']
                 .concat(DESF)
@@ -3771,7 +3787,7 @@
         // externa faria o diagnóstico falhar junto com o que ele deveria diagnosticar.
         const _OBS_COR = { ok: 'var(--success)', timeout: 'var(--danger)',
                            transporte: 'var(--danger)', incerto: 'var(--warning)',
-                           erro_gas: 'var(--gray)' };
+                           erro_gas: 'var(--gray)', semantico: '#5DADE2' };
 
         // Dispersão: cada ponto é uma chamada. Escala LOGARÍTMICA no eixo do tempo, porque
         // é ela que revela o formato bimodal — com escala linear, tudo abaixo de 3s vira uma
@@ -3833,7 +3849,7 @@
                 for (let i = 0; i < 7; i++) { t.nav[i] += v.nav[i]; t.tr[i] += v.tr[i]; }
             });
             t.ok = t.des.ok || 0;
-            t.ruins = t.n - t.ok;
+            t.ruins = (t.des.timeout || 0) + (t.des.transporte || 0) + (t.des.incerto || 0);
             // Quando há filtro de desfecho, é ELE que vira a altura da barra.
             t.foco = _obsFiltro.d ? (t.des[_obsFiltro.d] || 0) : t.n;
             return t;
@@ -3959,12 +3975,15 @@
             el.innerHTML = _barraJanela + `
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
                     ${card('Chamadas', r.total, r.porMinuto + '/min', null)}
-                    ${card('Não-ok', r.taxaRuim + '%', Object.entries(r.desfechos).filter(([k]) => k !== 'ok').map(([k, v]) => k + ':' + v).join(' ') || 'nenhum', r.taxaRuim > 5 ? 'var(--danger)' : 'var(--success)')}
+                    ${card('Falhas', r.taxaRuim + '%', Object.entries(r.desfechos).filter(([k]) => k !== 'ok').map(([k, v]) => k + ':' + v).join(' ') || 'nenhuma', r.taxaRuim > 5 ? 'var(--danger)' : 'var(--success)')}
                     ${card('Navegador p95', (r.msP95 ?? '—') + 'ms', 'p50 ' + (r.msP50 ?? '—') + 'ms', cor(r.msP95))}
                     ${card('Transporte p95', (r.trP95 ?? '—') + 'ms', 'pior ' + (r.piorTransporte ?? '—') + 'ms', cor(r.trP95))}
                 </div>
 
                 <div style="background:var(--bg-light);border-left:3px solid var(--primary);padding:7px 9px;border-radius:5px;font-size:10px;color:var(--gray);margin-bottom:10px;line-height:1.45;">
+                    <strong>Falhas</strong> conta só <em>timeout</em>, <em>transporte</em> e <em>incerto</em> — os casos em que
+                    não conseguimos falar direito com o servidor. <em>semantico</em> (o servidor respondeu "essa comanda já
+                    existe") e <em>erro_gas</em> (respondeu e recusou) ficam de fora: neles a comunicação funcionou.<br>
                     <strong>Transporte</strong> = tempo que o navegador esperou menos o tempo que o servidor levou.
                     É o pedaço que não está no nosso código e que nunca conseguimos ver.
                     Percentil e não média: a cauda é bimodal, e média de duas populações descreve um valor que não acontece.
@@ -4499,6 +4518,20 @@
         // O ganho grande de chamadas não está aqui — está no ponto 3b (poll por tela, −94%).
         const CARDAPIO_POLL_MS = 10 * 60 * 1000;
 
+        // Momento da última busca de cardápio BEM-SUCEDIDA. Existe porque o timer sozinho
+        // não basta: o Ponto 4 para o poll quando a aba fica oculta e o recria quando volta,
+        // e `setInterval` só executa a primeira vez depois do intervalo INTEIRO. Um aparelho
+        // que alterna de aba a cada poucos minutos — o celular do atendente, entrando e
+        // saindo do bolso — reiniciaria o relógio para sempre e **nunca** atualizaria o
+        // cardápio. Pego pelo Bruno em 12/08, olhando a própria observabilidade.
+        //
+        // A pergunta certa é a mesma da Regra 48: não "faz quanto tempo do último timer?",
+        // e sim "o dado que eu tenho está velho?".
+        //
+        // ⚠️ Declarada ANTES da função que a usa, de propósito — ver o bug do `localMudou`
+        // na Seção 7 do Knowledge, onde um `let` declarado abaixo do uso derrubou o poll.
+        let _cardapioUltimoEm = 0;
+
         async function _buscarCardapioAgora(motivo) {
             if (!state.user) return false;
             console.log('[Cardápio] buscando —', motivo);
@@ -4516,6 +4549,7 @@
                 console.warn('[Sheets] ⚠️ getCardapioEConfig falhou — mantendo cardápio e carnes anteriores');
                 return false;
             }
+            _cardapioUltimoEm = Date.now();
             if (Array.isArray(r.cardapio)) _processarCardapioRecebido(r.cardapio);
             if (r.config) { _aplicarConfigCarnes(r.config); _obsAplicarConfig(r.config); }
             return true;
@@ -4700,6 +4734,9 @@
                     // vazia caía fora do if e a lista local ficava com o valor velho.
                     _aplicarConfigCarnes(config);
                     _obsAplicarConfig(config);   // 3ª camada de desligamento (Ponto 8)
+                    // O boot TRAZ o cardápio junto (desde o ponto 1). Carimbar aqui evita
+                    // que a idade nasça infinita e dispare uma busca logo após o login.
+                    _cardapioUltimoEm = Date.now();
                     // Rodízio de telas ociosas do Fullscreen Cliente — chave genérica na
                     // aba config (idle_playlist), sem precisar de mudança no GAS (getConfig
                     // já é chave|valor livre). Valor é um JSON array de slides, ex.:
@@ -5006,14 +5043,50 @@
         }
 
         async function sheets_addItem(chave, itemRef, dados) {
-            const comanda = state.comandas[chave];
+            let comanda = state.comandas[chave];
             if (!comanda) return null;
+
             // ⏳ aguarda comanda ser criada no Sheets se ainda estiver pendente
             if (comanda._pendingNovaComanda) await comanda._pendingNovaComanda;
+
+            // ⚠️ RELER A COMANDA DEPOIS DO AWAIT — a referência de cima pode ter morrido.
+            //
+            // Achado pelo Bruno em 12/08, num cenário raro e real: o aparelho A cria a
+            // comanda; segundos depois, antes do poll, o aparelho B carrega o mesmo número.
+            // B não tem a comanda localmente, então cria de forma otimista (feedback verde)
+            // — e o GAS responde `jaAberta`. O ramo que trata isso faz
+            // `delete state.comandas[chave]` e absorve a comanda real do servidor, criando
+            // um objeto NOVO.
+            //
+            // A constante capturada antes do `await` continuava apontando para o objeto
+            // descartado, que nunca ganha `_id`. Resultado: o item lançado nessa janela
+            // caía no `return null` abaixo e **nunca era gravado** — em silêncio, com a
+            // tela mostrando a comanda normalmente.
+            //
+            // É a Regra 43 pelo avesso: lá o problema era ler uma global mutável tarde
+            // demais; aqui é capturar uma referência cedo demais e ela ser substituída.
+            comanda = state.comandas[chave];
+            if (!comanda) {
+                console.warn('[Sheets] addItem: comanda sumiu durante a criação |', chave);
+                return null;
+            }
+
+            // O item foi empurrado no array da comanda ANTIGA. Se o objeto foi trocado, ele
+            // ficou órfão: gravaria no servidor e não apareceria em tela nenhuma. Reanexa.
+            if (Array.isArray(comanda.itens) && comanda.itens.indexOf(itemRef) === -1) {
+                comanda.itens.push(itemRef);
+                console.log('[Sheets] item reanexado à comanda absorvida |', chave);
+            }
+
             if (!comanda._id) {
                 console.warn('[Sheets] sheets_addItem: comanda._id não disponível, item não salvo', chave);
                 return null;
             }
+
+            // Marca o instante do lançamento. É o que permite ao `_absorverComandaDoServidor`
+            // distinguir "item recém-lançado que o servidor ainda não conhece" de "item que o
+            // servidor removeu" — sem isso, um não pode ser preservado sem ressuscitar o outro.
+            itemRef._addedEm = Date.now();
             // Marca a gravação como EM VOO. É o que permite ao poll distinguir
             // "otimista, ainda não confirmado" de "resquício de uma gravação que já
             // terminou" — sem isso o item duplica na tela (ver o merge no pollFromSheets).
@@ -7492,6 +7565,47 @@ function _absorverComandaDoServidor(cmd) {
     else if (cmd.status === 'em_preparo' || itens.some(i => i.preparo_ja)) statusFinal = 'Em Preparo';
     else                                                      statusFinal = 'Aberta';
 
+    // ⚠️ PRESERVAR O QUE ESTÁ NA FILA — a proteção mora AQUI, não em cada chamador.
+    //
+    // Esta função substitui a comanda inteira pela versão do servidor. Sem este cuidado, ela
+    // apaga o item otimista que ainda não foi gravado — e o dreno da Onda 1 grava certo na
+    // planilha, mas não sobra item algum na tela para receber o id.
+    //
+    // É a TERCEIRA vez que este mesmo bug aparece: primeiro no poll, depois no boot, agora
+    // na busca sob demanda. Por isso a correção veio para dentro da função que absorve, em
+    // vez de ser repetida no chamador — o quarto lugar que chamar isto já nasce protegido.
+    const _anterior = state.comandas[chave];
+    const _idsServidor = new Set(itens.map(i => String(i._id)));
+
+    // Três situações em que um item local NÃO pode ser descartado:
+    //
+    //   1. sem `_id`, com gravação EM VOO      → a resposta ainda vai chegar
+    //   2. sem `_id`, na fila da Onda 1        → o dreno ainda vai reenviar
+    //   3. COM `_id`, lançado há pouco, e que  → gravou, mas esta resposta do servidor foi
+    //      não veio nesta resposta                montada antes de ele chegar lá (corrida)
+    //
+    // A terceira nasceu do relato do Bruno em 12/08: item gravava na planilha e sumia da
+    // tela. O `_addedEm` é o que a torna segura — item que veio do servidor não tem esse
+    // carimbo, então um item REMOVIDO por outro aparelho nunca é ressuscitado por engano.
+    const _chavesServidor = new Set(itens.map(i => i._clienteKey).filter(Boolean));
+
+    const _pendentes = ((_anterior && _anterior.itens) || []).filter(i => {
+        if (!i._id) {
+            // ⚠️ O servidor pode JÁ TER gravado este item e a resposta do addItem ainda não
+            // ter voltado. Nesse instante o item local não tem `_id`, mas o do servidor tem
+            // a mesma `cliente_key` — preservar aqui seria mostrar o lançamento em dobro.
+            if (i._clienteKey && _chavesServidor.has(i._clienteKey)) return false;
+            return i._enviando || _filaTemChave(i._clienteKey);
+        }
+        if (_idsServidor.has(String(i._id))) return false;          // já veio do servidor
+        return i._addedEm && (Date.now() - i._addedEm) < 60000;     // recém-lançado aqui
+    });
+    const _somaPend   = _pendentes.reduce((s, i) =>
+        s + (parseFloat(i.preco) || 0) * (parseFloat(i.quantidade) || 1), 0);
+    if (_pendentes.length) {
+        console.log('[Sheets] preservando', _pendentes.length, 'item(ns) na fila da comanda', chave);
+    }
+
     state.comandas[chave] = {
         _id:            cmd.id,
         numero:         numeroNorm,
@@ -7499,8 +7613,11 @@ function _absorverComandaDoServidor(cmd) {
         data,
         paid:           isPaid,
         encerramento:   cmd.encerramento || null,
-        itens,
-        total:          parseFloat(cmd.total) || 0,
+        itens:          [...itens, ..._pendentes],
+        // O servidor não conhece os pendentes — sem somar, as linhas da tela não fecham
+        // com o total, e número que não bate com o cliente na frente é pior que número
+        // marcado como pendente (decisão de 06/08).
+        total:          (parseFloat(cmd.total) || 0) + _somaPend,
         dataCriacao:    cmd.timestamp_abertura || null,
         formaPagamento: cmd.forma_pagamento || null,
         dataPagamento:  cmd.timestamp_pagamento || null,
@@ -7550,6 +7667,16 @@ async function carregarComanda() {
             }
 
             const comanda = state.comandas[key];
+
+            // ── ETAPA 2: refresh sob demanda ──
+            // Dispara em paralelo, sem `await`: a comanda abre AGORA com o dado local e a
+            // tela se corrige quando a resposta chegar. Fica depois dos ramos de
+            // reset/fechamento/cancelada de propósito — comanda encerrada não tem o que
+            // atualizar, e buscar ali seria chamada jogada fora.
+            if (comanda.encerramento !== 'reset' && comanda.encerramento !== 'fechamento'
+                && comanda.encerramento !== 'cancelada') {
+                _refrescarComandaSobDemanda(key, numeroNorm, 'abrir comanda no Lançar');
+            }
 
             // COMANDA COM RESET = tratar como nova (caixa foi aberto e limpou o dia)
             if (comanda.encerramento === 'reset') {
@@ -7836,12 +7963,23 @@ async function carregarComanda() {
             const key = `${numeroNorm}-${dataAtual}`;
             const comanda = state.comandas[key];
             const inputEl = document.getElementById('checkoutNumInput');
-            // Não existe ou foi resetada (expediente anterior)
+            // ── ETAPA 2: não desistir sem perguntar ao servidor ──
+            // Era a porta mais furada: dizia "não encontrada" sem nunca ter consultado.
+            // Comanda que existe no servidor e não chegou a este aparelho fazia o operador
+            // criar outra e relançar tudo.
             if (!comanda || comanda.encerramento === 'reset') {
-                if (inputEl) inputEl.value = '';
-                showToast(`⚠️ Comanda #${numeroNorm} não encontrada`, 'warning');
+                if (comanda && comanda.encerramento === 'reset') {
+                    if (inputEl) inputEl.value = '';
+                    showToast(`⚠️ Comanda #${numeroNorm} não encontrada`, 'warning');
+                    return;
+                }
+                showToast(`Buscando comanda #${numeroNorm}...`, 'info');
+                _buscarComandaNoServidorECarregar(numeroNorm, inputEl);
                 return;
             }
+
+            // (O refresh por dado velho NÃO é chamado aqui: esta função termina em
+            //  selecionarComandaCheckout(), que já cobre o caso para as três portas.)
             // Existe mas já foi paga ou encerrada
             if (comanda.status === 'Fechada/Paga' || comanda.paid || comanda.encerramento === 'fechamento') {
                 if (inputEl) inputEl.value = '';
@@ -8792,6 +8930,17 @@ async function carregarComanda() {
             // em Confirmar apagava a seleção silenciosamente (ver bloco de reset abaixo) — o
             // operador via o botão "desselecionar" sozinho e o pagamento falhava com toast vermelho.
             const mesmaComandaJaAtiva = (key === comandaCheckoutAtual);
+
+            // ── ETAPA 2 ── Este é o ponto comum do CLIQUE NO CARD e do BIPE DO LEITOR (ver
+            // o comentário no topo da função). Cobrir aqui pega as duas portas de uma vez.
+            //
+            // Só busca se o dado estiver velho DE FATO — não a cada seleção. Em operação
+            // normal o poll de 8s mantém a idade abaixo do corte e isto não custa nada.
+            // E `mesmaComandaJaAtiva` evita disparar no re-render que o poll provoca.
+            if (!mesmaComandaJaAtiva && comanda && !comanda.paid && !comanda.encerramento) {
+                _refrescarSeVelhoNoCheckout(key, comanda.numero);
+            }
+
             comandaCheckoutAtual = key;
             document.getElementById('checkout-panel-left').classList.add('comanda-ativa');
             const btnLimpar = document.getElementById('btnLimparCheckout');
@@ -10962,6 +11111,141 @@ async function carregarComanda() {
             return POLL_INTERVALO_POR_PERFIL[state.perfil] || POLL_INTERVALO_PADRAO;
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // PONTO 3b, ETAPA 2 — REFRESH SOB DEMANDA AO ABRIR COMANDA
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // É o que torna a etapa 3 possível. A troca é: sai "poll rápido para adivinhar quando
+        // alguém vai precisar", entra "dado fresco no momento exato do uso". Sem isto,
+        // afrouxar o Lançar para 60s faria o operador lançar em cima de comanda desatualizada.
+        //
+        // ⚠️ NÃO BLOQUEIA A TELA. A comanda abre na hora com o dado local e se corrige quando
+        // a resposta chega. Bloquear somaria 1-3s a cada abertura — e 30s quando a cauda de
+        // transporte pegar — no fluxo mais frequente do dia. Foi exatamente esse o erro
+        // cometido no ponto 1, quando pus uma busca antes de CRIAR comanda.
+        const _REFRESH_TRAVA_MS  = 5000;    // absorve disparo duplicado do mesmo gatilho
+        const _CHECKOUT_IDADE_MS = 10000;   // acima disso, algum poll falhou
+
+        const _refreshUltimoEm = {};   // { chave: timestamp }
+
+        async function _refrescarComandaSobDemanda(chave, numero, motivo) {
+            if (!state.user) return;
+
+            // Trava por comanda. Cobre leitor bipando duas vezes e Enter apertado em
+            // duplicata — NÃO cobre a sequência de pesagens (ali a comanda já está aberta e
+            // nem passa por aqui; correção do Bruno em 12/08).
+            const ultimo = _refreshUltimoEm[chave] || 0;
+            if (Date.now() - ultimo < _REFRESH_TRAVA_MS) return;
+            _refreshUltimoEm[chave] = Date.now();
+
+            let r = await sheetsAPI('getComandaCompleta', { numero: String(numero) }, 20000, 'usuario');
+
+            // Uma retentativa, só em falha de TRANSPORTE — mesmo padrão do login e do
+            // cardápio. Não custa percepção: o operador já está trabalhando na tela.
+            if (_falhaDeTransporte(r)) {
+                await new Promise(res => setTimeout(res, 900));
+                r = await sheetsAPI('getComandaCompleta', { numero: String(numero) }, 20000, 'usuario');
+            }
+
+            // ⚠️ Falha NÃO apaga nada (Regra 47). O local continua valendo e o operador segue.
+            if (!_respostaValida(r) || !r.comanda) {
+                console.warn('[Refresh] ' + motivo + ' — comanda', numero, 'não veio. Mantendo o local.');
+                return;
+            }
+
+            const antes = state.comandas[chave];
+            const eraPaga    = !!(antes && antes.paid);
+            const totalAntes = antes ? antes.total : null;
+
+            _absorverComandaDoServidor(r.comanda);   // já preserva a fila, ver a função
+
+            const depois = state.comandas[chave];
+            if (!depois) return;
+
+            // Foi paga em outro aparelho enquanto isto acontecia. Mudar o estado debaixo do
+            // operador é intencional: hoje ele lançaria itens numa comanda já paga e NUNCA
+            // descobriria.
+            if (!eraPaga && depois.paid) {
+                showToast('⚠️ Comanda #' + numero + ' já foi paga em outro aparelho.', 'warning');
+                if (state.comandaAtual === chave) { state.modoLeitura = true; carregarComanda(); }
+                return;
+            }
+
+            if (totalAntes !== null && Math.abs((depois.total || 0) - totalAntes) > 0.001) {
+                console.log('[Refresh] comanda', numero, 'total', totalAntes, '→', depois.total);
+                showToast('🔄 Comanda #' + numero + ' atualizada: R$ ' +
+                          (depois.total || 0).toFixed(2), 'warning');
+            }
+
+            renderizarTelaAtual();
+        }
+
+        // No Checkout a decisão é pela IDADE REAL do dado, não pelo intervalo da tela.
+        // O intervalo diz de quanto em quanto tempo a gente TENTA; a idade diz se o dado que
+        // está em mãos presta. Com a cauda de transporte, vários polls seguidos podem falhar
+        // e o "8 segundos" virar minutos sem ninguém perceber (observação do Bruno, 12/08 —
+        // é a Regra 48 aplicada onde eu não tinha aplicado).
+        //
+        // Em operação normal isto NÃO dispara: o poll de 8s mantém a idade abaixo do corte.
+        // Ele existe para o momento em que algo já deu errado — e é o momento em que o
+        // cliente está no caixa para pagar.
+        // Busca BLOQUEANTE — usada quando a comanda não está no aparelho e sem ela não há o
+        // que mostrar. Aqui a retentativa dobra a espera no pior caso, e aceito: a
+        // alternativa é dizer "não encontrada" para uma comanda que existe, e o contorno
+        // natural do operador é criar outra e relançar tudo.
+        async function _buscarComandaNoServidorECarregar(numero, inputEl) {
+            let r = await sheetsAPI('getComandaCompleta', { numero: String(numero) }, 20000, 'usuario');
+            if (_falhaDeTransporte(r)) {
+                await new Promise(res => setTimeout(res, 900));
+                r = await sheetsAPI('getComandaCompleta', { numero: String(numero) }, 20000, 'usuario');
+            }
+
+            if (!_respostaValida(r)) {
+                showToast('Não conseguimos consultar a comanda. Tente de novo.', 'error');
+                return;
+            }
+            if (!r.comanda) {
+                if (inputEl) inputEl.value = '';
+                showToast(`⚠️ Comanda #${numero} não encontrada`, 'warning');
+                return;
+            }
+
+            const chave = _absorverComandaDoServidor(r.comanda);
+            const cmd   = state.comandas[chave];
+            if (!cmd) return;
+
+            // ⚠️ Redesenhar a LISTA. Sem isto a comanda entrava no estado e era selecionada,
+            // mas o card só aparecia quando o próximo poll re-renderizava o Checkout — dando
+            // a impressão de que quem trouxe a comanda foi o poll, e não esta busca.
+            // Pego pelo Bruno no teste 5: "só apareceu depois que o poll rodou".
+            renderizarTelaAtual();
+
+            if (cmd.paid || cmd.encerramento === 'fechamento') {
+                if (inputEl) inputEl.value = '';
+                showToast(`⚠️ Comanda #${numero} já paga`, 'warning');
+                renderizarTelaAtual();
+                return;
+            }
+            if (inputEl) inputEl.value = '';
+            selecionarComandaCheckout(chave, cmd);
+        }
+
+        function _refrescarSeVelhoNoCheckout(chave, numero) {
+            // ⚠️ Poll EM VOO já vai trazer tudo — buscar por cima é chamada jogada fora.
+            //
+            // `_ultimoEstadoEm` só é atualizado quando o poll TERMINA. Enquanto ele está a
+            // caminho, a idade continua crescendo e passa dos 10s — então cada clique num
+            // card durante esses segundos disparava uma busca. Clicando em vários cards
+            // seguidos, várias buscas. Pego pelo Bruno no teste 4, em 12/08.
+            if (_pollingAtivo) return;
+
+            const idade = Date.now() - _ultimoEstadoEm;
+            if (idade < _CHECKOUT_IDADE_MS) return;
+            console.log('[Refresh] checkout — dado tem ' + Math.round(idade / 1000) +
+                        's, buscando comanda ' + numero);
+            _refrescarComandaSobDemanda(chave, numero, 'checkout com dado velho');
+        }
+
         let _pollingInterval    = null;
         let _pollingAtivo       = false;
         let _pollWaiters        = [];   // callbacks a chamar quando o próximo poll terminar
@@ -11057,6 +11341,15 @@ async function carregarComanda() {
             iniciarPolling();
             iniciarPollingCardapio();
             _sincronizarPorEvento('voltou à aba');
+
+            // Cardápio: mesma lógica, com o piso do próprio intervalo. Só busca se o dado
+            // realmente envelheceu — alternar de aba não gera chamada nenhuma.
+            const _idadeCard = Date.now() - _cardapioUltimoEm;
+            if (state._cardapioCarregado && _idadeCard >= CARDAPIO_POLL_MS) {
+                console.log('[Cardápio] voltou à aba — dado tem ' +
+                            Math.round(_idadeCard / 60000) + ' min, buscando.');
+                _buscarCardapioAgora('voltou à aba com dado velho');
+            }
         });
 
         // Chama fn() quando o próximo poll terminar (seja o atual em andamento ou um novo).
@@ -11098,6 +11391,12 @@ async function carregarComanda() {
             const cat = (i.categoria || '').toLowerCase();
             return {
                 _id:        i.id,
+                // ⚠️ A `cliente_key` precisa vir para o lado de cá. É o único fio que liga o
+                // item OTIMISTA (ainda sem `_id`, na tela) ao MESMO item já gravado que o
+                // servidor devolve. Sem ela, os dois parecem itens diferentes e a tela mostra
+                // o lançamento em dobro — foi o que o Bruno pegou em 12/08.
+                // É a mesma dedup da Onda 1, aplicada à exibição em vez da gravação.
+                _clienteKey: i.cliente_key || '',
                 codigo:     String(i.codigo).padStart(3, '0'),
                 nome:       i.nome,
                 quantidade: parseFloat(i.quantidade) || 1,
@@ -11460,8 +11759,14 @@ async function carregarComanda() {
                                 // respondeu mal e ainda vai ser reencaminhada. Sem a segunda
                                 // condição o poll apagaria da tela um item que o dreno ainda
                                 // vai confirmar — o operador veria sumir e relançaria.
+                                // Mesmo cuidado do `_absorverComandaDoServidor`: item sem
+                                // `_id` local cuja `cliente_key` já veio do servidor É o
+                                // mesmo item — preservar duplicaria na tela.
+                                const _ckServidor = new Set(serverItems.map(i => i._clienteKey).filter(Boolean));
                                 const pendingItems = local.itens.filter(i =>
-                                    !i._id && (i._enviando || _filaTemChave(i._clienteKey)));
+                                    !i._id
+                                    && !(i._clienteKey && _ckServidor.has(i._clienteKey))
+                                    && (i._enviando || _filaTemChave(i._clienteKey)));
                                 local.itens  = [...serverItems, ...pendingItems];
                                 // Mesma razão do boot: o servidor não conhece os pendentes,
                                 // então o total dele sozinho não fecha com as linhas da tela.
