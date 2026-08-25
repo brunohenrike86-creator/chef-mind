@@ -313,7 +313,7 @@ const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
 // tempo, e sem isso não dá pra saber qual versão está de fato rodando no aparelho —
 // só deduzir por sintoma, que já nos custou horas. O estado da trava de horário
 // aparece junto de propósito: é a diferença mais fácil de confundir entre versões.
-const CHEF_MIND_PEDIDO_VERSAO = '2026-08-06-d';
+const CHEF_MIND_PEDIDO_VERSAO = '2026-08-13-a';
 
 // Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
 // na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
@@ -856,7 +856,16 @@ function novoPedidoEmNovaAba() {
 //
 // 15s não muda nada para o cliente (ele está esperando comida, não uma cotação de
 // bolsa) e corta a carga do canal em 5×.
-const _POLL_INTERVALO_MS = 15000;
+// 15s → 30s (etapa 5 do ponto 3b, aprovado em 05/08 e aplicado em 13/08).
+//
+// O cliente acompanha o pedido dele em minutos, não em segundos: o preparo de uma marmita
+// leva vários minutos, e a diferença entre saber do "Pronto" em 15s ou em 30s não muda nada
+// para ele. Do lado do servidor a diferença é o dobro — e este é o único poll que escala com
+// o número de CLIENTES, não com o número de aparelhos do restaurante.
+//
+// O piso do gatilho por visibilidade acompanha automaticamente (Regra 48), então um cliente
+// alternando entre apps continua sem conseguir gerar mais chamadas que o poll normal.
+const _POLL_INTERVALO_MS = 30000;
 
 // Piso entre duas consultas, para o gatilho de visibilidade abaixo. Sem ele, um
 // cliente alternando entre apps dispararia uma chamada a cada troca — trocaríamos
