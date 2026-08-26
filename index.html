@@ -3169,7 +3169,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-13-k';
+        const CHEF_MIND_VERSAO = '2026-08-13-t';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -4139,11 +4139,25 @@
             _atualizarBadgeFila();
         }
 
-        function _filaEnfileirar(action, payload, clienteKey) {
+        // `extras.comandaChave` é o VÍNCULO TARDIO (ponto 23): o envelope guarda a chave da
+        // comanda em vez de exigir o `comanda_id` na hora de entrar na fila. Um item lançado
+        // logo depois de abrir a comanda pode não ter esse id ainda — e era exatamente aí
+        // que ele morria antes de ser enfileirado. Agora entra na fila mesmo assim, e o
+        // dreno resolve o id quando ele existir.
+        //
+        // Não há `atrasoMs`: o envelope SEMPRE nasce com o prazo cheio, mesmo quando ainda
+        // não houve POST. Chegou a existir a ideia de liberá-lo na hora nesse caso, e ela
+        // abria uma corrida — o dreno poderia amarrar o id e enviar no mesmo instante em que
+        // esta função também envia. O dedup do servidor provavelmente barraria, mas depender
+        // do intervalo entre duas chamadas para não duplicar é exatamente o que a nota abaixo
+        // proíbe. Trinta segundos de espera num caso já degradado é troca barata.
+        function _filaEnfileirar(action, payload, clienteKey, extras) {
+            extras = extras || {};
             const lista = _filaLer();
             if (lista.some(e => e.cliente_key === clienteKey)) return;
             lista.push({
                 cliente_key: clienteKey, action: action, payload: payload,
+                comanda_chave: extras.comandaChave || '',
                 tentativas: 0, criadoEm: Date.now(),
                 // ⚠️ O envelope NÃO nasce elegível para retentativa.
                 //
@@ -4166,8 +4180,40 @@
             _filaGravar(_filaLer().filter(e => e.cliente_key !== clienteKey));
         }
 
+        // Costura o `comanda_id` no envelope depois que ele já está na fila. O envelope entra
+        // sem id (vínculo tardio) e é gravado ANTES de qualquer espera — então quando o id
+        // enfim aparece, é preciso atualizar a versão persistida, não só a de memória.
+        function _filaAtualizarPayload(clienteKey, campos) {
+            const lista = _filaLer();
+            const env = lista.find(e => e.cliente_key === clienteKey);
+            if (!env) return;
+            Object.assign(env.payload, campos);
+            _filaGravar(lista);
+        }
+
+        // Quando uma comanda é revertida ou cancelada, os envelopes presos a ela deixam de
+        // ter destino. Sem esta limpeza eles ficariam para sempre na fila, pedindo um
+        // `comanda_id` que nunca vai existir — e o badge nunca zeraria.
+        function _filaRemoverPorComanda(chave) {
+            if (!chave) return;
+            const lista = _filaLer();
+            const restante = lista.filter(e => e.comanda_chave !== chave);
+            if (restante.length !== lista.length) {
+                console.warn('[Fila] descartando', lista.length - restante.length,
+                             'envelope(s) da comanda', chave, '— ela não existe no servidor');
+                _filaGravar(restante);
+            }
+        }
+
         function _filaTemChave(clienteKey) {
             return !!clienteKey && _filaLer().some(e => e.cliente_key === clienteKey);
+        }
+
+        // Existe algum envelope esperando o id DESTA comanda? Sem isso, a criação de cada
+        // comanda dispararia um dreno — e dreno que não tem o que fazer ainda custa uma
+        // varredura e polui o console num fluxo que roda centenas de vezes por dia.
+        function _filaEsperaComanda(chave) {
+            return !!chave && _filaLer().some(e => e.comanda_chave === chave && !e.payload.comanda_id);
         }
 
         function _filaAdiar(clienteKey) {
@@ -4177,6 +4223,18 @@
             env.tentativas += 1;
             const i = Math.min(env.tentativas - 1, _FILA_BACKOFF_MS.length - 1);
             env.proximaEm = Date.now() + _FILA_BACKOFF_MS[i];
+            _filaGravar(lista);
+        }
+
+        // Adiar SEM gastar tentativa. A diferença importa: `_filaAdiar` conta uma tentativa
+        // porque houve um envio que não deu certo. Aqui nada foi enviado — o envelope só não
+        // tinha ainda o `comanda_id` para poder sair. Contar isso como tentativa queimaria o
+        // orçamento de retentativas de um item que nunca chegou a ser recusado.
+        function _filaReagendar(clienteKey, ms) {
+            const lista = _filaLer();
+            const env = lista.find(e => e.cliente_key === clienteKey);
+            if (!env) return;
+            env.proximaEm = Date.now() + ms;
             _filaGravar(lista);
         }
 
@@ -4198,6 +4256,32 @@
         // travar a tela esperando confirmação deixaria o lançamento lento para todo mundo
         // por causa de uma falha rara. Mas SEM REDE ele afirma algo que não aconteceu:
         // "lançado" é lido como "salvo". Aí o que muda é o tom do aviso, não o fluxo.
+        // ⚖️ A INVARIANTE QUE FALTAVA:
+        //
+        //     um item visível na tela está GRAVADO ou está NA FILA. Nunca nenhum dos dois.
+        //
+        // Sempre que um envelope é descartado sem ter gravado, o item precisa sair junto.
+        // Sem isso ele fica na comanda, somando no total, e o operador cobra por algo que
+        // não existe no servidor — que é pior que o bug que o ponto 23 veio resolver.
+        //
+        // Havia DOIS lugares violando isso: o teto do vínculo tardio e a recusa do servidor
+        // no dreno. Ambos tiravam o envelope e deixavam o item na tela.
+        function _removerItemPorClienteKey(clienteKey) {
+            let nome = '';
+            Object.keys(state.comandas || {}).forEach(k => {
+                const c = state.comandas[k];
+                if (!c || !Array.isArray(c.itens)) return;
+                const i = c.itens.findIndex(it => it._clienteKey === clienteKey && !it._id);
+                if (i < 0) return;
+                nome = c.itens[i].nome || '';
+                c.itens.splice(i, 1);
+                c.total = (c.itens || []).reduce((sm, it) =>
+                    sm + (parseFloat(it.preco) || 0) * (parseFloat(it.quantidade) || 1), 0);
+            });
+            if (nome) { saveStorage(); renderizarTelaAtual(); }
+            return nome;
+        }
+
         function _toastLancado(msgSucesso) {
             if (navigator.onLine === false) {
                 showToast('⏳ Sem rede — lançamento guardado, será enviado sozinho.', 'warning');
@@ -4208,6 +4292,47 @@
 
         function _itemPendente(item) {
             return !!item && !item._id && !!item._clienteKey && _filaTemChave(item._clienteKey);
+        }
+
+        // Descobre o `_id` real de uma comanda a partir da chave local. Duas fontes, nessa
+        // ordem: o estado local (de graça) e, se ele não souber, o servidor.
+        //
+        // A segunda fonte é o que faz o vínculo tardio sobreviver a um F5: depois do refresh
+        // o estado local pode ter voltado sem a comanda, mas o envelope continua no
+        // localStorage — e o número da comanda está na própria chave (`numero-data`).
+        const _FILA_IDADE_PERGUNTA_MS = 15000;
+
+        // Teto do vínculo tardio. Espera por id NÃO gasta tentativa — o envelope não foi
+        // recusado, só não tinha para onde ir —, e foi isso que criou um envelope imortal:
+        // o Bruno encontrou um preso há 17 minutos, perguntando ao servidor de 30 em 30s por
+        // uma comanda que tinha sido ENCERRADA (o `getComandaCompleta` filtra encerradas, e
+        // ele rodou vários fechamentos de expediente nos testes).
+        //
+        // Um badge que nunca zera é pior que um badge ausente: depois de dois dias ninguém
+        // mais o enxerga, e ele para de funcionar como sinal justamente quando algo de
+        // verdade entrar na fila. Passado o teto, o envelope sai e o problema vira barulho —
+        // que é a única forma honesta de terminar isto.
+        const _FILA_VINCULO_TETO_MS = 10 * 60 * 1000;
+
+        async function _resolverIdDaComanda(chave, idadeEnvelope) {
+            if (!chave) return null;
+            const c = state.comandas[chave];
+            if (c && c._id) return c._id;
+
+            // Perguntar ao servidor custa uma leitura. No caso comum o id chega sozinho em
+            // segundos (a resposta do novaComanda estava só atrasada), então só vale gastar
+            // essa chamada quando o envelope já esperou tempo suficiente.
+            if (idadeEnvelope < _FILA_IDADE_PERGUNTA_MS) return null;
+
+            const numero = String(chave).split('-')[0];
+            if (!numero) return null;
+            const r = await sheetsAPI('getComandaCompleta', { numero: numero }, 20000, 'fila');
+            if (r && r.comanda && r.comanda.id) {
+                // Aproveita a viagem: a tela também estava sem o id.
+                _absorverComandaDoServidor(r.comanda);
+                return r.comanda.id;
+            }
+            return null;
         }
 
         let _filaDrenando = false;
@@ -4226,6 +4351,55 @@
                 for (const env of lista) {
                     if (Date.now() < env.proximaEm) continue;
                     if (env.tentativas >= _FILA_MAX_TENTATIVAS) continue;   // ver nota abaixo
+
+                    // ── VÍNCULO TARDIO (ponto 23) ──
+                    // O envelope entrou na fila sem `comanda_id` porque a comanda ainda não
+                    // tinha voltado do servidor. Resolve agora; se ainda não der, reagenda
+                    // sem gastar tentativa — não houve envio, houve espera.
+                    if (!env.payload.comanda_id && env.comanda_chave) {
+                        const _idade = Date.now() - env.criadoEm;
+
+                        // Desistir é a última coisa a se fazer, mas insistir para sempre não
+                        // é persistência — é um badge que ninguém mais lê.
+                        if (_idade > _FILA_VINCULO_TETO_MS) {
+                            console.error('[Fila] ❌ desistindo do vínculo |', env.comanda_chave,
+                                          '| item:', env.payload.nome,
+                                          '| a comanda não existe (ou foi encerrada)');
+                            _filaRemover(env.cliente_key);
+                            _removerItemPorClienteKey(env.cliente_key);   // invariante
+                            showToast('❌ "' + (env.payload.nome || 'Um item') + '" não pôde ser salvo — ' +
+                                      'a comanda #' + String(env.comanda_chave).split('-')[0] +
+                                      ' não existe mais. Confira e relance.', 'error');
+                            continue;
+                        }
+
+                        const _idReal = await _resolverIdDaComanda(env.comanda_chave, _idade);
+                        if (!_idReal) {
+                            console.log('[Fila] aguardando id da comanda |', env.comanda_chave,
+                                        '| idade:', Math.round(_idade / 1000) + 's');
+                            _filaReagendar(env.cliente_key, 5000);
+                            continue;
+                        }
+                        // ⚠️ NUNCA `_filaGravar(lista)` AQUI.
+                        //
+                        // `lista` é uma FOTO tirada no início do dreno, antes de qualquer
+                        // await. Entre aquela leitura e este ponto, o `sheets_addItem` pode
+                        // ter tirado da fila um envelope que acabou de ser confirmado — e
+                        // regravar a foto inteira o traz de volta. O item já estava na
+                        // planilha e continuava no contador.
+                        //
+                        // Foi o que o Bruno viu em 26/08: "itens travando no badge mesmo já
+                        // salvos". E não parava aí — cada envelope ressuscitado gerava, no
+                        // dreno seguinte, uma chamada extra ao GAS disputando espaço com o
+                        // operador. Daí a sensação de lentidão geral: um defeito, três
+                        // sintomas.
+                        //
+                        // Toda escrita na fila tem que reler antes de gravar. É a mesma
+                        // Regra 43 do estado local, aplicada ao localStorage.
+                        env.payload.comanda_id = _idReal;
+                        _filaAtualizarPayload(env.cliente_key, { comanda_id: _idReal });
+                        console.log('[Fila] 🔗 id da comanda resolvido |', env.comanda_chave, '→', _idReal);
+                    }
 
                     // `retentativa: true` autoriza o servidor a pagar a varredura cara se o
                     // cache de dedup já tiver expirado. Só a retentativa pode pedir isso.
@@ -4247,7 +4421,9 @@
                         console.error('[Fila] ❌ recusado pelo servidor:', env.cliente_key,
                                       res && res.erro);
                         _filaRemover(env.cliente_key);
-                        showToast('❌ Um lançamento não pôde ser salvo. Confira a comanda.', 'error');
+                        const _nomeRec = _removerItemPorClienteKey(env.cliente_key);   // invariante
+                        showToast('❌ "' + (_nomeRec || env.payload.nome || 'Um lançamento') +
+                                  '" não pôde ser salvo. Confira a comanda e relance.', 'error');
                     }
                 }
             } finally {
@@ -4283,7 +4459,409 @@
             // seriam 10 minutos sem conseguir lançar nada.
             if (!state._cardapioCarregado) _buscarCardapioAgora('voltou a rede');
         });
-        setInterval(() => _filaDrenar('timer'), 30000);
+        // Registro dos timers que a integridade dos dados depende. Não é firula: um teste
+        // que exercita a FUNÇÃO mas não verifica se alguém a CHAMA passa com o agendamento
+        // apagado — foi o que a análise de mutantes mostrou em 26/08. Com o registro, o
+        // autoteste confere que o mecanismo está de fato ligado.
+        const _TIMERS_VITAIS = {};
+
+        _TIMERS_VITAIS.filaDreno = setInterval(() => _filaDrenar('timer'), 30000);
+
+        // ⏱️ PRAZO PARA A COMANDA INDEFINIDA (achado A1 da auditoria de 26/08)
+        //
+        // O desfecho "não sei" do `sheets_novaComanda` mantém a comanda de pé esperando o
+        // auto-reparo do poll. Isso resolve o caso comum, mas não tem fim: se o número
+        // pertencer a uma comanda já encerrada, ela nunca vem no payload restrito do ponto 1
+        // — e a comanda ficaria na tela para sempre, sem `_id`.
+        //
+        // Silêncio nunca vira veredito. Mas indefinição também não pode ser eterna: passado
+        // o prazo, pergunta-se de novo e aí sim se conclui. Três minutos dão ao poll da tela
+        // de Lançar (60s) três chances antes disso.
+        const _COMANDA_INDEFINIDA_TETO_MS = 3 * 60 * 1000;
+        let _resolvendoIndefinidas = false;
+
+        async function _resolverComandasIndefinidas() {
+            if (_resolvendoIndefinidas || !state.user) return;
+            const alvos = Object.keys(state.comandas || {}).filter(k => {
+                const c = state.comandas[k];
+                return c && c._aguardandoId && !c._id &&
+                       (Date.now() - (c._aguardandoDesde || 0)) > _COMANDA_INDEFINIDA_TETO_MS;
+            });
+            if (!alvos.length) return;
+            _resolvendoIndefinidas = true;
+            try {
+                for (const chave of alvos) {
+                    const numero = String(chave).split('-')[0];
+                    const r = await sheetsAPI('getComandaCompleta', { numero: numero }, 20000, 'sistema');
+
+                    // Alguém pode ter resolvido enquanto perguntávamos.
+                    const c = state.comandas[chave];
+                    if (!c || c._id) continue;
+
+                    if (r && r.comanda && r.comanda.id) {
+                        console.log('[Comanda] ✅ indefinida resolvida |', chave, '→', r.comanda.id);
+                        _absorverComandaDoServidor(r.comanda);
+                        saveStorage();
+                        renderizarTelaAtual();
+                        if (_filaEsperaComanda(chave)) _filaDrenar('comanda indefinida resolvida');
+                        continue;
+                    }
+
+                    if (!_falhaDeTransporte(r)) {
+                        // Conclusivo: ela não existe. (Ver a nota em `sheets_novaComanda`
+                        // sobre por que o teste é `_falhaDeTransporte` e não `_respostaValida`.) Agora reverter é a resposta certa —
+                        // e apagar a comanda leva os itens junto, o que é coerente com a
+                        // invariante: nada some da fila sem sumir da tela.
+                        console.error('[Comanda] ❌ indefinida não existe no servidor — revertendo |', chave);
+                        _filaRemoverPorComanda(chave);
+                        delete state.comandas[chave];
+                        if (state.comandaAtual === chave) state.comandaAtual = null;
+                        saveStorage();
+                        renderizarTelaAtual();
+                        showToast('❌ A comanda #' + numero + ' não foi criada no servidor. ' +
+                                  'Abra de novo e relance os itens.', 'error');
+                        continue;
+                    }
+                    console.warn('[Comanda] indefinida segue sem resposta |', chave);
+                }
+            } finally {
+                _resolvendoIndefinidas = false;
+            }
+        }
+
+        _TIMERS_VITAIS.comandasIndefinidas = setInterval(_resolverComandasIndefinidas, 60000);
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // AUTOTESTE DA FILA E DA CRIAÇÃO DE COMANDA — rode `cmTeste()` no console
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // Por que isto existe: entre 13 e 26/08 eu entreguei quatro versões seguidas destas
+        // funções e CADA rodada de teste manual do Bruno encontrou um defeito novo meu. O
+        // problema não era nenhum dos defeitos em si — era a verificação depender de uma
+        // pessoa reproduzir cenários lentos e reparar em detalhes sutis. Isso não escala e
+        // não é justo com quem precisa abrir o restaurante no dia seguinte.
+        //
+        // Estes testes rodam em segundos, sem rede, sem patch para colar, e conferem as
+        // invariantes que os sintomas de verdade violam. Todo defeito encontrado por engano
+        // humano vira um caso aqui, para não voltar.
+        //
+        // Seguro de rodar: salva o estado real (comandas + fila) antes e restaura no fim.
+        async function cmTeste() {
+            // ⚠️ ISOLAMENTO — sem isto o teste é uma mentira.
+            //
+            // Primeira execução no navegador do Bruno (26/08): o T7 falhou porque o POLL do
+            // app estava rodando e reparou a comanda simulada com um `_id` REAL dos dados
+            // dele, no meio da retentativa de 900ms. O teste acusou defeito onde não havia.
+            //
+            // O que assusta é o inverso: um poll passando na hora certa pode fazer um teste
+            // passar quando o código está errado. Teste que o ambiente perturba não serve
+            // como rede de segurança. Então aqui tudo que corre sozinho é desligado, e
+            // religado no fim.
+            const _bkState = JSON.stringify(state.comandas || {});
+            const _bkUser  = state.user;
+            state.user = state.user || '__teste__';
+
+            pararPolling();
+            clearInterval(_cardapioPollInterval); _cardapioPollInterval = null;
+            clearInterval(_TIMERS_VITAIS.filaDreno);
+            clearInterval(_TIMERS_VITAIS.comandasIndefinidas);
+            const _bkFila  = localStorage.getItem(_FILA_CHAVE);
+            const _bkAPI   = sheetsAPI;
+            const _bkRender = renderizarTelaAtual;
+            const _bkToast = showToast;
+            const _bkSave  = saveStorage;
+
+            const res = [];
+            let toasts = [];
+            let chamadas = [];
+
+            const ok = (nome, cond, detalhe) => res.push({ teste: nome, resultado: cond ? '✅' : '❌', detalhe: cond ? '' : (detalhe || '') });
+
+            // Ambiente controlado: nada toca a rede, o DOM ou o localStorage real.
+            renderizarTelaAtual = () => {};
+            showToast = (m, t) => toasts.push({ m, t });
+            saveStorage = () => {};
+
+            let respostas = {};
+            sheetsAPI = async (action, dados) => {
+                chamadas.push({ action, dados });
+                const r = respostas[action];
+                const v = typeof r === 'function' ? await r(dados) : r;
+                return v === undefined ? { sucesso: false, erro: 'stub sem resposta', _transporte: true } : v;
+            };
+
+            const TRANSPORTE = { sucesso: false, erro: 'Sem confirmação', _incerto: true, _transporte: true };
+            const NAO_ACHOU  = { erro: 'Comanda não encontrada' };
+
+            // ⚠️ `reset` CLONA o estado. Quem for mexer aqui: pegue a referência do item
+            // de dentro de `state.comandas` depois do reset, nunca do literal — senão o
+            // teste exercita um objeto que o código nunca enxerga, e passa por engano.
+            const reset = (comandas) => {
+                state.comandas = JSON.parse(JSON.stringify(comandas || {}));
+                localStorage.setItem(_FILA_CHAVE, '[]');
+                toasts = []; chamadas = [];
+                return state.comandas;
+            };
+            const fila = () => JSON.parse(localStorage.getItem(_FILA_CHAVE) || '[]');
+            const novoItem = (nome) => ({ nome: nome, codigo: '001', quantidade: 1, preco: 10, total: 10 });
+
+            // A chave da comanda embute a data de HOJE — escrevê-la fixa faria a suíte
+            // quebrar sozinha na virada do dia, que é a pior forma de teste falhar: sem
+            // relação com nenhuma mudança de código.
+            const _d = new Date();
+            const hojeChave = (n) => n + '-' + _d.getFullYear() + '-' +
+                String(_d.getMonth() + 1).padStart(2, '0') + '-' + String(_d.getDate()).padStart(2, '0');
+            const dados = (nome) => ({ codigo: '001', nome: nome, quantidade: 1, preco: 10 });
+
+            try {
+                // ── T1: lançamento normal ────────────────────────────────────────────────
+                {
+                    reset({ 'A': { numero: 1, _id: 'C1', itens: [novoItem('Buffet')] } });
+                    const it = state.comandas['A'].itens[0];
+                    respostas = { addItem: { id: 'I1' } };
+                    await sheets_addItem('A', it, dados('Buffet'));
+                    ok('T1 lançamento normal grava', it._id === 'I1', 'item sem _id');
+                    ok('T1 fila esvazia', fila().length === 0, fila().length + ' na fila');
+                }
+
+                // ── T2: falha de transporte no addItem ───────────────────────────────────
+                {
+                    reset({ 'A': { numero: 1, _id: 'C1', itens: [novoItem('Refri')] } });
+                    const it = state.comandas['A'].itens[0];
+                    respostas = { addItem: TRANSPORTE };
+                    await sheets_addItem('A', it, dados('Refri'));
+                    ok('T2 transporte mantém na fila', fila().length === 1, fila().length + ' na fila');
+                    ok('T2 item fica pendente, não some', !it._id && state.comandas['A'].itens.length === 1);
+                }
+
+                // ── T3: comanda sem _id → fila, sem POST ─────────────────────────────────
+                {
+                    reset({ 'B': { numero: 2, itens: [novoItem('Suco')] } });
+                    const it = state.comandas['B'].itens[0];
+                    state.comandas['B']._pendingNovaComanda = new Promise(r => setTimeout(r, 10));
+                    respostas = { addItem: { id: 'NAO_DEVIA' } };
+                    await sheets_addItem('B', it, dados('Suco'));
+                    const env = fila()[0];
+                    ok('T3 enfileira mesmo sem id', !!env, 'fila vazia');
+                    ok('T3 guarda a chave da comanda', env && env.comanda_chave === 'B', env && env.comanda_chave);
+                    ok('T3 NÃO envia sem comanda_id', chamadas.filter(c2 => c2.action === 'addItem').length === 0,
+                       'enviou ' + chamadas.length);
+                }
+
+                // ── T4: vínculo tardio resolvido pelo estado local ───────────────────────
+                {
+                    reset({ 'C': { numero: 3, _id: 'C3', itens: [novoItem('Doce')] } });
+                    const it = state.comandas['C'].itens[0];
+                    it._clienteKey = 'ck4';
+                    localStorage.setItem(_FILA_CHAVE, JSON.stringify([{
+                        cliente_key: 'ck4', action: 'addItem',
+                        payload: { comanda_id: '', nome: 'Doce' },
+                        comanda_chave: 'C', tentativas: 0,
+                        criadoEm: Date.now() - 60000, proximaEm: 0
+                    }]));
+                    respostas = { addItem: { id: 'I4' } };
+                    await _filaDrenar('teste');
+                    const env = chamadas.find(c2 => c2.action === 'addItem');
+                    ok('T4 amarra o comanda_id antes de enviar', env && env.dados.comanda_id === 'C3',
+                       env && env.dados.comanda_id);
+                    ok('T4 fila esvazia após confirmar', fila().length === 0, fila().length + ' na fila');
+                    ok('T4 id chega no item', it._id === 'I4', 'item sem _id');
+                }
+
+                // ── T5: REGRESSÃO — dreno não pode ressuscitar envelope confirmado ───────
+                //   (o defeito da versão -o: `_filaGravar(lista)` com foto velha)
+                {
+                    // Sem `_id` local de propósito: é o que força a consulta ao servidor,
+                    // que é onde a corrida acontece. Com o id local, o resolvedor devolvia
+                    // na hora e este teste passava sem exercitar nada.
+                    reset({ 'D': { numero: 4, itens: [] } });
+                    localStorage.setItem(_FILA_CHAVE, JSON.stringify([
+                        { cliente_key: 'semId', action: 'addItem', payload: { comanda_id: '', nome: 'X' },
+                          comanda_chave: 'D', tentativas: 0, criadoEm: Date.now() - 60000, proximaEm: 0 },
+                        { cliente_key: 'jaFoi', action: 'addItem', payload: { comanda_id: 'C4', nome: 'Y' },
+                          comanda_chave: 'D', tentativas: 0, criadoEm: Date.now() - 60000, proximaEm: Date.now() + 999999 }
+                    ]));
+                    respostas = {
+                        // Durante o await do vínculo, alguém confirma e remove 'jaFoi' —
+                        // exatamente o que o sheets_addItem faz na vida real.
+                        getComandaCompleta: async () => {
+                            _filaRemover('jaFoi');   // o addItem confirmou e tirou da fila
+                            return { comanda: { id: 'C4', numero: 4, itens: [],
+                                                timestamp_abertura: new Date().toISOString() } };
+                        },
+                        addItem: { id: 'I5' }
+                    };
+                    await _filaDrenar('teste');
+                    ok('T5 envelope confirmado NÃO ressuscita',
+                       !fila().some(e => e.cliente_key === 'jaFoi'),
+                       'o envelope voltou para a fila');
+                }
+
+                // ── T6: invariante — envelope descartado tira o item da tela ─────────────
+                {
+                    reset({ 'E': { numero: 5, itens: [novoItem('Perdido')], total: 10 } });
+                    state.comandas['E'].itens[0]._clienteKey = 'ck6';
+                    localStorage.setItem(_FILA_CHAVE, JSON.stringify([{
+                        cliente_key: 'ck6', action: 'addItem',
+                        payload: { comanda_id: '', nome: 'Perdido' },
+                        comanda_chave: 'E', tentativas: 0,
+                        criadoEm: Date.now() - (_FILA_VINCULO_TETO_MS + 60000), proximaEm: 0
+                    }]));
+                    respostas = { getComandaCompleta: NAO_ACHOU };
+                    await _filaDrenar('teste');
+                    ok('T6 envelope vencido sai da fila', fila().length === 0, fila().length + ' na fila');
+                    ok('T6 item sai da tela junto', (state.comandas['E'].itens || []).length === 0,
+                       'item continuou visível sem estar salvo');
+                    ok('T6 avisa o operador', toasts.some(t => t.t === 'error'), 'nenhum aviso');
+                }
+
+                // ── T7: novaComanda incerta, mas a comanda EXISTE ────────────────────────
+                {
+                    reset({ [hojeChave(9)]: { numero: 9, itens: [] } });
+                    respostas = {
+                        novaComanda: TRANSPORTE,
+                        getComandaCompleta: { comanda: { id: 'C9', numero: 9, itens: [], timestamp_abertura: new Date().toISOString() } }
+                    };
+                    await sheets_novaComanda(hojeChave(9), 9);
+                    const c = state.comandas[hojeChave(9)];
+                    ok('T7 comanda NÃO é apagada', !!c, 'comanda sumiu');
+                    ok('T7 absorve o id real', c && c._id === 'C9', c && c._id);
+                }
+
+                // ── T8: novaComanda incerta e a comanda NÃO existe → reverte ─────────────
+                {
+                    reset({ [hojeChave(8)]: { numero: 8, itens: [] } });
+                    localStorage.setItem(_FILA_CHAVE, JSON.stringify([{
+                        cliente_key: 'ck8', action: 'addItem', payload: { comanda_id: '', nome: 'Z' },
+                        comanda_chave: hojeChave(8), tentativas: 0, criadoEm: Date.now(), proximaEm: 0
+                    }]));
+                    respostas = { novaComanda: TRANSPORTE, getComandaCompleta: NAO_ACHOU };
+                    await sheets_novaComanda(hojeChave(8), 8);
+                    ok('T8 "não achei" é conclusivo e reverte', !state.comandas[hojeChave(8)],
+                       'comanda ficou de fantasma na tela');
+                    ok('T8 purga os envelopes órfãos', fila().length === 0, fila().length + ' na fila');
+                }
+
+                // ── T9: nem a pergunta responde → mantém, marcada ────────────────────────
+                {
+                    reset({ [hojeChave(7)]: { numero: 7, itens: [] } });
+                    respostas = { novaComanda: TRANSPORTE, getComandaCompleta: TRANSPORTE };
+                    await sheets_novaComanda(hojeChave(7), 7);
+                    const c = state.comandas[hojeChave(7)];
+                    ok('T9 indefinido mantém a comanda', !!c, 'apagou sem saber');
+                    ok('T9 marca e carimba a hora', c && c._aguardandoId && c._aguardandoDesde > 0);
+                }
+
+                // ── T0: os relógios que sustentam tudo isto estão ligados ────────────────
+                {
+                    ok('T0 dreno da fila agendado', !!_TIMERS_VITAIS.filaDreno, 'ninguém drena a fila');
+                    ok('T0 resolvedor de indefinidas agendado', !!_TIMERS_VITAIS.comandasIndefinidas,
+                       'a comanda fantasma nunca seria resolvida');
+                }
+
+                // ── T10: a comanda indefinida tem prazo ──────────────────────────────────
+                {
+                    reset({ [hojeChave(6)]: { numero: 6, itens: [], _aguardandoId: true,
+                                              _aguardandoDesde: Date.now() - (_COMANDA_INDEFINIDA_TETO_MS + 60000) } });
+                    respostas = { getComandaCompleta: NAO_ACHOU };
+                    await _resolverComandasIndefinidas();
+                    ok('T10 fantasma é resolvido no prazo', !state.comandas[hojeChave(6)],
+                       'comanda ficaria na tela para sempre');
+                    ok('T10 avisa o operador', toasts.some(t => t.t === 'error'), 'nenhum aviso');
+                }
+            } catch (e) {
+                res.push({ teste: 'EXCEÇÃO', resultado: '❌', detalhe: e.message });
+                console.error(e);
+            } finally {
+                sheetsAPI = _bkAPI;
+                renderizarTelaAtual = _bkRender;
+                showToast = _bkToast;
+                saveStorage = _bkSave;
+                state.comandas = JSON.parse(_bkState);
+                state.user = _bkUser;
+
+                _TIMERS_VITAIS.filaDreno = setInterval(() => _filaDrenar('timer'), 30000);
+                _TIMERS_VITAIS.comandasIndefinidas = setInterval(_resolverComandasIndefinidas, 60000);
+                if (state.user) { iniciarPolling(); iniciarPollingCardapio(); }
+                if (_bkFila === null) localStorage.removeItem(_FILA_CHAVE);
+                else localStorage.setItem(_FILA_CHAVE, _bkFila);
+                _atualizarBadgeFila();
+            }
+
+            console.table(res);
+            const falhas = res.filter(r => r.resultado === '❌').length;
+            console.log(falhas === 0
+                ? '%c✅ ' + res.length + ' verificações, tudo passou.'
+                : '%c❌ ' + falhas + ' de ' + res.length + ' falharam.',
+                'font-size:14px;font-weight:bold;color:' + (falhas === 0 ? 'green' : 'red'));
+            return falhas === 0;
+        }
+        window.cmTeste = cmTeste;
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // CONFERÊNCIA TELA × PLANILHA — rode `cmConferir()` no console
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // O `cmTeste()` prova a lógica com o servidor simulado. Isto é o contrário: usa o
+        // servidor de verdade e responde a única pergunta que importa depois de uma rajada —
+        // **o que está na tela é o que está na planilha?**
+        //
+        // Existe porque conferir isso a olho, comanda por comanda, é lento e erra. E erro de
+        // conferência é pior que bug: dá confiança onde não devia.
+        async function cmConferir() {
+            const _d = new Date();
+            const hoje = _d.getFullYear() + '-' + String(_d.getMonth() + 1).padStart(2, '0') +
+                         '-' + String(_d.getDate()).padStart(2, '0');
+
+            const chaves = Object.keys(state.comandas || {}).filter(k => k.endsWith(hoje));
+            if (!chaves.length) { console.log('Nenhuma comanda de hoje no estado local.'); return true; }
+
+            const fila = _filaLer();
+            const linhas = [];
+            console.log('Conferindo ' + chaves.length + ' comanda(s) contra a planilha...');
+
+            for (const chave of chaves) {
+                const c = state.comandas[chave];
+                const numero = String(chave).split('-')[0];
+                const itensLocais = c.itens || [];
+                const pendentes = itensLocais.filter(i => !i._id).length;
+                const naFila = fila.filter(e => e.comanda_chave === chave).length;
+
+                const r = await sheetsAPI('getComandaCompleta', { numero: numero }, 20000, 'usuario');
+                const noServidor = (r && r.comanda && r.comanda.itens) ? r.comanda.itens.length : null;
+
+                let veredito;
+                if (!c._id && !r.comanda)              veredito = '⚠️ só local (comanda não existe no servidor)';
+                else if (noServidor === null)          veredito = '❌ servidor não respondeu / não achou';
+                else if (noServidor === itensLocais.length)           veredito = '✅ bate';
+                else if (noServidor === itensLocais.length - pendentes) veredito = '⏳ bate (faltam os pendentes)';
+                else                                   veredito = '❌ DIVERGE';
+
+                linhas.push({
+                    comanda: numero,
+                    tela: itensLocais.length,
+                    planilha: noServidor === null ? '—' : noServidor,
+                    pendentes: pendentes,
+                    na_fila: naFila,
+                    resultado: veredito
+                });
+            }
+
+            console.table(linhas);
+            const ruins = linhas.filter(l => l.resultado.startsWith('❌'));
+            const espera = linhas.filter(l => l.resultado.startsWith('⏳') || l.resultado.startsWith('⚠️'));
+            console.log(
+                ruins.length ? '%c❌ ' + ruins.length + ' comanda(s) divergindo — veja a tabela.'
+                : espera.length ? '%c⏳ tudo consistente, mas ' + espera.length +
+                                  ' com pendência. Rode de novo em ~30s; a fila ainda está trabalhando.'
+                : '%c✅ ' + linhas.length + ' comanda(s): tela e planilha batem.',
+                'font-size:14px;font-weight:bold;color:' +
+                (ruins.length ? 'red' : espera.length ? 'darkorange' : 'green'));
+            return ruins.length === 0;
+        }
+        window.cmConferir = cmConferir;
+
+
 
         async function _postComPrazo(action, dados) {
             // O `.catch` aqui não é decoração: quando o prazo vence, esta promise continua
@@ -4978,6 +5556,7 @@
             if (res && res.cancelada) {
                 // ⚠️ Número inutilizado: comanda foi cancelada neste dia — não pode ser reaberta.
                 console.warn('[Sheets] Comanda', numero, 'foi cancelada — número inutilizado no dia');
+                _filaRemoverPorComanda(chave);   // envelopes presos a ela não têm mais destino
                 delete state.comandas[chave];
                 if (state.comandaAtual === chave) state.comandaAtual = null;
                 saveStorage();
@@ -5023,7 +5602,11 @@
                 // sistema dizer que uma comanda existente não existe.
                 if (_b && _b.comanda) {
                     // Substitui a comanda otimista pela real, sem passar por tela vazia.
-                    delete state.comandas[chave];
+                    //
+                    // ⚠️ SEM `delete` ANTES (achado A2 da auditoria). `_absorverComandaDoServidor`
+                    // preserva os itens pendentes lendo `state.comandas[chave]` — apagar primeiro
+                    // joga fora justamente o que se quer salvar. A absorção troca o objeto de
+                    // qualquer forma, então o delete nunca foi necessário.
                     _absorverComandaDoServidor(_b.comanda);
                     document.getElementById('lançarComandaNum').value = numero;
                     carregarComanda();
@@ -5052,24 +5635,135 @@
             // uma comanda PAGA e antiga, ela não vem no payload restrito do ponto 1, então
             // o poll nunca a encontra para corrigir.
             //
-            // Reverter é seguro E recuperável: se a comanda tiver sido criada no servidor e
-            // só a resposta tiver se perdido, a próxima tentativa recebe `jaAberta` e carrega
-            // a comanda de verdade. Se não tiver sido criada, cria. Nos dois casos o
-            // operador termina com o dado certo — em vez de trabalhar meia hora num fantasma.
+            // ⚠️ REESCRITO EM 26/08 (ponto 23). O QUE HAVIA AQUI: `delete state.comandas[chave]`.
+            //
+            // O argumento original era razoável — reverter é recuperável, porque a próxima
+            // tentativa receberia `jaAberta`. O que ele não previu foi o que o `delete` faz
+            // com quem está ESPERANDO essa comanda. O Bruno reproduziu em produção abrindo 23
+            // comandas seguidas: com a fila congestionada, a resposta passou dos 30s, o front
+            // apagou uma comanda que o GAS tinha criado, e o `sheets_addItem` que aguardava
+            // em `await comanda._pendingNovaComanda` acordou, releu o estado, não achou nada
+            // e devolveu `null` — ANTES de enfileirar. O item não existiu em lugar nenhum.
+            //
+            // A correção de fundo não é "não reverter": era preciso um jeito de descobrir o
+            // `_id`, senão a comanda ficaria local para sempre e todo item morreria calado
+            // (o poll não resolve — pelo payload restrito do ponto 1, uma comanda antiga ou
+            // paga não vem nele).
+            //
+            // Então aqui não se conclui nada: PERGUNTA-SE. E a pergunta tem três respostas
+            // possíveis, cada uma com um desfecho diferente — sendo que a mais importante é
+            // a terceira, que antes era confundida com a segunda.
             if (!(res && res.id)) {
-                console.error('[Sheets] novaComanda sem id — revertendo criação local |',
-                              chave, '| erro:', res && res.erro);
-                delete state.comandas[chave];
-                if (state.comandaAtual === chave) state.comandaAtual = null;
+                console.warn('[Sheets] novaComanda sem id — perguntando ao servidor |',
+                             chave, '| erro:', res && res.erro);
+
+                // ⚠️ ALGUÉM PODE TER RESOLVIDO ENQUANTO ESPERÁVAMOS.
+                //
+                // Pego no teste 2 do Bruno (26/08): entre o POST e este ponto passaram ~60s
+                // (dois prazos de 30s, por causa da retentativa única) — tempo de sobra para
+                // o auto-reparo do poll (ponto 18) achar a comanda e preencher o `_id`. O
+                // console mostrava `[Poll] 🔧 reparando _id da comanda 34-...` ANTES desta
+                // linha, e mesmo assim seguíamos perguntando e marcando "aguardando".
+                //
+                // É a Regra 43 de novo, num lugar novo: quem espera muito tempo por um await
+                // não pode agir sobre o estado que leu antes dele. Aqui o preço era uma
+                // leitura desperdiçada e um badge âmbar mentindo sobre uma comanda pronta.
+                const _jaResolvida = () => {
+                    const c = state.comandas[chave];
+                    if (!c || !c._id) return false;
+                    console.log('[Sheets] comanda', numero, 'já foi resolvida enquanto esperávamos — id:', c._id);
+                    delete c._aguardandoId;
+                    delete c._aguardandoDesde;
+                    saveStorage();
+                    _marcarComandaAguardandoId(numero, false);
+                    if (_filaEsperaComanda(chave)) _filaDrenar('id da comanda resolvido pelo poll');
+                    return true;
+                };
+                if (_jaResolvida()) return;
+
+                _marcarComandaAtualizando(true);
+                const _q = await sheetsAPI('getComandaCompleta', { numero: String(numero) });
+                _marcarComandaAtualizando(false);
+
+                if (_jaResolvida()) return;   // e de novo depois desta espera
+
+                // (1) EXISTE — foi criada e só a resposta se perdeu. Absorve a real.
+                // Sem `delete` antes: `_absorverComandaDoServidor` preserva os itens que
+                // ainda estão na fila ou em voo, e isso só funciona se ele conseguir ver a
+                // comanda anterior. Apagar primeiro jogaria fora exatamente o que se quer
+                // salvar.
+                if (_q && _q.comanda && _q.comanda.id) {
+                    console.log('[Sheets] ✅ comanda', numero, 'existia — id:', _q.comanda.id);
+                    _absorverComandaDoServidor(_q.comanda);
+                    saveStorage();
+                    renderizarTelaAtual();
+                    if (_filaEsperaComanda(chave)) _filaDrenar('id da comanda resolvido');
+                    return;
+                }
+
+                // (2) NÃO EXISTE, e a resposta é confiável — a criação realmente não
+                // aconteceu. Aqui o revert continua certo: é a única das três em que ele é.
+                // ⚠️ O DISCRIMINADOR CERTO É `_falhaDeTransporte`, NÃO `_respostaValida`.
+                //
+                // Erro meu, pego ao escrever o autoteste (26/08): eu usava `_respostaValida`
+                // para dizer "o servidor respondeu". Mas quando a comanda não existe, o
+                // `getComandaCompleta` devolve `{erro: 'Comanda não encontrada'}` — e
+                // `_respostaValida` é FALSA para isso, porque ela olha justamente o campo
+                // `erro`. Resultado: o caso conclusivo caía no ramo "indefinido", e a comanda
+                // nunca era revertida. Ficaria de fantasma na tela para sempre.
+                //
+                // "Não achei" é uma RESPOSTA. Só não ter voltado nada é ausência de resposta,
+                // e é isso que `_falhaDeTransporte` sabe distinguir.
+                if (!_falhaDeTransporte(_q)) {
+                    console.error('[Sheets] novaComanda não criou — revertendo |', chave);
+                    _filaRemoverPorComanda(chave);   // idem: sem comanda no servidor, sem destino
+                    delete state.comandas[chave];
+                    if (state.comandaAtual === chave) state.comandaAtual = null;
+                    saveStorage();
+                    showToast('Não conseguimos criar a comanda. Tente de novo.', 'error');
+                    limparTelaLançar();
+                    return;
+                }
+
+                // (3) NEM A PERGUNTA FOI RESPONDIDA. Não dá para afirmar nada, e afirmar
+                // "não criou" é justamente o erro que trouxe até aqui. A comanda fica de pé,
+                // marcada como não confirmada; os itens lançados nela entram na fila com
+                // vínculo tardio e o dreno resolve o id sozinho.
+                console.warn('[Sheets] novaComanda indefinida — comanda mantida aguardando confirmação |', chave);
+                if (state.comandas[chave]) {
+                    state.comandas[chave]._aguardandoId = true;
+                    state.comandas[chave]._aguardandoDesde = Date.now();
+                }
                 saveStorage();
-                showToast('Não conseguimos criar a comanda. Tente de novo.', 'error');
-                limparTelaLançar();
+                _marcarComandaAguardandoId(numero, true);
+                renderizarTelaAtual();
                 return;
             }
 
             if (state.comandas[chave]) {
                 state.comandas[chave]._id = res.id;
+                delete state.comandas[chave]._aguardandoId;
+                delete state.comandas[chave]._aguardandoDesde;
                 console.log('[Sheets] ✅ Comanda', numero, 'id:', res.id);
+                _marcarComandaAguardandoId(numero, false);
+                if (_filaEsperaComanda(chave)) _filaDrenar('comanda confirmada');
+            }
+        }
+
+        // Badge discreto do ponto 23: a comanda funciona normalmente, o operador lança à
+        // vontade — só o banner de status muda de tom enquanto o servidor não confirmou.
+        // Sem toast: isto se resolve sozinho em segundos na esmagadora maioria das vezes, e
+        // um aviso que aparece dezenas de vezes por dia sem exigir ação vira ruído.
+        function _marcarComandaAguardandoId(numero, ligar) {
+            const el = document.getElementById('statusComanda');
+            if (!el || el.style.display === 'none') return;
+            if (ligar) {
+                el.style.background = '#E67E22';
+                el.textContent = `⏳ Comanda #${numero} — confirmando...`;
+            } else if (el.textContent.indexOf('confirmando') !== -1 &&
+                       el.textContent.indexOf('#' + numero) !== -1) {
+                el.style.background = '#27AE60';
+                el.textContent = `✅ Comanda #${numero} criada`;
             }
         }
 
@@ -5077,54 +5771,25 @@
             let comanda = state.comandas[chave];
             if (!comanda) return null;
 
-            // ⏳ aguarda comanda ser criada no Sheets se ainda estiver pendente
-            if (comanda._pendingNovaComanda) await comanda._pendingNovaComanda;
-
-            // ⚠️ RELER A COMANDA DEPOIS DO AWAIT — a referência de cima pode ter morrido.
+            // ═══ A FILA VEM ANTES DA ESPERA, não só antes do fetch ═══
             //
-            // Achado pelo Bruno em 12/08, num cenário raro e real: o aparelho A cria a
-            // comanda; segundos depois, antes do poll, o aparelho B carrega o mesmo número.
-            // B não tem a comanda localmente, então cria de forma otimista (feedback verde)
-            // — e o GAS responde `jaAberta`. O ramo que trata isso faz
-            // `delete state.comandas[chave]` e absorve a comanda real do servidor, criando
-            // um objeto NOVO.
+            // A Regra 55 dizia "enfileirar antes do fetch". Faltava uma palavra: antes de
+            // QUALQUER espera. Aqui a primeira linha era `await comanda._pendingNovaComanda`,
+            // e só depois dela o envelope entrava na fila.
             //
-            // A constante capturada antes do `await` continuava apontando para o objeto
-            // descartado, que nunca ganha `_id`. Resultado: o item lançado nessa janela
-            // caía no `return null` abaixo e **nunca era gravado** — em silêncio, com a
-            // tela mostrando a comanda normalmente.
+            // Pego pelo Bruno no teste 3 (26/08), e é o mesmo defeito do ponto 23 uma camada
+            // acima: com a criação da comanda demorando ~60s, esse await segura o item por um
+            // minuto inteiro. Um F5 nessa janela encontrava o item no estado local — sem
+            // `cliente_key`, sem envelope, sem `_enviando` — e portanto invisível para o
+            // dreno E descartável pelo poll. O item sumia da tela e nunca chegava à planilha.
             //
-            // É a Regra 43 pelo avesso: lá o problema era ler uma global mutável tarde
-            // demais; aqui é capturar uma referência cedo demais e ela ser substituída.
-            comanda = state.comandas[chave];
-            if (!comanda) {
-                console.warn('[Sheets] addItem: comanda sumiu durante a criação |', chave);
-                return null;
-            }
-
-            // O item foi empurrado no array da comanda ANTIGA. Se o objeto foi trocado, ele
-            // ficou órfão: gravaria no servidor e não apareceria em tela nenhuma. Reanexa.
-            if (Array.isArray(comanda.itens) && comanda.itens.indexOf(itemRef) === -1) {
-                comanda.itens.push(itemRef);
-                console.log('[Sheets] item reanexado à comanda absorvida |', chave);
-            }
-
-            if (!comanda._id) {
-                console.warn('[Sheets] sheets_addItem: comanda._id não disponível, item não salvo', chave);
-                return null;
-            }
-
-            // Marca o instante do lançamento. É o que permite ao `_absorverComandaDoServidor`
-            // distinguir "item recém-lançado que o servidor ainda não conhece" de "item que o
-            // servidor removeu" — sem isso, um não pode ser preservado sem ressuscitar o outro.
+            // Enfileirar antes resolve os dois: o envelope está no localStorage desde o
+            // primeiro instante, e o `_enviando`/`_clienteKey` protegem o item do poll.
             itemRef._addedEm = Date.now();
-            // Marca a gravação como EM VOO. É o que permite ao poll distinguir
-            // "otimista, ainda não confirmado" de "resquício de uma gravação que já
-            // terminou" — sem isso o item duplica na tela (ver o merge no pollFromSheets).
             itemRef._enviando = true;
 
             const _payload = {
-                comanda_id: comanda._id,
+                comanda_id: comanda._id || '',
                 codigo: dados.codigo, nome: dados.nome,
                 categoria: state.itens[dados.codigo]?.categoria || '',
                 quantidade: dados.quantidade || 1,
@@ -5135,24 +5800,59 @@
                 usuario: state.userLogado || state.user || ''
             };
 
-            // ⚠️ ORDEM CRÍTICA (Onda 1): chave → fila → salvar → só então o fetch.
-            //
-            // Se a aba morrer entre o fetch e a resposta — que é o cenário real do tablet
-            // Android sob pressão de memória — nada depois do `await` roda. O que sobrevive
-            // é só o que já estava no localStorage. Por isso a fila vem antes.
             const _ck = _novaClienteKey();
             itemRef._clienteKey = _ck;
-            _filaEnfileirar('addItem', _payload, _ck);
+            _filaEnfileirar('addItem', _payload, _ck, { comandaChave: chave });
             saveStorage();
-
-            // ⚠️ REDESENHAR AQUI, e não confiar no render do chamador.
-            //
-            // Quando a comanda acabou de ser criada, o `await comanda._pendingNovaComanda`
-            // lá em cima devolve o controle ao chamador antes desta linha. O chamador então
-            // chama renderizarListaLançada() e pinta a tela SEM a marca de pendência — que
-            // só passa a existir agora. Sem este render, o ⏳ nunca aparecia justamente no
-            // caso mais comum da operação: primeiro item de uma comanda nova.
             renderizarTelaAtual();
+
+            // ⏳ Só agora espera a comanda existir no servidor. Se a aba morrer daqui pra
+            // frente, o envelope já está gravado e o dreno assume.
+            if (comanda._pendingNovaComanda) await comanda._pendingNovaComanda;
+
+            // ⚠️ RELER A COMANDA DEPOIS DO AWAIT — a referência de cima pode ter morrido.
+            //
+            // Achado pelo Bruno em 12/08, num cenário raro e real: o aparelho A cria a
+            // comanda; segundos depois, antes do poll, o aparelho B carrega o mesmo número.
+            // B não tem a comanda localmente, então cria de forma otimista (feedback verde)
+            // — e o GAS responde `jaAberta`. O ramo que trata isso troca o objeto da comanda,
+            // e a referência capturada antes do await aponta para o descartado, que nunca
+            // ganha `_id`.
+            //
+            // É a Regra 43 pelo avesso: lá o problema era ler uma global mutável tarde
+            // demais; aqui é capturar uma referência cedo demais e ela ser substituída.
+            comanda = state.comandas[chave];
+            if (!comanda) {
+                // A comanda foi revertida (não existia mesmo no servidor). Quem reverteu já
+                // limpou os envelopes dela — ver `_filaRemoverPorComanda`.
+                console.warn('[Sheets] addItem: comanda não existe mais |', chave);
+                itemRef._enviando = false;
+                return null;
+            }
+
+            // O item foi empurrado no array da comanda ANTIGA. Se o objeto foi trocado, ele
+            // ficou órfão: gravaria no servidor e não apareceria em tela nenhuma. Reanexa.
+            if (Array.isArray(comanda.itens) && comanda.itens.indexOf(itemRef) === -1) {
+                comanda.itens.push(itemRef);
+                console.log('[Sheets] item reanexado à comanda absorvida |', chave);
+            }
+
+            // Sem `comanda_id` não há o que enviar — mandar assim criaria um item órfão na
+            // planilha, que é o ponto 19 e um problema pior que a espera. Quem grava este é
+            // o dreno, depois de amarrar o id.
+            if (!comanda._id) {
+                console.warn('[Sheets] addItem: comanda ainda sem id — item segue na fila com vínculo tardio |', chave);
+                itemRef._enviando = false;
+                saveStorage();
+                _atualizarBadgeFila();
+                renderizarTelaAtual();
+                return null;
+            }
+
+            // O id chegou depois do envelope. Costura os dois antes de enviar — se a aba
+            // morrer entre esta linha e a resposta, o dreno precisa do envelope completo.
+            _payload.comanda_id = comanda._id;
+            _filaAtualizarPayload(_ck, { comanda_id: comanda._id });
 
             const res = await sheetsAPI('addItem', Object.assign({}, _payload, { cliente_key: _ck }));
             itemRef._enviando = false;   // gravação terminou — com sucesso ou não
@@ -13596,9 +14296,10 @@ async function carregarComanda() {
             // privado do navegador). Sem try/catch, essa exceção sobe e ABORTA a função que
             // chamou saveStorage() no meio da execução — e isso é grave em pontos como
             // criarComandaInline(), onde saveStorage() roda ANTES de sheets_novaComanda():
-            // a comanda ficaria só no aparelho, nunca seria criada no servidor, e todo item
-            // lançado nela depois seria descartado em silêncio por sheets_addItem() (que
-            // desiste quando comanda._id não existe).
+            // a comanda ficaria só no aparelho e nunca seria criada no servidor. (Desde o
+            // ponto 23 o item não some mais nesse caso — ele fica na fila com vínculo
+            // tardio —, mas continua sem poder ser gravado enquanto a comanda não existir
+            // lá, então o cuidado abaixo segue valendo.)
             // Princípio: persistir localmente é conveniência; gravar no servidor é a
             // operação que não pode falhar. O local NUNCA pode derrubar o servidor.
             // Em operação normal este catch jamais executa — o comportamento é idêntico.
