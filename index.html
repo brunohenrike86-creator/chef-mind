@@ -3169,7 +3169,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-13-f';
+        const CHEF_MIND_VERSAO = '2026-08-13-k';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -3235,6 +3235,12 @@
         // segundo plano e grava normalmente — nós apenas paramos de PRENDER A TELA nele.
         // Nenhum signal entra em cena, então a Regra 2 continua intacta.
         const _POST_PRAZO_MS = 30000;
+
+        // Quanto o painel do Checkout segura a comanda esperando a confirmação da gravação.
+        // O caminho normal responde em 1-2s, então 6s cobre ele e a cauda moderada com folga.
+        // Acima disso o caixa viraria refém de um problema de transporte com um cliente na
+        // frente — e essa troca não compensa: o poll confirma sozinho depois.
+        const _CHECKOUT_ESPERA_MS = 6000;
 
         // ═══════════════════════════════════════════════════════════════════════════════
         // PONTO 8 — OBSERVABILIDADE (fase 1: coleta, sem tela)
@@ -5198,6 +5204,105 @@
             showToast(`❌ "${dados.nome}" não foi salvo. Lance novamente.`, 'error');
             if (typeof renderizarTelaAtual === 'function') renderizarTelaAtual();
             return res;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // PONTO 5 — avisar o operador do que mudou, e do que fazer
+        // ═══════════════════════════════════════════════════════════════════════════════
+        //
+        // "O total mudou" sozinho não serve — o Bruno derrubou a primeira versão com essa
+        // observação. Mudou por quê? O operador está com o cliente na frente e precisa de
+        // uma AÇÃO, não de um aviso.
+        //
+        // Por isso o servidor devolve os itens quando diverge: dá para mostrar exatamente
+        // qual item apareceu, e a linha que importa é "falta cobrar" / "devolver".
+        //
+        // ⚠️ "Foi cobrado" seria mentira — correção do Bruno. **O operador cobra o que ele
+        // vê.** O número do servidor é o que ficou REGISTRADO. São duas coisas diferentes, e
+        // confundi-las inverteria o sentido da mensagem.
+        async function _avisarDivergenciaPagamento(divs, forma) {
+            const _r = v => 'R$ ' + (v || 0).toFixed(2).replace('.', ',');
+            const ehAReceber = String(forma || '').toLowerCase() === 'a_receber';
+
+            // ⚠️ `confirmarAcao` monta a mensagem com innerHTML, e HTML COLAPSA espaços —
+            // alinhar com espaços comuns não funcionaria. Daí o &nbsp;. E nome de item vem
+            // do cadastro, então passa por escape antes de entrar no HTML.
+            const _esc = t => String(t == null ? '' : t)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const _ind = '&nbsp;&nbsp;&nbsp;';
+
+            const blocos = divs.map(d => {
+                // O "o quê" da pergunta, nos DOIS sentidos. A versão anterior só sabia listar
+                // o que entrou e, quando essa lista saía vazia, concluía "foram removidos" —
+                // conclusão por eliminação, que virava mentira sempre que a lista vinha vazia
+                // por outro motivo. Agora cada lado é apurado por conta própria.
+                const _antes  = d.antes || [];
+                const _ids    = new Set(_antes.map(i => i.id).filter(Boolean));
+                const _cks    = new Set(_antes.map(i => i.chave).filter(Boolean));
+                const _srv    = d.itens || [];
+                const _srvIds = new Set(_srv.map(i => String(i.id)));
+                const _srvCks = new Set(_srv.map(i => i.cliente_key).filter(Boolean));
+
+                // A `cliente_key` entra na comparação porque o item otimista da tela ainda
+                // não tem `id`. Sem ela, o mesmo item apareceria como "entrou" no servidor e
+                // "sumiu" da tela ao mesmo tempo.
+                const novos = _srv.filter(i =>
+                    !_ids.has(String(i.id)) && !(i.cliente_key && _cks.has(i.cliente_key)));
+
+                // Só itens que JÁ tinham id podem ser dados como removidos — um item ainda
+                // em voo não está ausente, está a caminho.
+                const sumidos = _antes.filter(i =>
+                    i.id && !_srvIds.has(i.id) && !(i.chave && _srvCks.has(i.chave)));
+
+                const linhas = novos.map(i => _ind + '+ ' + _esc(i.nome) + ' — ' + _r(parseFloat(i.total) || 0))
+                    .concat(sumidos.map(i => _ind + '&minus; ' + _esc(i.nome) + ' — ' + _r(i.total)));
+
+                // Sobra o caso em que a lista é a mesma e só o valor mudou (quantidade ou
+                // preço editado). Raro, mas dizer "removeram" aqui seria inventar.
+                const lista = linhas.length ? linhas.join('\n')
+                                            : _ind + '• (o valor de um item foi alterado)';
+
+                const dif = (d.correto || 0) - (d.viu || 0);
+
+                // A Receber é outro caso: NADA foi cobrado ainda, e o valor correto já ficou
+                // registrado. A cobrança futura sai certa sozinha — então aqui é informação,
+                // não tarefa. Mandar o operador correr atrás de dinheiro que ninguém deve
+                // seria pior que não avisar.
+                if (ehAReceber) {
+                    return '<strong>Comanda #' + d.numero + '</strong>\n' + lista +
+                           '\n\n' + _ind + 'Registrado: <strong>' + _r(d.correto) + '</strong>' +
+                           '\n' + _ind + 'Sua tela mostrava: ' + _r(d.viu) +
+                           '\n\n' + _ind + 'A cobrança futura já sai pelo valor correto.';
+                }
+
+                const acao = dif > 0
+                    ? _ind + 'Falta cobrar: <strong>' + _r(dif) + '</strong>'
+                    : _ind + 'Devolver: <strong>' + _r(Math.abs(dif)) + '</strong>';
+
+                return '<strong>Comanda #' + d.numero + '</strong>\n' + lista +
+                       '\n\n' + _ind + 'Você cobrou: ' + _r(d.viu) +
+                       '\n' + _ind + 'Valor correto: ' + _r(d.correto) +
+                       '\n' + acao;
+            }).join('\n\n<hr style="border:none;border-top:1px solid var(--border);margin:6px 0;">\n');
+
+            // Um modal só, mesmo com várias comandas — decisão do Bruno. Três interrupções
+            // seguidas viram três cliques automáticos em "Entendi", e aí o aviso não avisa.
+            await confirmarAcao({
+                icone: '⚠️',
+                titulo: divs.length > 1 ? 'Comandas mudaram durante o pagamento'
+                                        : 'A comanda mudou durante o pagamento',
+                mensagem: blocos,
+                textoConfirmar: 'Entendi',
+                corPerigo: !ehAReceber
+            });
+
+            // Absorve o estado real, para a tela mostrar a comanda como ela ficou.
+            divs.forEach(d => {
+                const c = state.comandas[d.chave];
+                if (c && d.itens) { c.itens = d.itens.map(mapItemSheets); c.total = d.correto; }
+            });
+            saveStorage();
+            renderizarTelaAtual();
         }
 
         async function sheets_pagarComanda(chave, total, forma, obs) {
@@ -9279,6 +9384,32 @@ async function carregarComanda() {
                 return;
             }
 
+            // 📸 O QUE O OPERADOR VIU — congelado AGORA, no clique de confirmar.
+            //
+            // Bug pego em teste (26/08): tanto o total quanto a lista de itens eram lidos
+            // DEPOIS do await de cada gravação. Nesse intervalo (~1-2s) o poll já tinha
+            // absorvido o item novo, e isso produzia dois sintomas diferentes:
+            //  • a lista "antes" já continha o item que apareceu → o modal dizia "itens
+            //    foram removidos" num caso em que o item foi ADICIONADO;
+            //  • no pagamento em grupo, da 2ª comanda em diante o total já era o corrigido
+            //    → o servidor não acusava divergência e o aviso dela sumia.
+            //
+            // "O operador cobrou o que ele viu" só é verdade se o retrato for do instante em
+            // que ele viu. Qualquer leitura depois do await é outra coisa.
+            const _visto = {};
+            _keysPagar.forEach(k => {
+                const c = state.comandas[k];
+                _visto[k] = {
+                    total: (c.itens || []).reduce((s,i)=>s+(i.total||(i.preco*i.quantidade)||0),0),
+                    itens: (c.itens || []).map(i => ({
+                        id:    i._id ? String(i._id) : '',
+                        chave: i._clienteKey || '',
+                        nome:  i.nome,
+                        total: i.total || (i.preco * i.quantidade) || 0
+                    }))
+                };
+            });
+
             // Marca localmente TODAS as comandas do pagamento (grupo com 1 = comportamento
             // idêntico ao de antes) e dispara a gravação no servidor.
             _keysPagar.forEach(k => {
@@ -9313,60 +9444,44 @@ async function carregarComanda() {
             // de entrar no trecho assíncrono — nada aqui pode depender de global mutável.
             const _formaPg = formaPagamentoSelecionada;
             const _obsPg   = obsAReceber || '';
-            ;(async () => {
-                const falhas = [];
-                for (const k of _keysPagar) {
-                    const c = state.comandas[k];
-                    const _tot = (c.itens || []).reduce((s,i)=>s+(i.total||(i.preco*i.quantidade)||0),0);
-                    try {
-                        const res = await sheets_pagarComanda(k, _tot, _formaPg, _obsPg);
-                        if (res && res.erro) falhas.push(c.numero);
-                    } catch (e) {
-                        falhas.push(c.numero);
-                    }
-                }
-                // Estoque NÃO é mais recarregado aqui (ponto 7, 04/08). A baixa automática
-                // foi desligada no GAS (ESTOQUE_BAIXA_AUTOMATICA), então não há saldo novo
-                // para buscar — era uma chamada por pagamento sem nenhum efeito. O pagamento
-                // é o momento mais sensível da operação; cada chamada a menos aqui conta.
-                // Religar junto com ESTOQUE_BAIXA_AUTOMATICA quando o módulo entrar em uso.
-                if (falhas.length > 0) {
-                    // Reverte localmente só as que falharam, pra elas voltarem à lista de
-                    // abertas e o operador conseguir tentar de novo — em vez de sumirem da
-                    // tela dando a impressão de que foram pagas.
-                    falhas.forEach(num => {
-                        const k = _keysPagar.find(x => state.comandas[x] && state.comandas[x].numero === num);
-                        if (k) {
-                            const c = state.comandas[k];
-                            c.paid = false;
-                            c.status = 'Aberta';
-                            c.formaPagamento = null;
-                            c.dataPagamento = null;
-                        }
-                    });
-                    saveStorage();
-                    renderizarCheckout();
-                    showToast(`⚠️ NÃO foi possível pagar a(s) comanda(s) #${falhas.join(', #')} — refaça o pagamento delas`, 'error');
-                }
-            })();
-
-            // FEEDBACK
-            showToast(_keysPagar.length > 1
-                ? `✓ ${_keysPagar.length} comandas pagas!`
-                : '✓ Pagamento confirmado!', 'success');
-
-            // LIMPAR — atrasado de propósito (deixa o operador ver o "✓ Pagamento confirmado!"
-            // e o estado da comanda paga por um instante, em vez de a tela sumir na cara dele
-            // assim que clica/confirma). Guarda QUAL comanda estava sendo paga agora, antes do
-            // delay — se o operador já bipou/selecionou outra comanda nesse meio-tempo (correria
-            // real, scanner é quase instantâneo), comandaCheckoutAtual já vai ter mudado quando
-            // este callback rodar, e a limpeza vira no-op: não mexe na comanda nova, que já foi
-            // corretamente preparada por selecionarComandaCheckout(). Sem essa checagem, esse
-            // cleanup atrasado zerava comandaCheckoutAtual/formaPagamentoSelecionada às cegas,
-            // podendo apagar a seleção que o operador já tinha feito para o próximo cliente
-            // (bug relatado: forma de pagamento da comanda anterior parecendo "grudar" na nova).
+            // ⏳ O PAINEL SEGURA A COMANDA ATÉ O SERVIDOR RESPONDER (26/08).
+            //
+            // O que havia aqui: verde imediato + painel liberado, enquanto a gravação ainda
+            // estava em voo. O Bruno descreveu a consequência melhor do que qualquer teste:
+            // "o card some, o feedback verde aparece, para o operador está tudo certo" — e o
+            // aviso de divergência chegava DEPOIS, com o cliente já indo embora.
+            //
+            // O defeito não era o atraso do aviso, era o significado do verde. Ele dizia
+            // "recebi seu clique"; o operador lê "acabou, próximo". Enquanto o clique e a
+            // confirmação tiverem a mesma cor, todo aviso posterior chega tarde por definição.
+            //
+            // Agora: a comanda sai da LISTA de abertas na hora (ninguém cobra de novo), mas o
+            // PAINEL fica ocupado, em "confirmando", até a resposta. No caminho normal (1-2s)
+            // a divergência aparece com a comanda ainda na tela e o cliente na frente. O
+            // operador não fica preso: pode bipar a próxima, e o guard de `comandaCheckoutAtual`
+            // cuida disso.
             const _comandaQueFoiPaga = comandaCheckoutAtual;
-            setTimeout(() => {
+
+            const _btnEsperando = document.getElementById('btnConfirmarPagamento');
+            if (_btnEsperando) {
+                _btnEsperando.textContent = '⏳ CONFIRMANDO...';
+                _btnEsperando.style.opacity = '0.6';
+                _btnEsperando.style.pointerEvents = 'none';
+                _btnEsperando.style.cursor = 'wait';
+            }
+
+            let _painelLiberado = false;
+            const _liberarPainel = () => {
+                if (_painelLiberado) return;
+                _painelLiberado = true;
+
+                // O rótulo volta SEMPRE, antes do guard: se o operador já bipou a próxima
+                // comanda, o botão que ele vai usar é este mesmo — e ele não pode encontrar
+                // um botão escrito "CONFIRMANDO..." para um pagamento que já terminou.
+                // (opacity/pointerEvents ficam por conta do fluxo da comanda nova.)
+                const _b = document.getElementById('btnConfirmarPagamento');
+                if (_b) { _b.textContent = '✓ CONFIRMAR PAGAMENTO [Enter]'; _b.style.cursor = 'pointer'; }
+
                 if (comandaCheckoutAtual !== _comandaQueFoiPaga) return;
                 comandaCheckoutAtual = null;
                 formaPagamentoSelecionada = null;
@@ -9395,7 +9510,120 @@ async function carregarComanda() {
                 }
 
                 renderizarCheckout();
-            }, 1500);
+            };
+
+            // Teto de 6s: passou disso, o caixa não pode ficar refém da cauda de transporte.
+            // Libera o painel e assume o tom honesto — âmbar, não verde. O poll confirma
+            // depois, e o desfecho final ainda vem quando a resposta chegar.
+            const _tetoPainel = setTimeout(() => {
+                if (_painelLiberado) return;
+                _liberarPainel();
+                showToast('⏳ Enviando o pagamento — pode seguir. NÃO cobre de novo.', 'warning');
+            }, _CHECKOUT_ESPERA_MS);
+
+            const _gravando = (async () => {
+                const falhas      = [];
+                const pagas       = [];   // confirmadas pelo servidor
+                const incertas    = [];   // resposta não chegou — NÃO reverter (ponto 5, decisão 3)
+                const divergencias = [];  // servidor calculou diferente do que a tela mostrava
+                for (const k of _keysPagar) {
+                    const c = state.comandas[k];
+                    const _tot = _visto[k].total;   // 📸 o que ele viu, não o que a tela mostra agora
+                    try {
+                        const res = await sheets_pagarComanda(k, _tot, _formaPg, _obsPg);
+
+                        // ⚠️ DECISÃO 3 — falha de TRANSPORTE não é "não deu certo".
+                        //
+                        // Antes, qualquer `res.erro` revertia a comanda para Aberta. Com a
+                        // cauda de transporte, isso significa: o GAS gravou o pagamento, a
+                        // resposta se perdeu na volta, e a comanda reaparece como pendente.
+                        // O desfecho real não é o cliente pagar duas vezes — é o operador
+                        // não entender, no fim do dia, por que aquela comanda ficou aberta
+                        // enquanto a planilha diz que está paga. A conferência não bate e
+                        // não há pista de onde veio.
+                        //
+                        // Pagar é naturalmente idempotente (grava os mesmos campos na mesma
+                        // linha), então manter como paga e deixar o poll confirmar é seguro.
+                        if (_falhaDeTransporte(res)) {
+                            incertas.push(c.numero);
+                            continue;
+                        }
+                        if (res && res.erro) { falhas.push(c.numero); continue; }
+
+                        pagas.push(c.numero);
+
+                        // Servidor calculou um total diferente do que o operador viu.
+                        if (res && res.divergiu) {
+                            divergencias.push({
+                                numero:  c.numero,
+                                chave:   k,
+                                viu:     _tot,
+                                correto: res.total_gravado,
+                                itens:   res.itens || [],
+                                antes:   _visto[k].itens
+                            });
+                        }
+                    } catch (e) {
+                        falhas.push(c.numero);
+                    }
+                }
+                // Estoque NÃO é mais recarregado aqui (ponto 7, 04/08). A baixa automática
+                // foi desligada no GAS (ESTOQUE_BAIXA_AUTOMATICA), então não há saldo novo
+                // para buscar — era uma chamada por pagamento sem nenhum efeito. O pagamento
+                // é o momento mais sensível da operação; cada chamada a menos aqui conta.
+                // Religar junto com ESTOQUE_BAIXA_AUTOMATICA quando o módulo entrar em uso.
+                // "A tempo" é o painel ainda segurando ESTA comanda. Se o operador já bipou
+                // a próxima, o verde precisa dizer de qual comanda está falando.
+                const _aTempo = !_painelLiberado && comandaCheckoutAtual === _comandaQueFoiPaga;
+
+                // ⚠️ A DIVERGÊNCIA VEM PRIMEIRO, e de propósito.
+                // Enquanto o painel segura, a comanda está na tela e o cliente na frente —
+                // é o único instante em que este aviso permite AGIR. Depois disso ele vira
+                // histórico, e aviso que não permite agir ensina a clicar "Entendi" no
+                // automático, que é justamente o que o Ponto 5 existe para evitar.
+                if (divergencias.length > 0) await _avisarDivergenciaPagamento(divergencias, _formaPg);
+
+                if (falhas.length > 0) {
+                    // Reverte localmente só as que falharam, pra elas voltarem à lista de
+                    // abertas e o operador conseguir tentar de novo — em vez de sumirem da
+                    // tela dando a impressão de que foram pagas.
+                    falhas.forEach(num => {
+                        const k = _keysPagar.find(x => state.comandas[x] && state.comandas[x].numero === num);
+                        if (k) {
+                            const c = state.comandas[k];
+                            c.paid = false;
+                            c.status = 'Aberta';
+                            c.formaPagamento = null;
+                            c.dataPagamento = null;
+                        }
+                    });
+                    saveStorage();
+                    renderizarCheckout();
+                    showToast(`⚠️ NÃO foi possível pagar a(s) comanda(s) #${falhas.join(', #')} — refaça o pagamento delas`, 'error');
+                }
+
+                if (incertas.length > 0) {
+                    console.warn('[Pagamento] sem confirmação:', incertas.join(', '),
+                                 '— mantidas como pagas, o poll confirma.');
+                    // Se o teto de 6s já avisou, repetir a mesma coisa aqui só ensina o
+                    // operador a ignorar toast âmbar. Uma vez, no momento certo, basta.
+                    if (_aTempo) {
+                        showToast('⏳ Comanda(s) #' + incertas.join(', #') +
+                                  ' — aguardando confirmação do servidor. NÃO cobre de novo.', 'warning');
+                    }
+                } else if (falhas.length === 0) {
+                    // ✓ Agora o verde significa GRAVADO. Quando chega atrasado (o teto já
+                    // liberou o painel), ele precisa dizer de qual comanda está falando —
+                    // o operador já está com outro cliente.
+                    showToast(_aTempo
+                        ? (pagas.length > 1 ? `✓ ${pagas.length} comandas pagas!` : '✓ Pagamento confirmado!')
+                        : `✓ Confirmado — comanda(s) #${pagas.join(', #')}`, 'success');
+                }
+
+                _liberarPainel();
+            })();
+
+            _gravando.then(() => { clearTimeout(_tetoPainel); });
         }
 
         
@@ -12118,6 +12346,10 @@ async function carregarComanda() {
 
         // ========== CAIXA — ABERTURA / FECHAMENTO ==========
 
+        // Fase desenhada na última renderização — usada para limpar o campo de troco só na
+        // TRANSIÇÃO para "fechado", e não a cada desenho. Ver a nota dentro da função.
+        let _faseCaixaAnterior = null;
+
         function renderizarCaixa() {
             // Não interromper o fluxo de fechamento ativo — o poll roda a cada 3s e
             // chamaria isso enquanto o usuário está preenchendo os campos de fechamento.
@@ -12135,10 +12367,27 @@ async function carregarComanda() {
             document.getElementById('caixa-fase-aberto').style.display    = fase === 'aberto'  ? 'flex'  : 'none';
             document.getElementById('caixa-fase-fechamento').style.display = 'none';
 
-            // Limpar campo de troco sempre que exibir a tela de abertura
-            if (fase === 'fechado') {
-                document.getElementById('inputTrocoAbertura').value = '';
+            // ⚠️ LIMPAR SÓ NA TRANSIÇÃO, nunca a cada desenho.
+            //
+            // Isto limpava o campo em TODA renderização — e `renderizarCaixa()` é chamada de
+            // onze lugares, incluindo o callback do `reRenderAposPoll`, que dispara segundos
+            // DEPOIS de a tela abrir. O operador entrava, digitava o troco, o poll terminava,
+            // o campo zerava embaixo do dedo, e o caixa era aberto com R$ 0,00.
+            //
+            // Aconteceu em produção em 13/08 e custou uma abertura de caixa zerada. É a
+            // Regra 33: função de render chamada tanto por ação do usuário quanto por poll
+            // não pode resetar estado que o usuário está preenchendo — precisa comparar
+            // contra o que já estava ativo antes de zerar.
+            //
+            // Também não limpa se o campo estiver com foco: se ele está digitando, a tela
+            // não tem nada a dizer sobre aquele valor.
+            const _trocoEl = document.getElementById('inputTrocoAbertura');
+            if (fase === 'fechado' && _trocoEl) {
+                if (_faseCaixaAnterior !== 'fechado' && document.activeElement !== _trocoEl) {
+                    _trocoEl.value = '';
+                }
             }
+            _faseCaixaAnterior = fase;
 
             if (document.getElementById('caixaDataLabel'))
                 document.getElementById('caixaDataLabel').textContent = dataLabel;
