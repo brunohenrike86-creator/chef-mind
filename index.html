@@ -3169,7 +3169,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-13-u';
+        const CHEF_MIND_VERSAO = '2026-08-13-w';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -6021,13 +6021,32 @@
             });
         }
 
+        // ⚠️ ESTE TAMBÉM ANUNCIAVA SUCESSO SEM SABER (ponto 22, bloco 2).
+        //
+        // A resposta era descartada, e quem chamava mostrava "✓ Carnes salvas!" de forma
+        // SÍNCRONA, sem nem esperar o POST. Some-se a trava de 30s, que impede o poll de
+        // corrigir a tela, e o resultado é: o Admin vê as carnes novas, a planilha continua
+        // com as antigas, e ninguém descobre até a cozinha preparar errado — e até o cliente
+        // ver o cardápio velho no link online.
+        //
+        // Retentar é seguro: `atualizarConfig` sobrescreve a mesma chave (Regra 50). Mesma
+        // retentativa única já usada no login e no cardápio.
         async function sheets_salvarCarnesDia(dia, carnes) {
             // Arma a trava ANTES do POST: durante o envio, o poll deste mesmo aparelho pode
             // trazer a config antiga e reverter na tela o que acabou de ser salvo. Foi o
             // incidente de 02/08.
             marcarCarnesEditadas();
             const siglas = ['seg','ter','qua','qui','sex','sab','dom'];
-            await sheetsAPI('atualizarConfig', { chave: `carnes_${siglas[dia]}`, valor: carnes.join(',') });
+            const _payload = { chave: `carnes_${siglas[dia]}`, valor: carnes.join(',') };
+
+            let res = await sheetsAPI('atualizarConfig', _payload);
+            if (_falhaDeTransporte(res)) {
+                console.warn('[Carnes] sem confirmação — 1 retentativa |', _payload.chave);
+                await new Promise(r => setTimeout(r, 900));
+                marcarCarnesEditadas();          // renova a trava para a 2ª tentativa
+                res = await sheetsAPI('atualizarConfig', _payload);
+            }
+            return res;
         }
 
         // Salvar como Promise global para o handleLogin poder aguardar o término
@@ -10415,8 +10434,24 @@ async function carregarComanda() {
             
             state.marnitasDia[diaMarnitaSelecionado] = carnes;
             saveStorage();
-            sheets_salvarCarnesDia(diaMarnitaSelecionado, carnes); // ☁️ SHEETS
-            showToast('✓ Carnes salvas!', 'success');
+
+            // O verde só depois da confirmação — antes ele saía junto com o clique, sem
+            // sequer esperar o POST.
+            sheets_salvarCarnesDia(diaMarnitaSelecionado, carnes).then(res => {
+                if (res && res.erro) {
+                    // Servidor recusou. Solta a trava para o poll poder trazer a verdade,
+                    // senão a tela fica mostrando um valor que não existe na planilha.
+                    _carnesEditadasEm = 0;
+                    showToast('❌ As carnes NÃO foram salvas: ' + res.erro + ' — tente de novo.', 'error');
+                    return;
+                }
+                if (_falhaDeTransporte(res)) {
+                    showToast('⏳ Não recebemos confirmação. Recarregue o Admin em instantes ' +
+                              'para conferir se as carnes salvaram.', 'warning');
+                    return;
+                }
+                showToast('✓ Carnes salvas!', 'success');
+            });
         }
 
         function obterMarnitasDodia() {
@@ -10895,8 +10930,37 @@ async function carregarComanda() {
             pendentes.forEach(i => {
                 i.timestampInicioPreparo = agora;
                 i.usuarioPreparo = usuario || 'Atendente';
-                i._writeAttemptedAt = Date.now(); // TTL para anti-flicker: se servidor não confirmar em 15s, reverte
-                if (i._id) sheetsAPI('iniciarPreparo', { item_id: i._id, usuario });
+                // TTL anti-flicker: se o servidor não confirmar dentro de WRITE_TTL_MS (45s),
+                // o merge do poll reverte o card. (O comentário antigo dizia 15s e estava
+                // desatualizado — o valor real está em WRITE_TTL_MS.)
+                i._writeAttemptedAt = Date.now();
+                delete i._writeIncerto;
+                if (!i._id) return;
+
+                // ⚠️ A RESPOSTA ERA JOGADA FORA (ponto 22, bloco 2).
+                //
+                // Consequência: uma gravação que caiu na cauda de transporte fazia o card
+                // voltar para "Aguardando" COM ERRO VERMELHO — e o poll seguinte trazia o
+                // timestamp do servidor e virava de novo. A cozinha via o card piscar e uma
+                // acusação de falha para algo que tinha dado certo.
+                //
+                // Agora: transporte incerto NÃO reverte (a gravação provavelmente aconteceu,
+                // e o poll confirma); recusa do servidor reverte na hora, com o motivo.
+                sheetsAPI('iniciarPreparo', { item_id: i._id, usuario }).then(res => {
+                    if (_falhaDeTransporte(res)) {
+                        i._writeIncerto = true;   // segura o revert do TTL
+                        console.warn('[Preparo] iniciarPreparo sem confirmação |', i._id);
+                        return;
+                    }
+                    if (res && res.erro) {
+                        i.timestampInicioPreparo = null;
+                        i.usuarioPreparo = null;
+                        delete i._writeAttemptedAt;
+                        saveStorage();
+                        renderizarPreapro();
+                        showToast('❌ Não foi possível iniciar o preparo: ' + res.erro, 'error');
+                    }
+                });
             });
 
             // Impressão automática do ticket — só dispara no tablet que tem o
@@ -10920,7 +10984,24 @@ async function carregarComanda() {
             const agora = new Date().toISOString();
             pendentes.forEach(i => {
                 i.timestampConcluido = agora;
-                if (i._id) sheetsAPI('concluirPreparo', { item_id: i._id });
+                if (!i._id) return;
+                // Mesmo tratamento do iniciarPreparo. Aqui o defeito era ainda mais silencioso:
+                // o merge do poll PRESERVA `timestampConcluido` local sem prazo nenhum, então
+                // uma conclusão que falhou ficava marcada como pronta NESTE aparelho para
+                // sempre — e como pendente em todos os outros.
+                sheetsAPI('concluirPreparo', { item_id: i._id }).then(res => {
+                    if (_falhaDeTransporte(res)) {
+                        console.warn('[Preparo] concluirPreparo sem confirmação |', i._id);
+                        return;   // provavelmente gravou; o poll confirma
+                    }
+                    if (res && res.erro) {
+                        i.timestampConcluido = null;
+                        saveStorage();
+                        renderizarPreapro();
+                        renderizarFullscreen();
+                        showToast('❌ Não foi possível concluir o preparo: ' + res.erro, 'error');
+                    }
+                });
             });
 
             saveStorage();
@@ -12870,8 +12951,13 @@ async function carregarComanda() {
                                     if (li) {
                                         if (!si.timestampInicioPreparo && li.timestampInicioPreparo) {
                                             const elapsed = li._writeAttemptedAt ? (Date.now() - li._writeAttemptedAt) : 0;
-                                            if (elapsed < WRITE_TTL_MS) {
+                                            // `_writeIncerto`: o POST não foi respondido. Não
+                                            // sabemos se gravou, e "não sei" não pode virar
+                                            // "falhou" — preserva e deixa o poll decidir quando
+                                            // o servidor enfim aparecer com o dado.
+                                            if (elapsed < WRITE_TTL_MS || li._writeIncerto) {
                                                 si.timestampInicioPreparo = li.timestampInicioPreparo; // preserva enquanto aguarda
+                                                if (li._writeIncerto) si._writeIncerto = true;
                                             } else {
                                                 // Servidor não confirmou em 15s — write falhou
                                                 // Não preserva: server truth vence (card volta pra Aguardando)
@@ -15303,11 +15389,32 @@ async function carregarComanda() {
             if (btnEl) { btnEl.disabled = true; btnEl.style.opacity = '0.4'; btnEl.style.cursor = 'not-allowed'; btnEl.textContent = '⏳ Cancelando...'; }
 
             showToast('⏳ Cancelando comanda...', 'info');
+            let _cancelouDeFato = false;
             try {
                 const parts = chave.split('-');
                 const numStr = parts[0];
                 const dia    = parts.slice(1).join('-');
                 const res = await sheetsAPI('cancelarComanda', { numero: numStr, dia: dia });
+
+                // Cancelar é idempotente: marca `encerramento` na mesma linha (Regra 50).
+                // Sem confirmação, "erro ao cancelar" seria um palpite — e o palpite errado
+                // faz o operador tentar de novo achando que nada aconteceu.
+                if (_falhaDeTransporte(res)) {
+                    // ⚠️ NÃO marcar como cancelada aqui. Escrevi assim numa primeira versão e
+                    // reli: o servidor pode ter RECUSADO por um motivo que importa — "a
+                    // comanda tem itens", por exemplo, se outro aparelho lançou algo nesta
+                    // janela. Marcar cancelada localmente esconderia uma comanda com itens.
+                    //
+                    // Regra de bolso para os casos indefinidos: escolha o estado que se
+                    // corrige sozinho por observação. Uma comanda a mais na tela alguém nota
+                    // e resolve; uma comanda escondida, não.
+                    console.warn('[Comanda] cancelamento sem confirmação |', chave);
+                    showToast('⏳ Sem confirmação do servidor. A comanda #' + numStr +
+                              ' continua na tela — se ela sumir sozinha em instantes, ' +
+                              'o cancelamento funcionou.', 'warning');
+                    return;
+                }
+
                 if (res && res.sucesso) {
                     // Manter no state local com encerramento='cancelada' — persiste no localStorage
                     // e bloqueia recriação otimista mesmo após polling ou reload da aba
@@ -15315,17 +15422,32 @@ async function carregarComanda() {
                         encerramento: 'cancelada', itens: [], total: 0
                     });
                     state.comandaAtual = null;
+                    _cancelouDeFato = true;
                     saveStorage();
                     limparTelaLançar();
                     showToast('✅ Comanda cancelada', 'success');
                 } else {
                     showToast(`❌ ${(res && res.erro) || 'Erro ao cancelar'}`, 'error');
-                    // Erro: comanda continua igual, restaura o botão pra poder tentar de novo
-                    if (btnEl) { btnEl.disabled = false; btnEl.style.opacity = '0.65'; btnEl.style.cursor = 'pointer'; btnEl.textContent = textoOriginal; }
                 }
             } catch (e) {
                 showToast('❌ Erro ao cancelar comanda', 'error');
-                if (btnEl) { btnEl.disabled = false; btnEl.style.opacity = '0.65'; btnEl.style.cursor = 'pointer'; btnEl.textContent = textoOriginal; }
+            } finally {
+                // ⚠️ RESTAURAR O BOTÃO AQUI, e não em cada ramo.
+                //
+                // Antes isto estava DUPLICADO no `else` e no `catch`. Quando o ponto 22
+                // acrescentou um terceiro caminho — o de transporte incerto —, ele nasceu sem
+                // a restauração, e o botão ficava "Cancelando..." para sempre: o operador não
+                // conseguia nem tentar de novo. Pego pelo Bruno no teste F.
+                //
+                // Toda desabilitação de botão precisa de um ponto ÚNICO de restauração. Com a
+                // restauração espalhada por ramo, o próximo ramo esquece — não é questão de
+                // atenção, é de estrutura.
+                if (!_cancelouDeFato && btnEl) {
+                    btnEl.disabled = false;
+                    btnEl.style.opacity = '0.65';
+                    btnEl.style.cursor = 'pointer';
+                    btnEl.textContent = textoOriginal;
+                }
             }
         }
 
