@@ -3169,7 +3169,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-13-t';
+        const CHEF_MIND_VERSAO = '2026-08-13-u';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -15662,23 +15662,54 @@ var itens = comanda.itens || [];
                     usuario
                 });
 
-                // Atualizar cache local
-                const agora_ts = new Date().toISOString();
-                _baixaLote.forEach(c => {
-                    const item = _arDados.find(x => String(x.id) === String(c.id));
-                    if (item) { item.baixa_data = agora_ts; item.baixa_forma = forma; item.baixa_usuario = usuario; }
-                });
+                // ⚠️ AQUI O SILÊNCIO VIRAVA SUCESSO — e isto é DINHEIRO (ponto 22, 26/08).
+                //
+                // O código anterior nem olhava a resposta: marcava tudo como recebido e
+                // mostrava o verde. E `sheetsAPI` NÃO lança exceção quando falha — devolve
+                // `{sucesso:false, _transporte:true}` —, então o `catch` praticamente nunca
+                // disparava. Qualquer desfecho virava "✅ recebida".
+                //
+                // É o erro INVERSO do resto do sistema. Nos outros pontos o silêncio virava
+                // fracasso: mensagem errada, dado preservado. Aqui vira sucesso, e a
+                // consequência é pior — a dívida some da lista de A Receber e **ninguém vai
+                // atrás dela nunca mais**.
+                const _qtd = _baixaLote.length;
 
-                const processados = resultado?.processados ?? _baixaLote.length;
+                if (_falhaDeTransporte(resultado)) {
+                    // Não sabemos. Dar baixa é idempotente, então repetir é seguro — mas
+                    // quem decide repetir é o operador, com a lista real na frente.
+                    fecharModalBaixaAR();
+                    showToast('⏳ Não recebemos confirmação do servidor. Conferindo a lista real...', 'warning');
+                    await carregarAReceber();
+                    return;
+                }
+                if (!resultado || resultado.erro || resultado.sucesso === false) {
+                    fecharModalBaixaAR();
+                    showToast('❌ ' + ((resultado && resultado.erro) || 'Não foi possível registrar a baixa') +
+                              ' — nada foi alterado. Tente de novo.', 'error');
+                    await carregarAReceber();
+                    return;
+                }
+
+                const processados = Number(resultado.processados);
                 fecharModalBaixaAR();
 
-                // Feedback de resultado
-                showToast(`✅ ${processados} comanda(s) recebida(s) · R$ ${total.toFixed(2).replace('.', ',')}`, 'success');
+                if (!isNaN(processados) && processados < _qtd) {
+                    // Baixa PARCIAL. Antes isso passava batido: o servidor devolvia
+                    // `processados` menor e a tela dizia sucesso do mesmo jeito.
+                    console.warn('[AReceber] baixa parcial:', processados, 'de', _qtd);
+                    showToast(`⚠️ Só ${processados} de ${_qtd} foram registradas. ` +
+                              'Confira a lista e refaça as que faltaram.', 'warning');
+                } else {
+                    showToast(`✅ ${processados || _qtd} comanda(s) recebida(s) · R$ ` +
+                              total.toFixed(2).replace('.', ','), 'success');
+                }
 
-                // Limpar filtro e recarregar
+                // Recarrega do SERVIDOR em vez de atualizar o cache local no otimismo.
+                // A lista de quem deve tem que refletir a planilha, não a nossa expectativa.
                 const inputBusca = document.getElementById('arBusca');
                 if (inputBusca) inputBusca.value = '';
-                renderizarAReceber();
+                await carregarAReceber();
                 return;
             }
 
@@ -15686,12 +15717,28 @@ var itens = comanda.itens || [];
             if (!_baixaCtx) return;
             btn.textContent = '...';
             try {
-                await sheetsAPI('darBaixaAReceber', { comanda_id: _baixaCtx.id, forma_baixa: forma, usuario });
-                const item = _arDados.find(c => String(c.id) === String(_baixaCtx.id));
-                if (item) { item.baixa_data = new Date().toISOString(); item.baixa_forma = forma; item.baixa_usuario = usuario; }
+                // Ver a nota no modo lote: este `await` também ignorava a resposta por
+                // completo e anunciava verde em qualquer cenário.
+                const res = await sheetsAPI('darBaixaAReceber', {
+                    comanda_id: _baixaCtx.id, forma_baixa: forma, usuario
+                });
+
+                if (_falhaDeTransporte(res)) {
+                    fecharModalBaixaAR();
+                    showToast('⏳ Não recebemos confirmação do servidor. Conferindo a lista real...', 'warning');
+                    await carregarAReceber();
+                    return;
+                }
+                if (!res || res.erro || res.sucesso === false) {
+                    showToast('❌ ' + ((res && res.erro) || 'Não foi possível registrar a baixa') +
+                              ' — nada foi alterado.', 'error');
+                    btn.disabled = false; btn.textContent = '✓ Confirmar';
+                    return;
+                }
+
                 fecharModalBaixaAR();
-                showToast('Baixa registrada com sucesso! ✅', 'success');
-                renderizarAReceber();
+                showToast('✅ Baixa registrada!', 'success');
+                await carregarAReceber();   // a lista vem do servidor, não do nosso otimismo
             } catch(e) {
                 showToast('Erro ao registrar baixa — tente novamente', 'error');
                 btn.disabled = false; btn.textContent = '✓ Confirmar';
