@@ -3169,7 +3169,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-13-w';
+        const CHEF_MIND_VERSAO = '2026-08-13-x';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -13242,6 +13242,26 @@ async function carregarComanda() {
                         : '✅ Caixa aberto com sucesso!';
                     showToast(msg, 'success');
                     pollFromSheets();
+                } else if (_falhaDeTransporte(res)) {
+                    // ⚠️ NÃO ACUSAR SEM SABER (ponto 22, bloco 3).
+                    //
+                    // O `abrirCaixa` do GAS já se protege sozinho: se o caixa foi aberto, uma
+                    // segunda chamada devolve "Caixa já aberto hoje" em vez de criar linha
+                    // nova. Ou seja, o servidor tem a resposta — basta PERGUNTAR, em vez de
+                    // dizer "Erro ao abrir caixa" para uma abertura que provavelmente deu
+                    // certo e mandar o operador tentar de novo às cegas. Foi o que aconteceu
+                    // com o Bruno em 13/08.
+                    showToast('⏳ Sem confirmação — conferindo o estado real do caixa...', 'warning');
+                    const _estado = await _sincronizarEstadoCaixa();
+                    if (_estado === 'aberto') {
+                        showToast('✅ O caixa foi aberto — a resposta é que se perdeu no caminho.', 'success');
+                        pollFromSheets();
+                    } else if (_estado === 'fechado') {
+                        showToast('❌ O caixa NÃO foi aberto. Confira o troco e tente de novo.', 'error');
+                    } else {
+                        showToast('⚠️ Não conseguimos falar com o servidor. ' +
+                                  'NÃO abra de novo antes de conferir — recarregue em instantes.', 'warning');
+                    }
                 } else {
                     // Mostra erro e fica na tela atual — NÃO navega
                     showToast(res?.erro || 'Erro ao abrir caixa', 'error');
@@ -13266,7 +13286,7 @@ async function carregarComanda() {
                 // isso); padronizado no helper para a regra ficar em um só lugar.
                 if (!_respostaValida(s)) {
                     console.warn('[Caixa] getCaixaStatus falhou — mantendo estado anterior');
-                    return;
+                    return null;   // null = "não consegui perguntar", diferente de "está fechado"
                 }
                 if (s.status === 'aberto') {
                     state.caixa = {
@@ -13281,7 +13301,8 @@ async function carregarComanda() {
                 }
                 saveStorage();
                 renderizarCaixa();
-            } catch(e) {}
+                return state.caixa.status;   // 'aberto' | 'fechado'
+            } catch(e) { return null; }
         }
 
         async function iniciarFechamentoCaixa() {
@@ -13655,6 +13676,26 @@ async function carregarComanda() {
                     pollFromSheets();
                     const enc = res.comandasEncerradas ?? '?';
                     showToast(`✅ Caixa fechado — ${enc} comanda(s) encerrada(s)`, 'success');
+                } else if (_falhaDeTransporte(res)) {
+                    // Mesmo raciocínio do abrirCaixa: o GAS procura a ÚLTIMA linha de hoje
+                    // com status 'aberto'. Se o fechamento aconteceu, uma segunda chamada não
+                    // acha nada para fechar e recusa — não sobrescreve. Então dá para
+                    // perguntar em vez de adivinhar.
+                    showToast('⏳ Sem confirmação — conferindo o estado real do caixa...', 'warning');
+                    const _estado = await _sincronizarEstadoCaixa();
+                    if (_estado === 'fechado') {
+                        document.getElementById('caixa-fase-fechamento').style.display = 'none';
+                        renderizarCaixa();
+                        renderizarCheckout();
+                        renderizarPreapro();
+                        pollFromSheets();
+                        showToast('✅ O caixa foi fechado — a resposta é que se perdeu no caminho.', 'success');
+                    } else if (_estado === 'aberto') {
+                        showToast('❌ O caixa NÃO foi fechado. Confira os valores e tente de novo.', 'error');
+                    } else {
+                        showToast('⚠️ Não conseguimos falar com o servidor. ' +
+                                  'NÃO feche de novo antes de conferir — recarregue em instantes.', 'warning');
+                    }
                 } else {
                     showToast(res?.erro || 'Erro ao fechar caixa', 'error');
                 }
