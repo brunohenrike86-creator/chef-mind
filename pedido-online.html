@@ -313,7 +313,7 @@ const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
 // tempo, e sem isso não dá pra saber qual versão está de fato rodando no aparelho —
 // só deduzir por sintoma, que já nos custou horas. O estado da trava de horário
 // aparece junto de propósito: é a diferença mais fácil de confundir entre versões.
-const CHEF_MIND_PEDIDO_VERSAO = '2026-08-28-h';
+const CHEF_MIND_PEDIDO_VERSAO = '2026-08-28-j';
 
 // Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
 // na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
@@ -431,26 +431,62 @@ const CHAVE_PEDIDO_EM_VOO = 'chefmind-pedido-em-voo';
 const _EM_VOO_VALIDADE_MS = 30 * 60 * 1000;   // meia hora: além disso o pedido não é mais "de agora"
 
 function _marcarPedidoEmVoo(payload) {
-    try {
-        localStorage.setItem(CHAVE_PEDIDO_EM_VOO, JSON.stringify({ payload: payload, ts: Date.now() }));
-        // Lê DE VOLTA. "setItem não lançou" não é o mesmo que "está gravado" — e a diferença
-        // entre as duas é exatamente a dúvida que travou o teste do Bruno em 28/08.
-        const _conf = localStorage.getItem(CHAVE_PEDIDO_EM_VOO);
-        console.log('%c[Pedido] 📌 marcado EM VOO — confirmado no storage? ' +
-                    (_conf ? 'SIM (' + _conf.length + ' chars)' : '🔴 NÃO'),
-                    'color:#E67E22;font-weight:bold');
-    } catch (e) { console.warn('[Pedido] não consegui marcar em voo:', e.message); }
+    // ⚠️ GRAVA EM DOIS LUGARES, de propósito.
+    //
+    // Em 28/08 o Bruno provou que a marca não sobrevive ao F5: o `getItem` logo depois do
+    // recarregamento devolve `null`, mesmo com a gravação tendo sido confirmada por leitura
+    // de volta um instante antes. Ou seja, "o setItem não lançou" e até "o getItem seguinte
+    // devolveu o valor" NÃO garantem que o dado atravessou o recarregamento — o localStorage
+    // do Chrome confirma na cópia em memória e persiste de forma assíncrona, e a página
+    // morrendo no meio disso pode levar a gravação junto.
+    //
+    // O `sessionStorage` é um armazenamento SEPARADO, com outro caminho de persistência, e
+    // sobrevive a F5 na mesma aba — que é exatamente o caso aqui. Duas gravações
+    // independentes: para perder o pedido agora, as DUAS têm que falhar no mesmo instante.
+    //
+    // Não é redundância por precaução vaga. É a resposta direta a um dado observado.
+    const registro = JSON.stringify({ payload: payload, ts: Date.now() });
+    let ondeGravou = [];
+
+    try { localStorage.setItem(CHAVE_PEDIDO_EM_VOO, registro); ondeGravou.push('local'); }
+    catch (e) { console.warn('[EmVoo] localStorage recusou:', e.message); }
+
+    try { sessionStorage.setItem(CHAVE_PEDIDO_EM_VOO, registro); ondeGravou.push('session'); }
+    catch (e) { console.warn('[EmVoo] sessionStorage recusou:', e.message); }
+
+    if (!ondeGravou.length) {
+        console.error('%c[Pedido] 🔴 NENHUM armazenamento aceitou a marca — o F5 vai perder o pedido',
+                      'color:red;font-weight:bold');
+        return;
+    }
+    console.log('%c[Pedido] 📌 marcado EM VOO em: ' + ondeGravou.join(' + ') +
+                ' (' + registro.length + ' chars)', 'color:#E67E22;font-weight:bold');
 }
 
 function _lerPedidoEmVoo() {
-    // Diz POR QUE devolveu nada. "Voltou null" tem quatro causas distintas — não existe,
-    // está corrompido, expirou, ou o payload está vazio — e sem distinguir as quatro a
-    // investigação vira chute. Custou uma rodada de testes do Bruno descobrir isso.
-    let bruto = null;
-    try { bruto = localStorage.getItem(CHAVE_PEDIDO_EM_VOO); }
-    catch (e) { console.warn('[EmVoo] localStorage inacessível:', e.message); return null; }
+    // Diz POR QUE devolveu nada, e — quando devolve algo — de QUAL armazenamento veio.
+    // Essa segunda informação é o experimento embutido: se a marca vier sempre do
+    // `sessionStorage`, o localStorage é que está perdendo a gravação no F5, e isso fica
+    // provado em produção sem precisar de mais nenhuma rodada de teste.
+    const fontes = [
+        { nome: 'localStorage',   ler: () => localStorage.getItem(CHAVE_PEDIDO_EM_VOO) },
+        { nome: 'sessionStorage', ler: () => sessionStorage.getItem(CHAVE_PEDIDO_EM_VOO) }
+    ];
 
-    if (!bruto) { console.log('[EmVoo] nada gravado'); return null; }
+    let bruto = null, origem = null, faltou = [];
+    for (const f of fontes) {
+        let v = null;
+        try { v = f.ler(); } catch (e) { console.warn('[EmVoo] ' + f.nome + ' inacessível:', e.message); continue; }
+        if (v) { if (!bruto) { bruto = v; origem = f.nome; } }
+        else faltou.push(f.nome);
+    }
+
+    if (!bruto) { console.log('[EmVoo] nada gravado em nenhum armazenamento'); return null; }
+    if (faltou.length) {
+        console.warn('%c[EmVoo] ⚠️ a marca sobreviveu em ' + origem + ', mas SUMIU de ' +
+                     faltou.join(' e ') + ' — foi a segunda gravação que salvou o pedido',
+                     'color:#E67E22;font-weight:bold');
+    }
 
     let v = null;
     try { v = JSON.parse(bruto); }
@@ -464,15 +500,17 @@ function _lerPedidoEmVoo() {
         _limparPedidoEmVoo();
         return null;
     }
-    console.log('[EmVoo] ✅ encontrado, gravado há ' + Math.round(idade / 1000) + 's');
+    console.log('[EmVoo] ✅ encontrado em ' + origem + ', gravado há ' + Math.round(idade / 1000) + 's');
     return v.payload;
 }
 
 function _limparPedidoEmVoo() {
-    if (localStorage.getItem(CHAVE_PEDIDO_EM_VOO)) {
-        console.log('%c[Pedido] ✅ marca EM VOO liberada (pedido resolvido)', 'color:green');
-    }
-    localStorage.removeItem(CHAVE_PEDIDO_EM_VOO);
+    // Limpa os DOIS. Deixar um para trás faria a próxima abertura tentar recuperar um pedido
+    // já resolvido — o defeito inverso, e igualmente confuso para o cliente.
+    let tinha = false;
+    try { if (localStorage.getItem(CHAVE_PEDIDO_EM_VOO)) tinha = true; localStorage.removeItem(CHAVE_PEDIDO_EM_VOO); } catch (e) {}
+    try { if (sessionStorage.getItem(CHAVE_PEDIDO_EM_VOO)) tinha = true; sessionStorage.removeItem(CHAVE_PEDIDO_EM_VOO); } catch (e) {}
+    if (tinha) console.log('%c[Pedido] ✅ marca EM VOO liberada (pedido resolvido)', 'color:green');
 }
 
 // Atalho de teste: zera tudo do Pedido Online e volta para a URL limpa, sem `?novo=1`.
@@ -481,8 +519,9 @@ function _limparPedidoEmVoo() {
 // justamente o parâmetro sob teste.
 window.cmResetPedido = function () {
     localStorage.removeItem(CHAVE_SESSAO);
-    localStorage.removeItem(CHAVE_PEDIDO_EM_VOO);
     localStorage.removeItem(CHAVE_CLIENTE_KEY);
+    try { sessionStorage.removeItem(CHAVE_PEDIDO_EM_VOO); } catch (e) {}
+    localStorage.removeItem(CHAVE_PEDIDO_EM_VOO);
     console.log('[Pedido] estado zerado — recarregando na URL limpa');
     // ⚠️ URL ABSOLUTA, não `location.pathname`.
     //
@@ -1619,7 +1658,34 @@ async function inicializar() {
     // 10-30s do transporte (ver plano emergencial). Chamada que não precisa existir é
     // ficha jogada fora na loteria — e, no horário de pico, ficha tirada de quem
     // realmente precisa.
-    const precisaDoCardapio = !sessaoAtiva && estaDentroDoHorario();
+    // A marca de "pedido em voo" é lida AQUI, antes de qualquer rede. Ela mora no
+    // localStorage: custa microssegundos e não pode falhar. Estava sendo lida DEPOIS do
+    // `carregarOpcoes()` — ou seja, atrás de até 24s de espera (duas tentativas de 12s),
+    // exatamente no cenário em que o cliente acabou de recarregar e está ansioso.
+    //
+    // O princípio: decisão que depende só de dado LOCAL nunca fica atrás de decisão que
+    // depende da REDE. Uma não pode falhar; a outra falha o tempo todo.
+    const _emVoo = _lerPedidoEmVoo();
+
+    // Mostra as três entradas que decidem a tela. Se o cliente cair no cardápio quando não
+    // devia, esta linha diz qual das três estava errada — em vez de deixar a dedução por
+    // conta de quem está testando.
+    // Lista as chaves presentes. Se a marca sumiu mas as outras estão lá, alguém a removeu.
+    // Se sumiram todas, o armazenamento foi limpo. São investigações opostas.
+    try {
+        console.log('[Boot] chaves no localStorage:', Object.keys(localStorage).join(' · ') || '(nenhuma)');
+    } catch (e) { console.warn('[Boot] não consegui listar o localStorage:', e.message); }
+
+    console.log('%c[Boot] decisão:', 'font-weight:bold',
+                '| ?novo=' + pularSessao,
+                '| sessão=' + (sessaoAtiva ? ('#' + sessaoAtiva.numero) : 'não'),
+                '| em voo=' + (_emVoo ? 'SIM' : 'não'),
+                '| horário=' + estaDentroDoHorario(),
+                '| versão=' + CHEF_MIND_PEDIDO_VERSAO);
+
+    // Nem o acompanhamento nem a tela de recuperação usam marmita, carne ou bebida. Somar
+    // `!_emVoo` aqui é a mesma economia que já se fazia para a sessão e para o fora-do-horário.
+    const precisaDoCardapio = !sessaoAtiva && !_emVoo && estaDentroDoHorario();
     if (precisaDoCardapio) await carregarOpcoes();
 
     if (sessaoAtiva && sessaoAtiva.comandaId) {
@@ -1649,23 +1715,6 @@ async function inicializar() {
     // E o parâmetro sobrevive ao F5 — então o guard desligava a recuperação exatamente no
     // cenário que ela existe para cobrir: cliente que veio pelo "Fazer novo pedido", enviou,
     // e recarregou durante a espera.
-    const _emVoo = _lerPedidoEmVoo();
-
-    // Mostra as três entradas que decidem a tela. Se o cliente cair no cardápio quando não
-    // devia, esta linha diz qual das três estava errada — em vez de deixar a dedução por
-    // conta de quem está testando.
-    // Lista as chaves presentes. Se a marca sumiu mas as outras estão lá, alguém a removeu.
-    // Se sumiram todas, o armazenamento foi limpo. São investigações opostas.
-    try {
-        console.log('[Boot] chaves no localStorage:', Object.keys(localStorage).join(' · ') || '(nenhuma)');
-    } catch (e) { console.warn('[Boot] não consegui listar o localStorage:', e.message); }
-
-    console.log('%c[Boot] decisão:', 'font-weight:bold',
-                '| ?novo=' + pularSessao,
-                '| sessão=' + (sessaoAtiva ? ('#' + sessaoAtiva.numero) : 'não'),
-                '| em voo=' + (_emVoo ? 'SIM' : 'não'),
-                '| horário=' + estaDentroDoHorario(),
-                '| versão=' + CHEF_MIND_PEDIDO_VERSAO);
     if (_emVoo) {
         console.warn('[Pedido] havia um pedido em voo — recuperando antes de abrir o cardápio');
         view = 'envio_incerto';
