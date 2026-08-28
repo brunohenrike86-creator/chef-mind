@@ -313,7 +313,7 @@ const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
 // tempo, e sem isso não dá pra saber qual versão está de fato rodando no aparelho —
 // só deduzir por sintoma, que já nos custou horas. O estado da trava de horário
 // aparece junto de propósito: é a diferença mais fácil de confundir entre versões.
-const CHEF_MIND_PEDIDO_VERSAO = '2026-08-13-a';
+const CHEF_MIND_PEDIDO_VERSAO = '2026-08-28-g';
 
 // Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
 // na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
@@ -411,6 +411,88 @@ const CHAVE_CLIENTE_KEY = 'chefmind-pedido-clientekey';
 // em 06/08 um bloco enxertado acima da declaração de um `let` derrubou o ciclo do poll por
 // zona morta temporal, e o erro só aparecia no caminho raro (ver Seção 7 do Knowledge).
 let _payloadIncerto = null;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PEDIDO EM VOO — gravado ANTES do envio (ponto 25-C, 27/08)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// O defeito: `salvarSessaoAtiva` só rodava DEPOIS da resposta. Com a cauda de transporte, a
+// espera chega a 30s — e se o cliente recarrega a página nesse intervalo, ele volta ao
+// cardápio como se nada tivesse acontecido. O pedido está gravado na planilha, a cozinha vai
+// preparar, e o cliente não vê nada. O caminho natural dele é **pedir de novo**.
+//
+// É a mesma lição do ponto 23 do lado do operador: a INTENÇÃO precisa estar no localStorage
+// antes de qualquer espera. Aqui vai o payload inteiro, porque reenviar é seguro — o servidor
+// deduplica pela `cliente_key` e devolve o pedido existente em vez de criar outro.
+//
+// Observado duas vezes pelo Bruno em poucos testes. Como quem sofre é o cliente, que fecha a
+// aba e vai embora, isso jamais apareceria em log nenhum.
+const CHAVE_PEDIDO_EM_VOO = 'chefmind-pedido-em-voo';
+const _EM_VOO_VALIDADE_MS = 30 * 60 * 1000;   // meia hora: além disso o pedido não é mais "de agora"
+
+function _marcarPedidoEmVoo(payload) {
+    try {
+        localStorage.setItem(CHAVE_PEDIDO_EM_VOO, JSON.stringify({ payload: payload, ts: Date.now() }));
+        // Lê DE VOLTA. "setItem não lançou" não é o mesmo que "está gravado" — e a diferença
+        // entre as duas é exatamente a dúvida que travou o teste do Bruno em 28/08.
+        const _conf = localStorage.getItem(CHAVE_PEDIDO_EM_VOO);
+        console.log('%c[Pedido] 📌 marcado EM VOO — confirmado no storage? ' +
+                    (_conf ? 'SIM (' + _conf.length + ' chars)' : '🔴 NÃO'),
+                    'color:#E67E22;font-weight:bold');
+    } catch (e) { console.warn('[Pedido] não consegui marcar em voo:', e.message); }
+}
+
+function _lerPedidoEmVoo() {
+    // Diz POR QUE devolveu nada. "Voltou null" tem quatro causas distintas — não existe,
+    // está corrompido, expirou, ou o payload está vazio — e sem distinguir as quatro a
+    // investigação vira chute. Custou uma rodada de testes do Bruno descobrir isso.
+    let bruto = null;
+    try { bruto = localStorage.getItem(CHAVE_PEDIDO_EM_VOO); }
+    catch (e) { console.warn('[EmVoo] localStorage inacessível:', e.message); return null; }
+
+    if (!bruto) { console.log('[EmVoo] nada gravado'); return null; }
+
+    let v = null;
+    try { v = JSON.parse(bruto); }
+    catch (e) { console.warn('[EmVoo] conteúdo ilegível — descartando:', bruto.slice(0, 80)); _limparPedidoEmVoo(); return null; }
+
+    if (!v || !v.payload) { console.warn('[EmVoo] gravado sem payload:', v); return null; }
+
+    const idade = Date.now() - (v.ts || 0);
+    if (idade > _EM_VOO_VALIDADE_MS) {
+        console.warn('[EmVoo] expirado (' + Math.round(idade / 1000) + 's) — descartando');
+        _limparPedidoEmVoo();
+        return null;
+    }
+    console.log('[EmVoo] ✅ encontrado, gravado há ' + Math.round(idade / 1000) + 's');
+    return v.payload;
+}
+
+function _limparPedidoEmVoo() {
+    if (localStorage.getItem(CHAVE_PEDIDO_EM_VOO)) {
+        console.log('%c[Pedido] ✅ marca EM VOO liberada (pedido resolvido)', 'color:green');
+    }
+    localStorage.removeItem(CHAVE_PEDIDO_EM_VOO);
+}
+
+// Atalho de teste: zera tudo do Pedido Online e volta para a URL limpa, sem `?novo=1`.
+// Existe porque, depois do primeiro pedido, a sessão salva manda o cliente direto para o
+// acompanhamento — e a única forma de voltar ao formulário era pelo `?novo=1`, que é
+// justamente o parâmetro sob teste.
+window.cmResetPedido = function () {
+    localStorage.removeItem(CHAVE_SESSAO);
+    localStorage.removeItem(CHAVE_PEDIDO_EM_VOO);
+    localStorage.removeItem(CHAVE_CLIENTE_KEY);
+    console.log('[Pedido] estado zerado — recarregando na URL limpa');
+    // ⚠️ URL ABSOLUTA, não `location.pathname`.
+    //
+    // Em `file://` cada arquivo é uma "unique security origin", e navegar para um caminho
+    // RELATIVO dispara `Unsafe attempt to load URL ... from frame with URL ...` — o Chrome
+    // bloqueia, e a página fica num meio-termo. Foi o que deixou o teste do Bruno
+    // intermitente em 28/08: o reset às vezes acontecia, às vezes não, e a diferença
+    // aparecia lá na frente como "caiu no cardápio".
+    location.href = location.href.split('?')[0].split('#')[0];
+};
 
 function _obterClienteKey() {
     let k = localStorage.getItem(CHAVE_CLIENTE_KEY);
@@ -758,6 +840,9 @@ async function confirmarPedido() {
         cliente_key: _obterClienteKey()
     };
 
+    // ⚠️ ANTES DA ESPERA, não depois. Ver a nota em CHAVE_PEDIDO_EM_VOO.
+    _marcarPedidoEmVoo(payload);
+
     let resultado;
     try {
         // Sem signal (Regra 2) — mesmo que o cliente feche a aba logo depois, o POST
@@ -790,12 +875,18 @@ async function confirmarPedido() {
     }
 
     if (!resultado || resultado.erro) {
+        // Recusa CONCLUSIVA do servidor: o pedido não entrou, então não há o que recuperar
+        // depois. Manter a marca faria a próxima abertura da página tentar reenviar algo que
+        // o servidor já rejeitou.
+        _limparPedidoEmVoo();
         erro((resultado && resultado.erro) || 'Erro ao enviar o pedido. Tente de novo.');
         return;
     }
 
     salvarClienteLembrado(state.nome.trim(), state.whatsapp.trim());
-    _limparClienteKey();   // pedido entrou: a próxima compra é outra, precisa de chave nova
+    _limparPedidoEmVoo();       // confirmado: não há mais nada em voo
+    _limparMarcaNovoNaURL();    // recargas seguintes voltam a enxergar a sessão
+    _limparClienteKey();        // pedido entrou: a próxima compra é outra, precisa de chave nova
 
     pedidoAtual = {
         comandaId: resultado.comandaId,
@@ -843,7 +934,12 @@ function novoPedidoEmNovaAba() {
     // ?novo=1 sinaliza pra essa nova aba ignorar a sessão ativa do localStorage (que é
     // compartilhada entre abas da mesma origem) e abrir direto no formulário — sem isso
     // a nova aba reconheceria a mesma sessão e cairia de volta na tela de acompanhamento.
-    window.open(location.pathname + '?novo=1', '_blank');
+    // URL ABSOLUTA — `location.pathname` é caminho relativo, e em `file://` cada arquivo é
+    // uma origem única: abrir relativo dispara "Unsafe attempt to load URL" e o Chrome
+    // bloqueia. Em produção (https) funciona, mas o teste local não — e foi isso que
+    // impediu o cenário do `?novo=1` de ser testado em 28/08. Mesma causa do
+    // `cmResetPedido`, no mesmo dia: caminho relativo em file:// não é confiável.
+    window.open(location.href.split('?')[0].split('#')[0] + '?novo=1', '_blank');
 }
 
 // ===== Polling do status (ponto 10 do plano emergencial) =====
@@ -1402,18 +1498,66 @@ function renderEnvioIncerto() {
 // Reenvia o MESMO payload, com a mesma chave e `retentativa: true`. O servidor deduplica:
 // devolve o pedido existente se ele já entrou, ou cria uma vez só se não entrou. Nos dois
 // casos o cliente termina na tela de acompanhamento — que é onde ele queria estar.
+// Reenvia o payload com `retentativa: true` e devolve a resposta. O servidor deduplica pela
+// `cliente_key`: entrega o pedido existente se ele já entrou, ou cria uma vez só se não
+// entrou. Nos dois casos o cliente termina no acompanhamento — que é onde ele queria estar.
+//
+// ⚠️ DUAS TENTATIVAS, não uma. Em 27/08 o Bruno precisou clicar duas vezes: a 1ª verificação
+// levou ~17s (dentro do prazo) e mesmo assim falhou, porque o `echo` do GAS devolveu OUTRO
+// redirect em vez do JSON. A 2ª foi em 2,24s. Como reenviar é comprovadamente seguro, pedir
+// ao cliente que clique de novo é transferir a ele um problema que o código pode resolver.
+async function _tentarRecuperarPedido(payload, tentativas) {
+    tentativas = tentativas || 2;
+    let r = null;
+    for (let i = 0; i < tentativas; i++) {
+        r = await apiPost('novoPedidoOnline', Object.assign({}, payload, { retentativa: true }));
+        // Sem este log não há como saber, olhando de fora, se o servidor CRIOU um pedido novo
+        // ou RECONHECEU o que já existia. `_dedup: true` prova que o reenvio não duplicou.
+        console.log('[Pedido] recuperação tentativa ' + (i + 1) + ' →', r,
+                    r && r._dedup ? '| ✅ DEDUP (não criou outro)' : '| criado agora');
+        if (r && !r.erro && r.comandaId) return r;
+        if (i < tentativas - 1) await new Promise(res => setTimeout(res, 1200));
+    }
+    return r;
+}
+
+// Conclui a recuperação: guarda a sessão e leva o cliente ao acompanhamento.
+// Tira o `?novo=1` da URL depois que o pedido entrou. Sem isto, um F5 seguinte continuaria
+// ignorando a sessão salva e devolveria o cliente ao formulário — com o pedido já na cozinha.
+function _limparMarcaNovoNaURL() {
+    try {
+        const u = new URL(location.href);
+        if (u.searchParams.has('novo')) {
+            u.searchParams.delete('novo');
+            history.replaceState(null, '', u.toString());
+        }
+    } catch (e) {}
+}
+
+function _assumirPedidoRecuperado(r, origem) {
+    _limparPedidoEmVoo();
+    _limparMarcaNovoNaURL();
+    _limparClienteKey();
+    if (state.nome && state.nome.trim()) salvarClienteLembrado(state.nome.trim(), state.whatsapp.trim());
+    pedidoAtual = {
+        comandaId: r.comandaId, numero: r.numero,
+        nome: (state.nome && state.nome.trim()) || (r.nomeCliente || ''),
+        itens: state.carrinho, bebidas: state.bebidas, total: calcularTotal()
+    };
+    salvarSessaoAtiva(pedidoAtual);
+    console.log('[Pedido] recuperado via ' + origem + ' → comanda ' + r.numero);
+    view = 'status';
+    render();
+    iniciarPolling();
+}
+
 async function verificarPedidoIncerto() {
-    if (!_payloadIncerto) { erro('Recarregue a página e faça o pedido novamente.'); return; }
+    const payload = _payloadIncerto || _lerPedidoEmVoo();
+    if (!payload) { erro('Recarregue a página e faça o pedido novamente.'); return; }
     const btn = document.getElementById('btnVerificarPedido');
     if (btn) { btn.disabled = true; btn.textContent = 'Verificando...'; }
 
-    const r = await apiPost('novoPedidoOnline', Object.assign({}, _payloadIncerto, { retentativa: true }));
-
-    // Sem este log não há como saber, olhando de fora, se o servidor CRIOU um pedido novo ou
-    // RECONHECEU o que já existia — os dois desfechos levam o cliente para a mesma tela.
-    // `_dedup: true` é o que prova que o reenvio não duplicou.
-    console.log('[Pedido] verificação →', r,
-                r && r._dedup ? '| ✅ DEDUP (não criou outro)' : '| pedido criado agora');
+    const r = await _tentarRecuperarPedido(payload);
 
     if (btn) { btn.disabled = false; btn.textContent = 'Verificar meu pedido'; }
 
@@ -1421,17 +1565,7 @@ async function verificarPedidoIncerto() {
         erro('Ainda não conseguimos confirmar. Tente de novo em alguns segundos.');
         return;
     }
-
-    _limparClienteKey();
-    salvarClienteLembrado(state.nome.trim(), state.whatsapp.trim());
-    pedidoAtual = {
-        comandaId: r.comandaId, numero: r.numero, nome: state.nome.trim(),
-        itens: state.carrinho, bebidas: state.bebidas, total: calcularTotal()
-    };
-    salvarSessaoAtiva(pedidoAtual);
-    view = 'status';
-    render();
-    iniciarPolling();
+    _assumirPedidoRecuperado(r, 'botão');
 }
 
 function renderErroCarregamento() {
@@ -1471,6 +1605,60 @@ async function inicializar() {
         view = 'status';
         render();
         iniciarPolling();
+        return;
+    }
+
+    // ═══ PEDIDO EM VOO: recuperar antes de mostrar o cardápio (ponto 25-C) ═══
+    //
+    // Chegou aqui sem sessão ativa, mas com a marca de "enviei e não sei o desfecho". Sem
+    // isto, o cliente veria o cardápio limpo e faria o pedido de novo — enquanto o primeiro
+    // já está na cozinha.
+    //
+    // O reenvio é seguro: o servidor deduplica pela `cliente_key`. E note que a marca é lida
+    // ANTES de qualquer decisão de tela — se o cardápio aparecesse primeiro, já teríamos
+    // perdido o cliente para o segundo pedido.
+    // ⚠️ O `pularSessao` NÃO se aplica aqui, e confundir os dois foi um erro meu que o
+    // teste 2 do Bruno pegou (28/08).
+    //
+    // `?novo=1` significa "esta aba é para um pedido NOVO, ignore o pedido em andamento da
+    // OUTRA aba". Faz sentido para a sessão salva. Não faz nenhum para o pedido em voo: ele
+    // foi enviado DESTA aba, depois que ela abriu. É dela.
+    //
+    // E o parâmetro sobrevive ao F5 — então o guard desligava a recuperação exatamente no
+    // cenário que ela existe para cobrir: cliente que veio pelo "Fazer novo pedido", enviou,
+    // e recarregou durante a espera.
+    const _emVoo = _lerPedidoEmVoo();
+
+    // Mostra as três entradas que decidem a tela. Se o cliente cair no cardápio quando não
+    // devia, esta linha diz qual das três estava errada — em vez de deixar a dedução por
+    // conta de quem está testando.
+    // Lista as chaves presentes. Se a marca sumiu mas as outras estão lá, alguém a removeu.
+    // Se sumiram todas, o armazenamento foi limpo. São investigações opostas.
+    try {
+        console.log('[Boot] chaves no localStorage:', Object.keys(localStorage).join(' · ') || '(nenhuma)');
+    } catch (e) { console.warn('[Boot] não consegui listar o localStorage:', e.message); }
+
+    console.log('%c[Boot] decisão:', 'font-weight:bold',
+                '| ?novo=' + pularSessao,
+                '| sessão=' + (sessaoAtiva ? ('#' + sessaoAtiva.numero) : 'não'),
+                '| em voo=' + (_emVoo ? 'SIM' : 'não'),
+                '| horário=' + estaDentroDoHorario(),
+                '| versão=' + CHEF_MIND_PEDIDO_VERSAO);
+    if (_emVoo) {
+        console.warn('[Pedido] havia um pedido em voo — recuperando antes de abrir o cardápio');
+        view = 'envio_incerto';
+        _payloadIncerto = _emVoo;
+        // Repõe o carrinho para o resumo do acompanhamento não ficar vazio.
+        state.nome = _emVoo.nomeCliente || state.nome;
+        state.whatsapp = _emVoo.whatsapp || state.whatsapp;
+        render();
+
+        const r = await _tentarRecuperarPedido(_emVoo);
+        if (r && !r.erro && r.comandaId) { _assumirPedidoRecuperado(r, 'abertura da página'); return; }
+
+        // Não deu: a tela de verificação já está na frente do cliente, com o botão. Melhor
+        // isso do que o cardápio limpo — pelo menos ele sabe que existe um pedido.
+        console.warn('[Pedido] recuperação automática falhou; cliente fica na tela de verificação');
         return;
     }
 
