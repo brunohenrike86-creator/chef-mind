@@ -313,7 +313,7 @@ const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
 // tempo, e sem isso não dá pra saber qual versão está de fato rodando no aparelho —
 // só deduzir por sintoma, que já nos custou horas. O estado da trava de horário
 // aparece junto de propósito: é a diferença mais fácil de confundir entre versões.
-const CHEF_MIND_PEDIDO_VERSAO = '2026-08-28-g';
+const CHEF_MIND_PEDIDO_VERSAO = '2026-08-28-h';
 
 // Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
 // na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
@@ -883,10 +883,24 @@ async function confirmarPedido() {
         return;
     }
 
+    // ⚠️ A ORDEM AQUI É O DEFEITO QUE O BRUNO ACHOU EM 28/08 — e ela é o ponto todo.
+    //
+    // Antes: limpava a marca de "em voo" PRIMEIRO e salvava a sessão DEPOIS. Entre as duas
+    // linhas existia uma janela de milissegundos em que **nenhuma das duas âncoras existia**.
+    //
+    // Parece impossível de acertar, mas o cenário do teste cai nela sistematicamente: o
+    // cliente dá F5 enquanto a tela diz "Enviando"; a resposta chega DURANTE o
+    // recarregamento; o código da página velha ainda roda o suficiente para limpar a marca;
+    // e a página morre antes de salvar a sessão. As duas somem, e o pedido fica invisível —
+    // exatamente o desfecho que este ponto existe para impedir.
+    //
+    // Com a resposta represada em 35s isso nunca acontecia, porque a resposta não chegava
+    // antes do F5. Foi por isso que o teste passava com o patch e falhava sem ele.
+    //
+    // A regra, que vale além daqui: **nunca destrua a âncora antiga antes de a nova existir.**
+    // Salvar a sessão primeiro é seguro em qualquer ordem de morte da página — no pior caso
+    // sobram as duas, e ter as duas nunca fez mal a ninguém.
     salvarClienteLembrado(state.nome.trim(), state.whatsapp.trim());
-    _limparPedidoEmVoo();       // confirmado: não há mais nada em voo
-    _limparMarcaNovoNaURL();    // recargas seguintes voltam a enxergar a sessão
-    _limparClienteKey();        // pedido entrou: a próxima compra é outra, precisa de chave nova
 
     pedidoAtual = {
         comandaId: resultado.comandaId,
@@ -896,7 +910,11 @@ async function confirmarPedido() {
         bebidas: state.bebidas,
         total: calcularTotal()
     };
-    salvarSessaoAtiva(pedidoAtual);
+    salvarSessaoAtiva(pedidoAtual);   // 1º: a nova âncora passa a existir
+
+    _limparPedidoEmVoo();             // 2º: só então a antiga pode ir
+    _limparMarcaNovoNaURL();
+    _limparClienteKey();
 
     view = 'confirmacao';
     render();
@@ -1535,16 +1553,20 @@ function _limparMarcaNovoNaURL() {
 }
 
 function _assumirPedidoRecuperado(r, origem) {
-    _limparPedidoEmVoo();
-    _limparMarcaNovoNaURL();
-    _limparClienteKey();
+    // Mesma ordem do `confirmarPedido`, pelo mesmo motivo: a nova âncora antes de soltar a
+    // antiga. Aqui a janela é ainda mais fácil de atingir — a recuperação roda no boot, e o
+    // cliente impaciente pode recarregar de novo no meio dela.
     if (state.nome && state.nome.trim()) salvarClienteLembrado(state.nome.trim(), state.whatsapp.trim());
     pedidoAtual = {
         comandaId: r.comandaId, numero: r.numero,
         nome: (state.nome && state.nome.trim()) || (r.nomeCliente || ''),
         itens: state.carrinho, bebidas: state.bebidas, total: calcularTotal()
     };
-    salvarSessaoAtiva(pedidoAtual);
+    salvarSessaoAtiva(pedidoAtual);   // 1º
+
+    _limparPedidoEmVoo();             // 2º
+    _limparMarcaNovoNaURL();
+    _limparClienteKey();
     console.log('[Pedido] recuperado via ' + origem + ' → comanda ' + r.numero);
     view = 'status';
     render();
