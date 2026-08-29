@@ -3169,7 +3169,7 @@
         // navegador (inclusive em file://) servem cópia em cache por um tempo — já
         // perseguimos um bug que não existia mais no código publicado, porque o Chrome
         // ainda estava executando a versão anterior. Aparece no console ao abrir a página.
-        const CHEF_MIND_VERSAO = '2026-08-13-x';
+        const CHEF_MIND_VERSAO = '2026-08-29-a';
 
         // ⚙️ MÓDULO DE ESTOQUE — desligado em 04/08 (ponto 7 do plano emergencial).
         //
@@ -3681,6 +3681,84 @@
         window.cmObsUso = function () { const u = _obsUso(); console.log('[Obs] armazenamento', u); return u; };
         window.cmSaudeCopiar = () => _obsCopiar('detalhe');
         window.cmSaudeCopiarHoras = () => _obsCopiar('horas');
+
+        // ══════════════════════════════════════════════════════════════════
+        // COLETA EM APARELHO SEM MENU ADMIN  —  abrir com ?saude=1
+        // ══════════════════════════════════════════════════════════════════
+        //
+        // Problema real, encontrado no restaurante em 29/08: o tablet da marmita roda o
+        // perfil Marmita, que não tem a aba Saúde; e Android não tem console. O aparelho
+        // que mais interessa medir — o que fica na mão do operador o dia inteiro — era
+        // justamente o único de onde não dava para tirar o dado.
+        //
+        // Este painel abre por URL, sem depender de perfil e SEM PRECISAR ESTAR LOGADO:
+        // o buffer é lido do localStorage na carga do script, antes de qualquer login.
+        //
+        // Não toca em nada do fluxo normal — só existe se `?saude=1` estiver na URL.
+        function _obsPainelPortatil() {
+            if (document.getElementById('obs-painel-portatil')) return;
+            const box = document.createElement('div');
+            box.id = 'obs-painel-portatil';
+            box.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#141414;color:#fff;' +
+                'font:15px/1.5 system-ui,sans-serif;padding:20px;overflow:auto;-webkit-overflow-scrolling:touch';
+
+            const nRegs  = (_obsBuffer || []).length;
+            const nHoras = Object.keys(_obsHoras || {}).length;
+
+            // Alvos de 52px: este painel é usado em tablet, em pé, muitas vezes com pressa.
+            const btn = 'display:block;width:100%;box-sizing:border-box;margin:10px 0;padding:16px;' +
+                        'min-height:52px;font-size:16px;font-weight:600;border:0;border-radius:10px;cursor:pointer';
+
+            box.innerHTML =
+                '<div style="font-size:19px;font-weight:700;margin-bottom:4px">📊 Coleta de Saúde</div>' +
+                '<div style="opacity:.75;font-size:13px;margin-bottom:16px">aparelho: <b>' + _obsDevice() + '</b></div>' +
+                '<div style="background:#222;border-radius:10px;padding:14px;margin-bottom:18px">' +
+                    '<div><b>' + nRegs + '</b> chamadas registradas</div>' +
+                    '<div><b>' + nHoras + '</b> hora(s) no resumo</div>' +
+                '</div>' +
+                '<button id="obs-pp-det"   style="' + btn + ';background:#2E7D32;color:#fff">📋 Copiar detalhe</button>' +
+                '<button id="obs-pp-hor"   style="' + btn + ';background:#1565C0;color:#fff">📋 Copiar por hora</button>' +
+                '<button id="obs-pp-csv"   style="' + btn + ';background:#455A64;color:#fff">⬇️ Baixar CSV</button>' +
+                '<button id="obs-pp-fecha" style="' + btn + ';background:#333;color:#bbb">Fechar</button>' +
+                '<div id="obs-pp-msg" style="margin-top:14px;min-height:24px;font-size:14px"></div>' +
+                '<div style="margin-top:20px;opacity:.5;font-size:12px">Depois de copiar, cole numa planilha ' +
+                'do Google ou mande para você mesmo no WhatsApp. Fechar não apaga nada.</div>';
+
+            document.body.appendChild(box);
+            const msg = (t, cor) => { const d = box.querySelector('#obs-pp-msg');
+                                      d.textContent = t; d.style.color = cor || '#8BC34A'; };
+
+            // Feedback próprio, sem showToast: este painel precisa funcionar na tela de
+            // login, onde o app ainda não montou nada.
+            async function copiar(qual) {
+                const txt = qual === 'horas' ? _obsTSVHoras() : _obsTSVDetalhe();
+                if (!txt || txt.indexOf('\n') === -1) { msg('Nada registrado ainda.', '#FFB74D'); return; }
+                try {
+                    await navigator.clipboard.writeText(txt);
+                    msg('✅ Copiado (' + txt.split('\n').length + ' linhas). Cole numa planilha.');
+                } catch (e) {
+                    // Sem clipboard (http, permissão negada, WebView antiga): mostra o texto
+                    // para seleção manual. Nunca deixar o operador sem saída.
+                    const ta = document.createElement('textarea');
+                    ta.value = txt;
+                    ta.style.cssText = 'width:100%;height:45vh;margin-top:12px;font-size:11px';
+                    box.appendChild(ta); ta.focus(); ta.select();
+                    msg('Selecione tudo e copie à mão (o navegador bloqueou a cópia automática).', '#FFB74D');
+                }
+            }
+            box.querySelector('#obs-pp-det').addEventListener('click', () => copiar('detalhe'));
+            box.querySelector('#obs-pp-hor').addEventListener('click', () => copiar('horas'));
+            box.querySelector('#obs-pp-csv').addEventListener('click', () => { try { _obsBaixarCSV(); msg('Arquivo gerado.'); } catch (e) { msg('Falhou: ' + e.message, '#EF9A9A'); } });
+            box.querySelector('#obs-pp-fecha').addEventListener('click', () => box.remove());
+        }
+        window.cmPainelSaude = _obsPainelPortatil;
+
+        try {
+            if (new URLSearchParams(location.search).get('saude') === '1') {
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _obsPainelPortatil);
+                else _obsPainelPortatil();
+            }
+        } catch (e) { /* URL exótica nunca pode impedir o app de subir */ }
 
         function _obsSetJanela(min) { _obsJanelaMin = min; renderizarSaude(); }
         function _obsSetFiltro(campo, valor) { _obsFiltro[campo] = valor; renderizarSaude(); }
