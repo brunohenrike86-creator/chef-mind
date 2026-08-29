@@ -313,7 +313,7 @@ const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
 // tempo, e sem isso não dá pra saber qual versão está de fato rodando no aparelho —
 // só deduzir por sintoma, que já nos custou horas. O estado da trava de horário
 // aparece junto de propósito: é a diferença mais fácil de confundir entre versões.
-const CHEF_MIND_PEDIDO_VERSAO = '2026-08-29-b';
+const CHEF_MIND_PEDIDO_VERSAO = '2026-08-29-c';
 
 // Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
 // na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
@@ -1717,6 +1717,12 @@ async function carregarOpcoes() {
 }
 
 async function _carregarOpcoesViaGAS() {
+    // Anuncia a ida ao Apps Script no console. Antes, só dava para saber se ela
+    // aconteceu olhando a aba Rede — e no caminho da revalidação ela sai ~250ms
+    // DEPOIS da tela pintar, então é fácil de não ver e concluir errado.
+    // Um caminho que custa 2-24s de espera do cliente merece dizer o próprio nome.
+    const _t0 = Date.now();
+    console.log('[Cardápio] consultando o Apps Script...');
     for (let tentativa = 1; tentativa <= _CARREGAMENTO_TENTATIVAS; tentativa++) {
         try {
             const opcoes = await apiGet('getOpcoesPedidoOnline', null, _CARREGAMENTO_TIMEOUT_MS);
@@ -1738,6 +1744,7 @@ async function _carregarOpcoesViaGAS() {
 
             _falhaCarregamento = false;
             _tentandoDeNovo    = false;
+            console.log('[Cardápio] Apps Script respondeu em ' + (Date.now() - _t0) + 'ms');
             return true;
         } catch (e) {
             console.warn('[Pedido Online] Falha ao carregar opções (tentativa ' +
