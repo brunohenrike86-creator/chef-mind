@@ -313,7 +313,7 @@ const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
 // tempo, e sem isso não dá pra saber qual versão está de fato rodando no aparelho —
 // só deduzir por sintoma, que já nos custou horas. O estado da trava de horário
 // aparece junto de propósito: é a diferença mais fácil de confundir entre versões.
-const CHEF_MIND_PEDIDO_VERSAO = '2026-08-28-j';
+const CHEF_MIND_PEDIDO_VERSAO = '2026-08-29-a';
 
 // Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
 // na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
@@ -1466,7 +1466,225 @@ function _registrarFalhaCarregamento() {
     } catch (e) { /* localStorage cheio ou bloqueado nunca pode quebrar a tela */ }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ABERTURA SEM APPS SCRIPT (ponto 13, decidido em 29/08)
+//
+// Por que existe: medimos o `getOpcoesPedidoOnline` e ele responde em 50ms
+// tocando ZERO vezes na planilha (`_ms:50, _chs:0`). Ou seja, o que o cliente
+// esperava não era consulta — era **transporte**: o piso de container do Apps
+// Script mais os dois saltos HTTP, e a cauda de 10-30s quando ela aparece.
+//
+// Não dá para consertar a cauda. Dá para não jogar a ficha: o que o cliente vê
+// na abertura agora não passa pelo Apps Script.
+//
+// A divisão segue a natureza de cada dado, não a conveniência:
+//
+//   No CÓDIGO  → código, nome, estrutura (letra do tamanho, máximo de carnes).
+//                Só muda por decisão de negócio, que já exige deploy de qualquer forma.
+//   No CSV     → preço e carnes do dia. Mudam sem aviso, e preço errado na tela
+//                é dinheiro com o cliente na frente (o servidor recalcula — Regra 18).
+//
+// Hardcodar preço junto teria criado exatamente esse risco de forma permanente:
+// mudar o preço na planilha e esquecer o deploy = cliente vê R$ 21 e paga R$ 24,
+// por tempo indeterminado e sem nada avisar.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CARDAPIO_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR4wMkpjmQ0RHUX1jVHnIcWLOnOslvqLSF90Fj59ebOuj-XwPNSlgFQwJfjF5-HFXrYy25hXKPbrMgJ/pub?gid=1543316840&single=true&output=csv';
+const CHAVE_CARDAPIO_CACHE = 'chefmind-pedido-cardapio';
+const _CSV_TIMEOUT_MS = 6000;   // é infra estática; se demora mais que isso, algo está errado — cai logo
+
+// Estrutura fixa. O preço NÃO está aqui de propósito (ver bloco acima).
+// A letra do tamanho é declarada em vez de deduzida do nome: o código antigo
+// fazia `_letraTamanho("Marmitex P")`, e renomear o item na planilha para
+// "Marmita Pequena" quebraria o tamanho silenciosamente.
+const CARDAPIO_FIXO = {
+    marmitas: [
+        { codigo: 5, letra: 'P', nome: 'Marmitex P' },
+        { codigo: 6, letra: 'M', nome: 'Marmitex M' },
+        { codigo: 7, letra: 'G', nome: 'Marmitex G' }
+    ],
+    bebidas: [
+        { codigo: 18, nome: 'Coca Cola Original 350ml Lata' },
+        { codigo: 19, nome: 'Coca Cola Zero 350ml Lata' },
+        { codigo: 22, nome: 'Coca Cola Original 1L' },
+        { codigo: 23, nome: 'Coca Cola Zero 1L' },
+        { codigo: 36, nome: 'Fanta Laranja 350ml Lata' },
+        { codigo: 41, nome: 'Sprite 350ml Lata' },
+        { codigo: 43, nome: 'Guaraná Antarctica 350ml Lata' },
+        { codigo: 44, nome: 'Guaraná Antarctica Zero 350ml Lata' }
+    ]
+};
+
+function _siglaDiaHoje() {
+    return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'][new Date().getDay()];
+}
+
+// Parser de CSV de verdade, com aspas. Um `split(',')` ingênuo quebraria já no
+// primeiro dia: a lista de carnes É separada por vírgula, então o Google entrega
+// esse campo entre aspas — e o split partiria "Frango Assado, Feijoada" em duas colunas.
+function _parseCSV(texto) {
+    const linhas = [];
+    let campo = '', linha = [], aspas = false;
+    for (let i = 0; i < texto.length; i++) {
+        const c = texto[i];
+        if (aspas) {
+            if (c === '"') { if (texto[i + 1] === '"') { campo += '"'; i++; } else aspas = false; }
+            else campo += c;
+        } else if (c === '"') { aspas = true; }
+        else if (c === ',') { linha.push(campo); campo = ''; }
+        else if (c === '\n') { linha.push(campo); linhas.push(linha); linha = []; campo = ''; }
+        else if (c !== '\r') { campo += c; }
+    }
+    if (campo !== '' || linha.length) { linha.push(campo); linhas.push(linha); }
+    return linhas;
+}
+
+// Planilha em português escreve decimal com vírgula ("21,5"). Um `parseFloat`
+// direto devolveria 21 e o cliente veria meio real a menos — silenciosamente.
+function _numeroPlanilha(v) {
+    if (v === null || v === undefined) return NaN;
+    let t = String(v).trim().replace(/[R$\s]/g, '');
+    if (!t) return NaN;
+    // Qual separador é o decimal? O ÚLTIMO. "1.234,56" e "1,234.56" são o mesmo
+    // valor escrito em duas convenções, e olhar só para a vírgula transformava o
+    // primeiro em 1,23456 — erro de mil vezes, silencioso, em cima de preço.
+    const iVirgula = t.lastIndexOf(','), iPonto = t.lastIndexOf('.');
+    if (iVirgula > iPonto)      t = t.replace(/\./g, '').replace(',', '.');   // 1.234,56
+    else if (iPonto > iVirgula) t = t.replace(/,/g, '');                      // 1,234.56
+    else                        t = t.replace(',', '.');                      // só um dos dois
+    return parseFloat(t);
+}
+
+// "Indisponível" só quando dito explicitamente. Linha `disp_` ausente = disponível,
+// que é o mesmo padrão do GAS hoje (`disponivel_online` vazio conta como true).
+// Assim o bloco opcional na planilha pode ser colado depois, sem tocar no código.
+function _estaDisponivel(v) {
+    if (v === undefined || v === null || String(v).trim() === '') return true;
+    const t = String(v).trim().toLowerCase();
+    return !(t === 'false' || t === 'falso' || t === 'nao' || t === 'não' || t === '0' || t === 'n');
+}
+
+async function _buscarCardapioCSV() {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), _CSV_TIMEOUT_MS);
+    let texto;
+    try {
+        const r = await fetch(CARDAPIO_CSV_URL + '&_t=' + Date.now(), { signal: ctrl.signal, cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        texto = await r.text();
+    } catch (e) {
+        console.warn('[Cardápio] CSV indisponível (' + e.message + ') — caindo no Apps Script');
+        return null;
+    } finally { clearTimeout(t); }
+
+    const mapa = {};
+    _parseCSV(texto).forEach(l => { if (l.length >= 2 && l[0]) mapa[String(l[0]).trim()] = l[1]; });
+
+    const precos = {}, disp = {};
+    [].concat(CARDAPIO_FIXO.marmitas, CARDAPIO_FIXO.bebidas).forEach(i => {
+        precos[i.codigo] = _numeroPlanilha(mapa['preco_' + i.codigo]);
+        disp[i.codigo]   = _estaDisponivel(mapa['disp_' + i.codigo]);
+    });
+
+    // Validação: se as três marmitas não vieram com preço válido, o CSV está
+    // quebrado (fórmula com #N/A, aba renomeada, coluna movida). Melhor cair no
+    // Apps Script — lento e certo — do que exibir cardápio errado. Isto cobre
+    // sozinho a maior parte das quebras; a chave `modo` cobre o resto.
+    const marmitasOk = CARDAPIO_FIXO.marmitas.every(m => precos[m.codigo] > 0);
+    if (!marmitasOk) {
+        console.warn('[Cardápio] CSV sem preço válido das marmitas — caindo no Apps Script', precos);
+        return null;
+    }
+
+    const carnesPorDia = {};
+    ['seg','ter','qua','qui','sex','sab','dom'].forEach(d => {
+        carnesPorDia[d] = String(mapa['carnes_' + d] || '').split(',').map(c => c.trim()).filter(Boolean);
+    });
+
+    return { modo: String(mapa['modo'] || 'estatico').trim().toLowerCase(),
+             precos: precos, disp: disp, carnes: carnesPorDia };
+}
+
+function _aplicarCardapio(d) {
+    TAMANHOS = {};
+    CARDAPIO_FIXO.marmitas.forEach(m => {
+        if (!d.disp[m.codigo] || !(d.precos[m.codigo] > 0)) return;
+        TAMANHOS[m.letra] = { label: m.letra, preco: d.precos[m.codigo],
+                              codigo: m.codigo, maxCarnes: MAX_CARNES_POR_LETRA[m.letra] || 2 };
+    });
+    BEBIDAS_CARDAPIO = CARDAPIO_FIXO.bebidas
+        .filter(b => d.disp[b.codigo] && d.precos[b.codigo] > 0)
+        .map(b => ({ codigo: b.codigo, nome: b.nome, preco: d.precos[b.codigo] }));
+    CARNES_DO_DIA = d.carnes[_siglaDiaHoje()] || [];
+    _falhaCarregamento = false;
+    _tentandoDeNovo = false;
+}
+
+// Cache só do DIA. Carne de ontem descreve o almoço de ontem — mostrá-la como
+// se fosse de hoje é pior do que qualquer espera. E preço de "algumas horas
+// atrás" é um risco muito menor do que preço de semanas atrás.
+function _gravarCardapioCache(d) {
+    try {
+        localStorage.setItem(CHAVE_CARDAPIO_CACHE,
+            JSON.stringify({ dia: new Date().toISOString().slice(0, 10), dados: d }));
+    } catch (e) { console.warn('[Cardápio] não consegui guardar o cache:', e.message); }
+}
+
+function _lerCardapioCacheDeHoje() {
+    let v = null;
+    try { v = JSON.parse(localStorage.getItem(CHAVE_CARDAPIO_CACHE) || 'null'); } catch (e) { return null; }
+    if (!v || !v.dados) return null;
+    if (v.dia !== new Date().toISOString().slice(0, 10)) {
+        console.log('[Cardápio] cache é de ' + v.dia + ' — descartado');
+        return null;
+    }
+    return v.dados;
+}
+
+async function _revalidarCardapioEmSegundoPlano() {
+    const d = await _buscarCardapioCSV();
+    if (!d || d.modo === 'gas') return;
+    const antes = JSON.stringify({ t: TAMANHOS, b: BEBIDAS_CARDAPIO, c: CARNES_DO_DIA });
+    _aplicarCardapio(d);
+    _gravarCardapioCache(d);
+    const depois = JSON.stringify({ t: TAMANHOS, b: BEBIDAS_CARDAPIO, c: CARNES_DO_DIA });
+    if (antes !== depois) {
+        console.log('[Cardápio] mudou desde o cache — atualizando a tela');
+        // Só re-renderiza o que o cliente ainda pode escolher. Nas telas de
+        // acompanhamento e confirmação o pedido já foi feito: trocar o cardápio
+        // debaixo dele não corrige nada e assusta.
+        if (view === 'form' || view === 'carregando') render();
+    }
+}
+
 async function carregarOpcoes() {
+    // 1. Cache de hoje: pinta na hora e revalida por trás. O cliente não espera.
+    const cache = _lerCardapioCacheDeHoje();
+    if (cache) {
+        _aplicarCardapio(cache);
+        console.log('[Cardápio] servido do cache de hoje (instantâneo)');
+        _revalidarCardapioEmSegundoPlano();
+        return true;
+    }
+
+    // 2. Sem cache: busca o CSV (~250ms, infra estática, sem container e sem cauda).
+    const d = await _buscarCardapioCSV();
+    if (d && d.modo === 'gas') {
+        console.warn('[Cardápio] chave `modo` = gas na planilha — usando o Apps Script por decisão manual');
+        return await _carregarOpcoesViaGAS();
+    }
+    if (d) {
+        _aplicarCardapio(d);
+        _gravarCardapioCache(d);
+        console.log('[Cardápio] servido do CSV publicado');
+        return true;
+    }
+
+    // 3. CSV fora do ar ou inválido: o caminho antigo continua inteiro aqui.
+    return await _carregarOpcoesViaGAS();
+}
+
+async function _carregarOpcoesViaGAS() {
     for (let tentativa = 1; tentativa <= _CARREGAMENTO_TENTATIVAS; tentativa++) {
         try {
             const opcoes = await apiGet('getOpcoesPedidoOnline', null, _CARREGAMENTO_TIMEOUT_MS);
