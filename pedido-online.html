@@ -313,7 +313,7 @@ const CHAVE_CLIENTE = 'chefMind_pedidoOnline_cliente';
 // tempo, e sem isso não dá pra saber qual versão está de fato rodando no aparelho —
 // só deduzir por sintoma, que já nos custou horas. O estado da trava de horário
 // aparece junto de propósito: é a diferença mais fácil de confundir entre versões.
-const CHEF_MIND_PEDIDO_VERSAO = '2026-08-29-a';
+const CHEF_MIND_PEDIDO_VERSAO = '2026-08-29-b';
 
 // Horário de atendimento p/ pedido online — validação client-side (mesma janela usada
 // na operação física). Não há enforcement server-side ainda; combinou-se manter o fluxo
@@ -1601,8 +1601,14 @@ async function _buscarCardapioCSV() {
         carnesPorDia[d] = String(mapa['carnes_' + d] || '').split(',').map(c => c.trim()).filter(Boolean);
     });
 
-    return { modo: String(mapa['modo'] || 'estatico').trim().toLowerCase(),
-             precos: precos, disp: disp, carnes: carnesPorDia };
+    const modo = String(mapa['modo'] || 'estatico').trim().toLowerCase();
+    // Diz SEMPRE o que o CSV respondeu. Sem isto, "mudei a chave e nada aconteceu"
+    // tem três causas indistinguíveis: a planilha ainda não propagou, a chave está
+    // escrita diferente, ou o código ignorou. Uma linha separa as três.
+    console.log('[Cardápio] CSV lido — modo=' + modo + ' · ' +
+                Object.keys(precos).length + ' preços · ' +
+                (carnesPorDia[_siglaDiaHoje()] || []).length + ' carnes hoje');
+    return { modo: modo, precos: precos, disp: disp, carnes: carnesPorDia };
 }
 
 function _aplicarCardapio(d) {
@@ -1643,7 +1649,24 @@ function _lerCardapioCacheDeHoje() {
 
 async function _revalidarCardapioEmSegundoPlano() {
     const d = await _buscarCardapioCSV();
-    if (!d || d.modo === 'gas') return;
+    if (!d) return;
+
+    // ⚠️ O interruptor tem que valer AQUI também, e este era o buraco: quando a
+    // página pinta do cache (o caminho normal, instantâneo), quem lê o CSV é esta
+    // função — e ela tratava `modo = gas` com um `return` mudo. Resultado: o Bruno
+    // virava a chave na planilha e nada acontecia, sem nenhuma pista do porquê.
+    //
+    // Pior do que não funcionar: o motivo de virar a chave é justamente suspeitar do
+    // dado do CSV, e nesse cenário os clientes com cache continuariam presos ao dado
+    // suspeito. **O interruptor precisa vencer o cache** — só que sem devolver a
+    // espera para o cliente, e por isso ele age aqui e não antes da pintura.
+    if (d.modo === 'gas') {
+        console.warn('[Cardápio] chave `modo` = gas — voltando ao Apps Script e descartando o cache');
+        try { localStorage.removeItem(CHAVE_CARDAPIO_CACHE); } catch (e) {}
+        const ok = await _carregarOpcoesViaGAS();
+        if (ok && (view === 'form' || view === 'carregando')) render();
+        return;
+    }
     const antes = JSON.stringify({ t: TAMANHOS, b: BEBIDAS_CARDAPIO, c: CARNES_DO_DIA });
     _aplicarCardapio(d);
     _gravarCardapioCache(d);
@@ -1656,6 +1679,15 @@ async function _revalidarCardapioEmSegundoPlano() {
         if (view === 'form' || view === 'carregando') render();
     }
 }
+
+// Atalho de diagnóstico: mostra o que o CSV responde AGORA, sem depender de recarregar
+// nem de adivinhar se a planilha já propagou.
+window.cmCardapio = async function () {
+    const d = await _buscarCardapioCSV();
+    if (!d) { console.log('🔴 CSV indisponível ou inválido — a página usaria o Apps Script'); return null; }
+    console.log('modo:', d.modo, '| preços:', d.precos, '| carnes de hoje:', d.carnes[_siglaDiaHoje()]);
+    return d;
+};
 
 async function carregarOpcoes() {
     // 1. Cache de hoje: pinta na hora e revalida por trás. O cliente não espera.
